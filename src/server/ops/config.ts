@@ -5,10 +5,14 @@ const secret = z.string().min(32).refine(
   "秘密仍是示例或默认值",
 );
 const deploymentSchema = z.strictObject({
-  DOMAIN: z.string().regex(/^(?!https?:\/\/)[a-z0-9.-]+(?::[0-9]+)?$/i),
+  DOMAIN: z.string().regex(/^(?!https?:\/\/)[a-z0-9.-]+$/i),
+  APP_BASE_PATH: z.literal("/fitgrid"),
+  APP_PORT: z.coerce.number().int().min(1024).max(65535),
+  PUBLIC_HTTPS_PORT: z.coerce.number().int().min(1).max(65535),
+  BETTER_AUTH_URL: z.url({ protocol: /^https$/ }),
   APP_IMAGE: z.string().min(1).refine(
-    (value) => /(?:@sha256:[a-f0-9]{64}|:[a-z0-9][a-z0-9._-]*)$/i.test(value) && !/:latest$/i.test(value),
-    "APP_IMAGE 必须使用不可变的非 latest 标签或 sha256 digest",
+    (value) => /(?:@sha256:[a-f0-9]{64}|:sha-[a-f0-9]{40})$/i.test(value),
+    "APP_IMAGE 必须使用完整 commit SHA 标签或 sha256 digest",
   ),
   POSTGRES_DB: z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/),
   POSTGRES_USER: z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/),
@@ -32,6 +36,11 @@ export function validateDeploymentEnvironment(
   const parsed = deploymentSchema.parse(value);
   if (parsed.BETTER_AUTH_SECRET === parsed.OWNER_REF_SECRET) {
     throw new Error("BETTER_AUTH_SECRET 与 OWNER_REF_SECRET 必须相互独立");
+  }
+  const publicPort = parsed.PUBLIC_HTTPS_PORT === 443 ? "" : `:${parsed.PUBLIC_HTTPS_PORT}`;
+  const expectedAuthUrl = `https://${parsed.DOMAIN}${publicPort}${parsed.APP_BASE_PATH}`;
+  if (parsed.BETTER_AUTH_URL !== expectedAuthUrl) {
+    throw new Error(`BETTER_AUTH_URL 必须是 ${expectedAuthUrl}`);
   }
   const runtime = new URL(parsed.DATABASE_URL);
   const migration = new URL(parsed.MIGRATION_DATABASE_URL);

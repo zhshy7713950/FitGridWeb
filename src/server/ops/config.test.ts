@@ -4,7 +4,11 @@ import { validateDeploymentEnvironment, validateRestoreTarget } from "./config";
 
 const validEnvironment = {
   DOMAIN: "grid.example.com",
-  APP_IMAGE: "ghcr.io/example/fitgridweb:sha-2ca7f41",
+  APP_BASE_PATH: "/fitgrid",
+  APP_PORT: "3300",
+  PUBLIC_HTTPS_PORT: "443",
+  BETTER_AUTH_URL: "https://grid.example.com/fitgrid",
+  APP_IMAGE: "ghcr.io/zhshy7713950/fitgridweb:sha-2ca7f41000000000000000000000000000000000",
   POSTGRES_DB: "fitgridweb",
   POSTGRES_USER: "fitgridmigrate",
   POSTGRES_PASSWORD: "database-secret-that-is-not-a-default",
@@ -28,6 +32,10 @@ describe("production configuration", () => {
     ["mutable image", { APP_IMAGE: "ghcr.io/example/fitgridweb:latest" }],
     ["same auth and owner secret", { OWNER_REF_SECRET: validEnvironment.BETTER_AUTH_SECRET }],
     ["unchanged placeholder", { BETTER_AUTH_SECRET: "REPLACE_WITH_AT_LEAST_32_RANDOM_BYTES" }],
+    ["wrong base path", { APP_BASE_PATH: "/other" }],
+    ["privileged app port", { APP_PORT: "443" }],
+    ["invalid public HTTPS port", { PUBLIC_HTTPS_PORT: "70000" }],
+    ["auth URL outside base path", { BETTER_AUTH_URL: "https://grid.example.com/" }],
   ])("rejects %s", (_name, patch) => {
     expect(() => validateDeploymentEnvironment({ ...validEnvironment, ...patch })).toThrow();
   });
