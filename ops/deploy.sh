@@ -24,7 +24,14 @@ until docker compose exec -T db pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 done
 
 # This must succeed before a new app container is started.
-docker compose run --rm --no-deps -e DATABASE_URL="$MIGRATION_DATABASE_URL" app pnpm prisma migrate deploy
+runtime_database_url=$DATABASE_URL
+DATABASE_URL=$MIGRATION_DATABASE_URL
+export DATABASE_URL
+migration_status=0
+docker compose run --rm --no-deps -e DATABASE_URL app node_modules/.bin/prisma migrate deploy || migration_status=$?
+DATABASE_URL=$runtime_database_url
+export DATABASE_URL
+[ "$migration_status" -eq 0 ] || exit "$migration_status"
 docker compose up -d app caddy
 docker compose exec -T app node -e "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 curl --fail --silent --show-error "https://$DOMAIN/api/v1/health" >/dev/null

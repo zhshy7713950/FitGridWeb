@@ -41,6 +41,30 @@ validate_host() {
   fi
 }
 
+validate_disk_pressure() {
+  disk_path=${1:-/}
+  used_percent=$(df -Pk "$disk_path" | awk 'NR == 2 { value=$5; gsub(/%/, "", value); print value }')
+  case $used_percent in ""|*[!0-9]*) fitgrid_error "无法读取磁盘使用率"; return 1 ;; esac
+  if [ "$used_percent" -ge 85 ]; then
+    fitgrid_error "磁盘使用率 ${used_percent}% 已达到 85% 停止线"
+    return 1
+  fi
+  if [ "$used_percent" -ge 70 ]; then
+    printf '警告：磁盘使用率已达到 %s%%；请安排清理或扩容。\n' "$used_percent" >&2
+  fi
+}
+
+validate_https_endpoint() {
+  domain=$1
+  public_port=$2
+  suffix=
+  [ "$public_port" -eq 443 ] || suffix=":$public_port"
+  if ! curl --silent --show-error --output /dev/null --max-time 10 "https://$domain$suffix/"; then
+    fitgrid_error "现有 nginx HTTPS 地址无法连接：https://$domain$suffix/"
+    return 1
+  fi
+}
+
 validate_domain() {
   case ${1:-} in
     ""|*://*|*/*|*:*|*[!A-Za-z0-9.-]*)
@@ -65,6 +89,22 @@ validate_port() {
 resolve_ref() {
   repository=$1
   git_ref=$2
+  case $git_ref in
+    [a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9][a-fA-F0-9]*)
+      if [ "${#git_ref}" -eq 40 ]; then
+        requested_sha=$(printf '%s' "$git_ref" | tr 'A-F' 'a-f')
+        api_sha=$(curl -fsSL "https://api.github.com/repos/zhshy7713950/FitGridWeb/commits/$requested_sha" 2>/dev/null \
+          | sed -n 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-fA-F0-9]\{40\}\)".*/\1/p' | head -n 1 || true)
+        api_sha=$(printf '%s' "$api_sha" | tr 'A-F' 'a-f')
+        if [ "$api_sha" = "$requested_sha" ]; then
+          printf '%s\n' "$requested_sha"
+          return 0
+        fi
+        fitgrid_error "完整 commit SHA 不存在于公开仓库"
+        return 1
+      fi
+      ;;
+  esac
   if command -v git >/dev/null 2>&1; then
     refs=$(git ls-remote "$repository" "$git_ref" "$git_ref^{}" 2>/dev/null) || {
       fitgrid_error "无法解析 Git ref：$git_ref"
@@ -94,18 +134,17 @@ assert_public_image() {
   image=$1
   if command -v docker >/dev/null 2>&1; then
     docker manifest inspect "$image" >/dev/null 2>&1 && return 0
-  else
-    repository=${image#ghcr.io/}
-    tag=${repository##*:}
-    repository=${repository%:*}
-    token=$(curl -fsSL "https://ghcr.io/token?service=ghcr.io&scope=repository:$repository:pull" \
-      | sed -n 's/.*"token":"\([^"]*\)".*/\1/p') || token=
-    if [ -n "$token" ] && curl -fsSI \
-      -H "Authorization: Bearer $token" \
-      -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
-      "https://ghcr.io/v2/$repository/manifests/$tag" >/dev/null 2>&1; then
-      return 0
-    fi
+  fi
+  repository=${image#ghcr.io/}
+  tag=${repository##*:}
+  repository=${repository%:*}
+  token=$(curl -fsSL "https://ghcr.io/token?service=ghcr.io&scope=repository:$repository:pull" \
+    | sed -n 's/.*"token":"\([^"]*\)".*/\1/p') || token=
+  if [ -n "$token" ] && curl -fsSI \
+    -H "Authorization: Bearer $token" \
+    -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+    "https://ghcr.io/v2/$repository/manifests/$tag" >/dev/null 2>&1; then
+    return 0
   fi
   fitgrid_error "镜像无法匿名读取：$image；请确认 GitHub Actions 已完成且 GHCR package 已设为 Public"
   return 1
@@ -149,6 +188,25 @@ environment_value() {
   awk -F= -v wanted="$key" '$1 == wanted { sub(/^[^=]*=/, ""); print; exit }' "$file"
 }
 
+validate_upgrade_invariants() {
+  environment_file=$1
+  domain=$2
+  app_port=$3
+  public_port=$4
+  nginx_site=$5
+  [ -f "$environment_file" ] || return 0
+
+  saved_domain=$(environment_value DOMAIN "$environment_file")
+  saved_app_port=$(environment_value APP_PORT "$environment_file")
+  saved_public_port=$(environment_value PUBLIC_HTTPS_PORT "$environment_file")
+  saved_nginx_site=$(environment_value NGINX_SITE "$environment_file")
+  if [ "$domain" != "$saved_domain" ] || [ "$app_port" != "$saved_app_port" ] \
+    || [ "$public_port" != "$saved_public_port" ] || [ "$nginx_site" != "$saved_nginx_site" ]; then
+    fitgrid_error "--upgrade 只允许更换应用版本；域名、端口或 nginx vhost 变更需单独维护窗口"
+    return 1
+  fi
+}
+
 secret_or_new() {
   key=$1
   file=$2
@@ -186,6 +244,18 @@ ensure_environment() {
   owner_secret=$(secret_or_new OWNER_REF_SECRET "$environment_file")
   cursor_secret=$(secret_or_new CURSOR_SIGNING_SECRET "$environment_file")
 
+  log_level=$(environment_value LOG_LEVEL "$environment_file")
+  case $log_level in debug|info|warn|error) : ;; *) log_level=info ;; esac
+  backup_directory=$(environment_value BACKUP_DIR "$environment_file")
+  case $backup_directory in /*) : ;; *) backup_directory=/var/lib/fitgridweb/backups ;; esac
+  case $backup_directory in *[[:space:]]*) backup_directory=/var/lib/fitgridweb/backups ;; esac
+  backup_remote_directory=$(environment_value BACKUP_REMOTE_DIR "$environment_file")
+  case $backup_remote_directory in ""|/*) : ;; *) backup_remote_directory= ;; esac
+  case $backup_remote_directory in *[[:space:]]*) backup_remote_directory= ;; esac
+  retention_days=$(environment_value BACKUP_RETENTION_DAYS "$environment_file")
+  case $retention_days in ""|*[!0-9]*) retention_days=180 ;; esac
+  if [ "$retention_days" -lt 1 ] || [ "$retention_days" -gt 3650 ]; then retention_days=180; fi
+
   if [ ! -s "$backup_key_file" ]; then
     backup_key_temp=$(mktemp "${backup_key_file}.tmp.XXXXXX")
     openssl rand -hex 32 >"$backup_key_temp"
@@ -218,11 +288,11 @@ ensure_environment() {
     printf 'BETTER_AUTH_SECRET=%s\n' "$auth_secret"
     printf 'OWNER_REF_SECRET=%s\n' "$owner_secret"
     printf 'CURSOR_SIGNING_SECRET=%s\n' "$cursor_secret"
-    printf 'LOG_LEVEL=info\n'
-    printf 'BACKUP_DIR=/var/lib/fitgridweb/backups\n'
-    printf 'BACKUP_REMOTE_DIR=/mnt/fitgridweb-offsite\n'
+    printf 'LOG_LEVEL=%s\n' "$log_level"
+    printf 'BACKUP_DIR=%s\n' "$backup_directory"
+    printf 'BACKUP_REMOTE_DIR=%s\n' "$backup_remote_directory"
     printf 'BACKUP_ENCRYPTION_KEY_FILE=%s\n' "$backup_key_file"
-    printf 'BACKUP_RETENTION_DAYS=180\n'
+    printf 'BACKUP_RETENTION_DAYS=%s\n' "$retention_days"
   } >"$temporary"
   chmod 600 "$temporary"
   mv "$temporary" "$environment_file"

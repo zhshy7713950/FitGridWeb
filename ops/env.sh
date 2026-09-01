@@ -1,12 +1,28 @@
 #!/bin/sh
 
 load_fitgrid_environment() {
-  environment_file=${ENV_FILE:-.env}
+  if [ -n "${ENV_FILE:-}" ]; then
+    environment_file=$ENV_FILE
+  elif [ -f "${FITGRID_DEFAULT_ENV_FILE:-/etc/fitgridweb/fitgridweb.env}" ]; then
+    environment_file=${FITGRID_DEFAULT_ENV_FILE:-/etc/fitgridweb/fitgridweb.env}
+  else
+    environment_file=.env
+  fi
   [ -f "$environment_file" ] || { echo "Missing environment file: $environment_file" >&2; exit 1; }
+  ENV_FILE=$environment_file
+  export ENV_FILE
   set -a
   # shellcheck disable=SC1090
   . "$environment_file"
   set +a
+}
+
+fitgrid_compose() {
+  compose_project_directory=${PROJECT_DIR:-$(pwd)}
+  docker compose --project-name fitgridweb \
+    --env-file "$ENV_FILE" \
+    -f "$compose_project_directory/docker-compose.yml" \
+    -f "$compose_project_directory/docker-compose.low-memory.yml" "$@"
 }
 
 require_fitgrid_value() {

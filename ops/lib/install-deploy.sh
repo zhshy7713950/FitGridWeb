@@ -45,10 +45,24 @@ rollback_app() {
   old_environment=${3:-}
   if restore_environment "$environment_file" "$old_environment"; then
     fitgrid_error "新应用不健康；已恢复旧 APP_IMAGE。数据库迁移未逆向回滚。"
-    fitgrid_compose "$project_directory" "$environment_file" up -d --wait app
+    fitgrid_compose "$project_directory" "$environment_file" up --no-build -d --wait app
   else
     fitgrid_error "首次安装没有旧镜像可恢复；数据库保持运行以便诊断"
     fitgrid_compose "$project_directory" "$environment_file" stop app >/dev/null 2>&1 || true
+  fi
+  return 1
+}
+
+rollback_release() {
+  project_directory=$1
+  environment_file=$2
+  old_environment=${3:-}
+  app_port=$4
+  public_health=$5
+  rollback_app "$project_directory" "$environment_file" "$old_environment" || true
+  if [ -n "$old_environment" ] && [ -f "$old_environment" ]; then
+    verify_health "http://127.0.0.1:$app_port/fitgrid/api/v1/health" || true
+    verify_health "$public_health" || true
   fi
   return 1
 }
@@ -65,14 +79,21 @@ deploy_release() {
   set +a
 
   fitgrid_compose "$project_directory" "$environment_file" pull db app
-  fitgrid_compose "$project_directory" "$environment_file" up -d --wait db
-  if ! fitgrid_compose "$project_directory" "$environment_file" run --rm --no-deps \
-    -e "DATABASE_URL=$MIGRATION_DATABASE_URL" app pnpm prisma migrate deploy; then
+  fitgrid_compose "$project_directory" "$environment_file" up --no-build -d --wait db
+  runtime_database_url=$DATABASE_URL
+  DATABASE_URL=$MIGRATION_DATABASE_URL
+  export DATABASE_URL
+  migration_status=0
+  fitgrid_compose "$project_directory" "$environment_file" run --rm --no-deps \
+    -e DATABASE_URL app node_modules/.bin/prisma migrate deploy || migration_status=$?
+  DATABASE_URL=$runtime_database_url
+  export DATABASE_URL
+  if [ "$migration_status" -ne 0 ]; then
     restore_environment "$environment_file" "$old_environment" || true
     fitgrid_error "数据库迁移失败；新应用未启动"
     return 1
   fi
-  if ! fitgrid_compose "$project_directory" "$environment_file" up -d --wait app; then
+  if ! fitgrid_compose "$project_directory" "$environment_file" up --no-build -d --wait app; then
     rollback_app "$project_directory" "$environment_file" "$old_environment"
     return 1
   fi
@@ -85,7 +106,8 @@ deploy_release() {
 create_initial_admin() {
   project_directory=$1
   environment_file=$2
-  fitgrid_compose "$project_directory" "$environment_file" run --rm --no-deps app pnpm admin:create
+  fitgrid_compose "$project_directory" "$environment_file" run --rm --no-deps \
+    app node_modules/.bin/tsx src/server/cli/create-admin.ts
 }
 
 fitgrid_install_main() {
@@ -129,19 +151,30 @@ fitgrid_install_main() {
   nginx_temporary=$(mktemp -d)
   trap 'rm -rf "$nginx_temporary"' EXIT HUP INT TERM
   render_nginx_snippet "$app_port" >"$nginx_temporary/fitgridweb-location.conf"
-  install_nginx_include "$nginx_site" "$nginx_temporary/fitgridweb-location.conf" "$nginx_backup_root"
-
   public_suffix=
   [ "$public_port" -eq 443 ] || public_suffix=":$public_port"
   public_health="https://$domain$public_suffix/fitgrid/api/v1/health"
+  if ! install_nginx_include "$nginx_site" "$nginx_temporary/fitgridweb-location.conf" "$nginx_backup_root"; then
+    rollback_release "$project_directory" "$environment_file" "$old_environment" "$app_port" "$public_health" || true
+    return 1
+  fi
   if ! verify_health "$public_health"; then
-    rollback_app "$project_directory" "$environment_file" "$old_environment"
+    rollback_release "$project_directory" "$environment_file" "$old_environment" "$app_port" "$public_health" || true
     return 1
   fi
 
-  install_systemd_unit "$project_directory/ops/templates/fitgridweb.service" /etc/systemd/system/fitgridweb.service
-  systemctl restart fitgridweb.service
-  verify_health "$public_health"
+  if ! install_systemd_unit "$project_directory/ops/templates/fitgridweb.service" /etc/systemd/system/fitgridweb.service; then
+    rollback_release "$project_directory" "$environment_file" "$old_environment" "$app_port" "$public_health" || true
+    return 1
+  fi
+  if ! systemctl restart fitgridweb.service; then
+    rollback_release "$project_directory" "$environment_file" "$old_environment" "$app_port" "$public_health" || true
+    return 1
+  fi
+  if ! verify_health "$public_health"; then
+    rollback_release "$project_directory" "$environment_file" "$old_environment" "$app_port" "$public_health" || true
+    return 1
+  fi
 
   if [ "$admin_choice" = yes ]; then
     create_initial_admin "$project_directory" "$environment_file"

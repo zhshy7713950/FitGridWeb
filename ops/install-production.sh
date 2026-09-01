@@ -99,20 +99,37 @@ if [ "$from_installed" = false ]; then
   case $nginx_site in /*) : ;; *) fitgrid_error "nginx vhost 必须是绝对路径"; exit 1 ;; esac
   case $nginx_site in *[[:space:]]*) fitgrid_error "nginx vhost 路径不能含空白字符"; exit 1 ;; esac
   [ -f "$nginx_site" ] || { fitgrid_error "nginx vhost 文件不存在：$nginx_site"; exit 1; }
+  if [ "$upgrade" = true ]; then
+    validate_upgrade_invariants "$ENVIRONMENT_FILE" "$domain" "$app_port" "$public_port" "$nginx_site"
+  fi
   assert_app_port_available "$app_port"
   resolved_sha=$(resolve_ref "$REPOSITORY_URL" "$git_ref")
   image=$(image_for_sha "$resolved_sha")
   assert_public_image "$image"
+  validate_disk_pressure /
+  validate_https_endpoint "$domain" "$public_port"
+
+  if [ -z "$temporary_bootstrap" ]; then
+    temporary_bootstrap=$(mktemp -d)
+    trap 'test -z "$temporary_bootstrap" || rm -rf "$temporary_bootstrap"' EXIT HUP INT TERM
+  fi
+  preflight_nginx_library=$temporary_bootstrap/install-nginx.sh
+  curl -fsSL "$RAW_ROOT/$resolved_sha/ops/lib/install-nginx.sh" -o "$preflight_nginx_library"
+  # shellcheck disable=SC1090
+  . "$preflight_nginx_library"
+  validate_nginx_site "$nginx_site" "$domain" "$public_port"
 
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
   apt-get install -y --no-install-recommends ca-certificates curl git
   ensure_checkout "$REPOSITORY_URL" "$resolved_sha" "$INSTALL_DIRECTORY"
-  exec "$INSTALL_DIRECTORY/ops/install-production.sh" \
-    --from-installed --ref "$resolved_sha" --domain "$domain" \
+  rm -rf "$temporary_bootstrap"
+  temporary_bootstrap=
+  set -- --from-installed --ref "$resolved_sha" --domain "$domain" \
     --app-port "$app_port" --public-port "$public_port" \
-    --nginx-site "$nginx_site" --swap "$swap_choice" --create-admin "$admin_choice" \
-    $( [ "$upgrade" = true ] && printf '%s' '--upgrade' || true )
+    --nginx-site "$nginx_site" --swap "$swap_choice" --create-admin "$admin_choice"
+  [ "$upgrade" = false ] || set -- "$@" --upgrade
+  exec "$INSTALL_DIRECTORY/ops/install-production.sh" "$@"
 fi
 
 resolved_sha=$git_ref

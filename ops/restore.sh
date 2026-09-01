@@ -50,6 +50,6 @@ dump_file="$temporary_directory/restore.dump"
 openssl enc -d -aes-256-cbc -pbkdf2 \
   -pass "file:$BACKUP_ENCRYPTION_KEY_FILE" -in "$backup_file" -out "$dump_file"
 [ -s "$dump_file" ] || { echo "Decrypted backup is empty" >&2; exit 1; }
-pg_restore --list "$dump_file" >/dev/null
-pg_restore --clean --if-exists --no-owner --dbname="$target_url" "$dump_file"
+fitgrid_compose exec -T db pg_restore --list <"$dump_file" >/dev/null
+fitgrid_compose exec -T db pg_restore --clean --if-exists --no-owner --dbname="$target_url" <"$dump_file"
 echo "Restore completed for the explicitly selected non-production database"

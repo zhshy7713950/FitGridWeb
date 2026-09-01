@@ -66,14 +66,14 @@ describe("deployment script", () => {
     const files = await fixture();
     await executable(files.bin, "docker", `
 printf '%s\n' "$*" >>"$COMMAND_LOG"
-case "$*" in *"prisma migrate deploy"*) exit 7 ;; esac
+case "$*" in *"node_modules/.bin/prisma migrate deploy"*) exit 7 ;; esac
 exit 0`);
     await executable(files.bin, "curl", "exit 0");
 
     const result = run("deploy.sh", files);
     expect(result.status).toBe(7);
     const calls = await readFile(files.commandLog, "utf8");
-    expect(calls).toContain("prisma migrate deploy");
+    expect(calls).toContain("node_modules/.bin/prisma migrate deploy");
     expect(calls).not.toContain("up -d app caddy");
   });
 });
@@ -81,16 +81,23 @@ exit 0`);
 describe("backup script", () => {
   it("does not run retention cleanup when encryption fails", async () => {
     const files = await fixture();
-    await executable(files.bin, "pg_dump", `
-for argument in "$@"; do case "$argument" in --file=*) output=\${argument#--file=} ;; esac; done
-printf 'valid custom dump' >"$output"`);
-    await executable(files.bin, "pg_restore", "exit 0");
+    await executable(files.bin, "docker", `
+printf 'docker %s\n' "$*" >>"$COMMAND_LOG"
+case "$*" in
+  *"pg_dump"*) printf 'valid custom dump' ;;
+  *"pg_restore --list"*) cat >/dev/null ;;
+esac`);
     await executable(files.bin, "openssl", "exit 9");
     await executable(files.bin, "find", "printf 'find %s\\n' \"$*\" >>\"$COMMAND_LOG\"");
 
-    const result = run("backup.sh", files);
+    const result = run("backup.sh", files, {
+      ENV_FILE: "",
+      FITGRID_DEFAULT_ENV_FILE: files.environmentFile,
+    });
     expect(result.status, result.stderr).toBe(9);
-    await expect(readFile(files.commandLog, "utf8")).rejects.toThrow();
+    const calls = await readFile(files.commandLog, "utf8");
+    expect(calls).toContain("exec -T db pg_dump");
+    expect(calls).not.toContain("find ");
   });
 });
 

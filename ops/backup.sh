@@ -26,9 +26,9 @@ encrypted_file="$BACKUP_DIR/$base.dump.enc"
 checksum_file="$BACKUP_DIR/$base.dump.enc.sha256"
 metadata_file="$BACKUP_DIR/$base.json"
 
-PGDATABASE="$MIGRATION_DATABASE_URL" pg_dump --format=custom --file="$dump_file"
+fitgrid_compose exec -T db pg_dump --format=custom --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" >"$dump_file"
 [ -s "$dump_file" ] || { echo "pg_dump produced an empty file" >&2; exit 1; }
-pg_restore --list "$dump_file" >/dev/null
+fitgrid_compose exec -T db pg_restore --list <"$dump_file" >/dev/null
 openssl enc -aes-256-cbc -pbkdf2 -salt \
   -pass "file:$BACKUP_ENCRYPTION_KEY_FILE" -in "$dump_file" -out "$encrypted_file"
 [ -s "$encrypted_file" ] || { echo "Encrypted backup is empty" >&2; exit 1; }

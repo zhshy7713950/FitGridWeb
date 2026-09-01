@@ -10,6 +10,8 @@
 - 选择未占用的本地端口，默认 `3300`。应用只绑定 `127.0.0.1`；PostgreSQL 不发布宿主端口。
 - GitHub Actions 已为所选完整 commit 生成 `ghcr.io/zhshy7713950/fitgridweb:sha-<40位SHA>`。首次发布后，在 GitHub Packages 设置中把该 GHCR package 设为 **Public**；安装器不保存 GitHub Token。
 
+安装器会在修改 apt、`/opt` 或系统配置前完成镜像公开性、nginx 单-server/域名/HTTPS 端口、现有 HTTPS 连通性、应用端口和磁盘检查。磁盘达到 70% 会警告，达到 85% 会停止安装或升级。
+
 ## 一键安装
 
 先下载再运行，便于执行前查看脚本；不要使用 `curl | sudo sh`：
@@ -31,7 +33,7 @@ sudo sh /tmp/fitgridweb-install.sh
 6. 是否把总 Swap 补到 2 GiB；
 7. 是否在部署后创建首个管理员。
 
-管理员密码由容器内 `pnpm admin:create` 直接以隐藏 TTY 输入读取，不会出现在参数、shell history 或安装日志中。它只允许在用户表为空时执行一次。
+管理员密码由容器内管理员 CLI 直接以隐藏 TTY 输入读取，不会出现在参数、shell history 或安装日志中。它只允许在用户表为空时执行一次。
 
 安装成功地址为：
 
@@ -111,7 +113,7 @@ ps aux --sort=-%mem | head -20
 sudo /opt/fitgridweb/ops/install-production.sh --upgrade
 ```
 
-升级默认复用已保存的域名、端口、nginx 文件和当前 SHA，并默认不再创建管理员。输入新的 tag、分支或完整 SHA 即可升级。脚本保留既有数据库卷和秘密，先迁移再更新 app；迁移失败时不启动新 app；新 app 健康失败时恢复旧 `APP_IMAGE` 并重新启动旧 app。
+升级默认复用已保存的域名、端口、nginx 文件和当前 SHA，并默认不再创建管理员。输入新的 tag、分支或完整 SHA 即可升级。为了保证应用、nginx 和回滚端点保持原子一致，`--upgrade` 不允许同时更换域名、本地端口、公网端口或 vhost；这类变更应在单独维护窗口完成。脚本保留既有数据库卷、秘密和已验证的备份路径/保留期，先迁移再更新 app；迁移失败时不启动新 app；nginx、systemd 或最终健康检查失败时恢复旧 `APP_IMAGE` 并重新验证旧服务。
 
 数据库 migration 不做自动逆向 SQL。migration 必须向后兼容旧应用；如果新 migration 破坏了旧版兼容性，应用镜像回滚并不等于数据库回滚，必须按隔离恢复流程处理。
 
@@ -136,7 +138,7 @@ sudo systemctl reload nginx
 
 ## 备份与隔离恢复
 
-先把 `/etc/fitgridweb/fitgridweb.env` 中的 `BACKUP_REMOTE_DIR` 改为真实异机挂载或独立故障域目录。仅复制到同一块 VPS 磁盘不算灾难恢复。
+首次安装会把 `/etc/fitgridweb/fitgridweb.env` 中的 `BACKUP_REMOTE_DIR` 留空，备份命令会明确拒绝运行。先把它改为真实异机挂载或独立故障域目录；仅复制到同一块 VPS 磁盘不算灾难恢复。后续 `--upgrade` 会保留该配置。
 
 ```bash
 sudo /opt/fitgridweb/ops/backup.sh

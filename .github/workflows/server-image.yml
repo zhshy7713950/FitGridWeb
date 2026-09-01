@@ -55,3 +55,11 @@ jobs:
             NEXT_BASE_PATH=/fitgrid
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Verify runtime CLIs without Corepack writes
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+        run: |
+          docker run --rm --read-only --tmpfs /tmp:size=64m \
+            --entrypoint /app/node_modules/.bin/prisma "$IMAGE" --version
+          docker run --rm --read-only --tmpfs /tmp:size=64m \
+            --entrypoint /app/node_modules/.bin/tsx "$IMAGE" --version

@@ -67,8 +67,9 @@ describe("deployment state machine", () => {
     const result = run(`deploy_release "${files.project}" "${files.environment}" "${files.oldEnvironment}" 3300`, files, { MIGRATION_OK: "0" });
     expect(result.status).toBe(1);
     const log = await readFile(files.log, "utf8");
-    expect(log).toContain("prisma migrate deploy");
-    expect(log).not.toContain("up -d --wait app");
+    expect(log).toContain("node_modules/.bin/prisma migrate deploy");
+    expect(log).not.toContain("postgresql://fitgrid_migrate:secret");
+    expect(log).not.toContain("up --no-build -d --wait app");
     expect(log).not.toMatch(/down|-v|volume rm|system prune/);
   });
 
@@ -78,7 +79,7 @@ describe("deployment state machine", () => {
     expect(result.status).toBe(1);
     expect(await readFile(files.environment, "utf8")).toContain(`APP_IMAGE=${oldImage}`);
     const log = await readFile(files.log, "utf8");
-    expect((log.match(/up -d --wait app/g) ?? [])).toHaveLength(2);
+    expect((log.match(/up --no-build -d --wait app/g) ?? [])).toHaveLength(2);
     expect(log).not.toMatch(/down|-v|volume rm|system prune/);
   });
 
@@ -95,7 +96,22 @@ describe("deployment state machine", () => {
     const files = await fixture();
     expect(run(`create_initial_admin "${files.project}" "${files.environment}"`, files).status).toBe(0);
     const log = await readFile(files.log, "utf8");
-    expect(log).toContain("run --rm --no-deps app pnpm admin:create");
+    expect(log).toContain("run --rm --no-deps app node_modules/.bin/tsx src/server/cli/create-admin.ts");
     expect(log).not.toMatch(/password=/i);
+  });
+
+  it("does not require Corepack or network access inside read-only runtime containers", async () => {
+    const source = await readFile(library, "utf8");
+    expect(source).not.toMatch(/\bpnpm\b/);
+    expect(source).toContain("node_modules/.bin/prisma migrate deploy");
+    expect(source).toContain("node_modules/.bin/tsx src/server/cli/create-admin.ts");
+  });
+
+  it("coordinates rollback for nginx, systemd, and final health failures", async () => {
+    const source = await readFile(library, "utf8");
+    expect(source).toMatch(/if ! install_nginx_include[\s\S]*rollback_release/);
+    expect(source).toMatch(/if ! install_systemd_unit[\s\S]*rollback_release/);
+    expect(source).toMatch(/if ! systemctl restart fitgridweb\.service[\s\S]*rollback_release/);
+    expect((source.match(/rollback_release /g) ?? []).length).toBeGreaterThanOrEqual(4);
   });
 });

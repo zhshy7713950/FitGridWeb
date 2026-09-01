@@ -68,6 +68,6 @@ install_systemd_unit() {
   cp "$template" "$temporary"
   chmod 644 "$temporary"
   mv "$temporary" "$destination"
-  systemctl daemon-reload
-  systemctl enable fitgridweb.service
+  systemctl daemon-reload || return 1
+  systemctl enable fitgridweb.service || return 1
 }

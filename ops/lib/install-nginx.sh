@@ -45,6 +45,7 @@ location ^~ /fitgrid/ {
     proxy_pass http://127.0.0.1:${app_port};
     proxy_http_version 1.1;
     proxy_set_header Host \$http_host;
+    proxy_set_header X-Forwarded-Host \$http_host;
     proxy_set_header X-Real-IP \$remote_addr;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto https;
@@ -52,6 +53,9 @@ location ^~ /fitgrid/ {
     proxy_set_header Connection "upgrade";
     proxy_request_buffering off;
     proxy_buffering off;
+    proxy_connect_timeout 10s;
+    proxy_read_timeout 60s;
+    proxy_send_timeout 60s;
     client_max_body_size 10m;
 }
 EOF
@@ -90,7 +94,17 @@ install_nginx_include() {
   if ! grep -Fq "$marker" "$site"; then
     site_temp=$(mktemp "${site}.tmp.XXXXXX")
     awk -v managed_include="$include" '
-      { lines[NR] = $0; if ($0 ~ /^[[:space:]]*}[[:space:]]*(#.*)?$/) closing = NR }
+      {
+        lines[NR] = $0
+        code = $0; sub(/#.*/, "", code)
+        if (!inside && code ~ /(^|[[:space:]])server[[:space:]]*\{/) {
+          inside = 1; server_depth = depth + 1
+        }
+        open_code = code; close_code = code
+        opens = gsub(/\{/, "", open_code); closes = gsub(/\}/, "", close_code)
+        depth += opens - closes
+        if (inside && depth < server_depth) { closing = NR; inside = 0 }
+      }
       END {
         if (!closing) exit 2
         for (line = 1; line <= NR; line++) {
@@ -119,5 +133,15 @@ install_nginx_include() {
     fitgrid_error "nginx -t 失败，已恢复原文件"
     return 1
   fi
-  systemctl reload nginx
+  if ! systemctl reload nginx; then
+    cp -p "$site_backup" "$site"
+    if [ "$snippet_existed" = true ]; then
+      cp -p "$snippet_backup" "$managed_snippet"
+    else
+      rm -f "$managed_snippet"
+    fi
+    nginx -t >/dev/null 2>&1 || true
+    fitgrid_error "nginx reload 失败，已恢复受管文件；运行中的旧配置未被替换"
+    return 1
+  fi
 }

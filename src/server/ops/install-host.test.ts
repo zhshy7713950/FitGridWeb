@@ -83,7 +83,7 @@ describe("boot recovery", () => {
     const source = await readFile(unitTemplate, "utf8");
     expect(source).toContain("Requires=docker.service");
     expect(source).toContain("After=network-online.target docker.service");
-    expect(source).toContain("docker-compose.low-memory.yml up -d --wait db app");
+    expect(source).toContain("docker-compose.low-memory.yml up --no-build -d --wait db app");
     expect(source).toContain("docker-compose.low-memory.yml stop app db");
     expect(source).not.toMatch(/caddy|sing-box|ufw|firewall/i);
 
