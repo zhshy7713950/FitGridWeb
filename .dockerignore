@@ -3,7 +3,12 @@
 .next
 node_modules
 coverage
-docs
+docs/*
+!docs/fit-replication/
+docs/fit-replication/*
+!docs/fit-replication/fixtures/
+docs/fit-replication/fixtures/*
+!docs/fit-replication/fixtures/grid-algorithm-v2.1.0.json
 .env
 .env.*
 !.env.example

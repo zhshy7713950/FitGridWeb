@@ -5,12 +5,12 @@
 ## 部署前确认
 
 - 至少 1.5 GiB 总内存和 8 GiB 可用磁盘；建议允许安装器把总 Swap 补到 2 GiB。
-- 现有域名已经由 nginx 提供 HTTPS；安装器不会申请证书、修改 `listen`、修改防火墙或触碰 sing-box。
-- 准备一个只含一个目标 `server {}` 的 nginx vhost 文件，例如 `/etc/nginx/sites-available/example.conf`。其中必须有目标 `server_name` 和实际 HTTPS `listen ... ssl` 端口。
+- 现有域名已经在当前 nginx 配置中使用有效的 TLS 证书；安装器会复用证书，但不会申请、续期或替换证书，也不会修改防火墙或触碰 sing-box。
+- 安装器优先检查 `443/TCP`：空闲时自动创建 `/etc/nginx/conf.d/fitgridweb.conf` 并使用标准 HTTPS；已占用时才要求填写另一个空闲端口。UDP 端口不参与该判断，因此 sing-box 使用 `443/UDP` 不会阻止 nginx 使用 `443/TCP`。
 - 选择未占用的本地端口，默认 `3300`。应用只绑定 `127.0.0.1`；PostgreSQL 不发布宿主端口。
 - GitHub Actions 已为所选完整 commit 生成 `ghcr.io/zhshy7713950/fitgridweb:sha-<40位SHA>`。首次发布后，在 GitHub Packages 设置中把该 GHCR package 设为 **Public**；安装器不保存 GitHub Token。
 
-安装器会在修改 apt、`/opt` 或系统配置前完成镜像公开性、nginx 单-server/域名/HTTPS 端口、现有 HTTPS 连通性、应用端口和磁盘检查。磁盘达到 70% 会警告，达到 85% 会停止安装或升级。
+安装器先完成镜像公开性、应用端口和磁盘检查，再以可回滚方式创建独立 nginx vhost，并完成 nginx 配置和 HTTPS 连通性检查，之后才修改 apt、`/opt` 或启动应用。磁盘达到 70% 会警告，达到 85% 会停止安装或升级。
 
 ## 一键安装
 
@@ -26,12 +26,13 @@ sudo sh /tmp/fitgridweb-install.sh
 安装器依次询问：
 
 1. 现有 HTTPS 域名，不含协议、端口和路径；
-2. 现有 nginx HTTPS 端口，标准 HTTPS 使用 `443`，非标准端口填实际值；
-3. 目标 nginx vhost 的绝对路径；
-4. FitGrid 本地回环端口，默认 `3300`；
-5. 公开仓库的 Git ref，默认 `main`，最终总会解析为完整 SHA；
-6. 是否把总 Swap 补到 2 GiB；
-7. 是否在部署后创建首个管理员。
+2. FitGrid 本地回环端口，默认 `3300`；
+3. 公开仓库的 Git ref，默认 `main`，最终总会解析为完整 SHA；
+4. 是否把总 Swap 补到 2 GiB；
+5. 是否在部署后创建首个管理员。
+
+如果 `443/TCP` 已被占用，安装器会额外要求填写一个空闲的公网 HTTPS 端口；否则不会询问端口或 nginx 文件路径。
+公网 HTTPS 端口不能与本地应用端口相同。安装器只支持带 `FITGRID_NGINX_INSTALLER_PROTOCOL=2` 的当前发布；若显式选择更早的 Git ref，会给出兼容性错误并停止。
 
 管理员密码由容器内管理员 CLI 直接以隐藏 TTY 输入读取，不会出现在参数、shell history 或安装日志中。它只允许在用户表为空时执行一次。
 
@@ -54,13 +55,13 @@ curl --fail --silent --show-error \
 - `/etc/fitgridweb/fitgridweb.env`：权限 `600` 的运行配置和五个独立随机秘密；
 - `/etc/fitgridweb/backup.key`：权限 `600` 的备份加密密钥；
 - `/etc/nginx/snippets/fitgridweb-location.conf`：受管 `/fitgrid` 代理片段；
-- 用户选择的单-server nginx vhost：只插入一行带 `fitgridweb-managed` 标记的 include；
+- `/etc/nginx/conf.d/fitgridweb.conf`：自动创建或复用的单-server专用 vhost，只使用现有域名证书；
 - `/var/backups/fitgridweb/nginx`：nginx 修改前的带时间戳备份；
 - `/etc/systemd/system/fitgridweb.service`：开机恢复 `db app`；
 - 用户同意且现有 Swap 不足时：`/swapfile-fitgridweb` 和 `/etc/fstab` 中的一条受管记录；
 - Docker 官方 apt source 和 Docker Engine/Compose plugin。
 
-它不会执行 `docker system prune`，不会删除 PostgreSQL 卷，也不会修改 SSH、防火墙、sing-box、其他 nginx server 或其他 Docker Compose project。
+它不会执行 `docker system prune`，不会删除 PostgreSQL 卷，也不会修改 SSH、防火墙、sing-box、其他 nginx server 或其他 Docker Compose project。若同域名存在多组不同证书、证书文件不存在或专用 vhost 已被其他服务占用，安装器会停止而不是猜测或覆盖。
 
 ## 日常检查与重启
 
@@ -119,7 +120,7 @@ sudo /opt/fitgridweb/ops/install-production.sh --upgrade
 
 ## nginx 失败恢复
 
-安装器写入后自动执行 `nginx -t`，失败会恢复原 vhost 和原 snippet，且不会 reload。需要人工检查时：
+安装器写入后自动执行 `nginx -t` 和 reload，再分别使用本机 SNI/TLS 与公网域名验证 HTTPS。任一步失败都会删除新建 vhost，并再次执行 `nginx -t` 与 reload恢复旧配置；已有受管文件修改失败则恢复原 vhost 和原 snippet。需要人工检查时：
 
 ```bash
 sudo nginx -t

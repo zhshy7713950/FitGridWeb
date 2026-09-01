@@ -74,6 +74,20 @@ describe("installer preflight", () => {
     }
   });
 
+  it("automates a dedicated nginx endpoint without asking novices for a vhost path", async () => {
+    const installer = await readFile(path.join(process.cwd(), "ops/install-production.sh"), "utf8");
+    const imageGate = installer.indexOf('assert_public_image "$image"');
+    const prepareSite = installer.indexOf("prepare_dedicated_nginx_site");
+
+    expect(installer).toContain("nginx_site=/etc/nginx/conf.d/fitgridweb.conf");
+    expect(installer).toContain("choose_nginx_public_port");
+    expect(installer).toContain("validate_distinct_ports");
+    expect(installer).toContain("FITGRID_NGINX_INSTALLER_PROTOCOL");
+    expect(installer).not.toContain('prompt_value "仅含一个 server 块的 nginx vhost 文件绝对路径"');
+    expect(imageGate).toBeGreaterThan(0);
+    expect(prepareSite).toBeGreaterThan(imageGate);
+  });
+
   it("accepts the supported host and rejects insufficient resources", async () => {
     const files = await fixture();
     expect(run(`validate_host "${files.release}" "${files.meminfo}" "${files.root}" x86_64`, files).status).toBe(0);
@@ -98,7 +112,9 @@ describe("installer preflight", () => {
     expect(run(`resolve_ref https://github.com/zhshy7713950/FitGridWeb.git ${directSha}`, files, { CURL_COMMIT_SHA: "" }).status).toBe(1);
 
     const image = "ghcr.io/zhshy7713950/fitgridweb:sha-2ca7f41000000000000000000000000000000000";
-    expect(run(`assert_public_image ${image}`, files, { MANIFEST_OK: "0", CURL_MANIFEST_OK: "0" }).status).toBe(1);
+    const unavailable = run(`assert_public_image ${image}`, files, { MANIFEST_OK: "0", CURL_MANIFEST_OK: "0" });
+    expect(unavailable.status).toBe(1);
+    expect(unavailable.stderr).toContain("github.com/zhshy7713950/FitGridWeb/actions");
     expect(run(`assert_public_image ${image}`, files, { MANIFEST_OK: "0", CURL_MANIFEST_OK: "1" }).status).toBe(0);
   });
 
@@ -106,6 +122,12 @@ describe("installer preflight", () => {
     const files = await fixture();
     expect(run("assert_app_port_available 3300", files, { PORT_BUSY: "1" }).status).toBe(1);
     expect(run("assert_app_port_available 3300", files, { PORT_BUSY: "0" }).status).toBe(0);
+  });
+
+  it("rejects using the same host port for nginx and the application", async () => {
+    const files = await fixture();
+    expect(run("validate_distinct_ports 443 3300", files).status).toBe(0);
+    expect(run("validate_distinct_ports 3300 3300", files).status).toBe(1);
   });
 
   it("warns at 70 percent disk, aborts at 85 percent, and verifies existing HTTPS", async () => {

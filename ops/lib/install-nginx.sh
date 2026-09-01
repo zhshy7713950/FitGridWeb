@@ -4,6 +4,62 @@ if ! command -v fitgrid_error >/dev/null 2>&1; then
   fitgrid_error() { printf '错误：%s\n' "$*" >&2; }
 fi
 
+FITGRID_NGINX_INSTALLER_PROTOCOL=2
+
+nginx_tcp_port_available() {
+  port=$1
+  case $port in ""|*[!0-9]*) fitgrid_error "HTTPS 端口必须是数字"; return 1 ;; esac
+  if ss -ltnH 2>/dev/null | awk '{ print $4 }' | grep -Eq "(^|:)$port$"; then
+    return 1
+  fi
+}
+
+resolve_nginx_public_port() {
+  site=$1
+  domain=$2
+  candidate=$3
+
+  if [ -f "$site" ] && validate_nginx_site "$site" "$domain" "$candidate" >/dev/null 2>&1; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  if nginx_tcp_port_available "$candidate"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  fitgrid_error "HTTPS TCP 端口 $candidate 已被其他服务占用"
+  return 1
+}
+
+choose_nginx_public_port() {
+  site=$1
+  domain=$2
+  preferred=${3:-443}
+
+  if resolved=$(resolve_nginx_public_port "$site" "$domain" "$preferred"); then
+    printf '%s\n' "$resolved"
+    return 0
+  fi
+
+  suggested=8443
+  while :; do
+    candidate=$(prompt_value "端口 $preferred 已占用，请填写 FitGrid 公网 HTTPS 端口" "$suggested")
+    case $candidate in
+      ""|*[!0-9]*) fitgrid_error "HTTPS 端口必须是数字"; continue ;;
+    esac
+    if [ "$candidate" -lt 1 ] || [ "$candidate" -gt 65535 ]; then
+      fitgrid_error "HTTPS 端口必须在 1–65535 之间"
+      continue
+    fi
+    if resolved=$(resolve_nginx_public_port "$site" "$domain" "$candidate"); then
+      printf '%s\n' "$resolved"
+      return 0
+    fi
+    suggested=$((candidate + 1))
+    [ "$suggested" -le 65535 ] || suggested=8443
+  done
+}
+
 validate_nginx_site() {
   site=$1
   domain=$2
@@ -29,6 +85,186 @@ validate_nginx_site() {
   fi
   if ! sed 's/#.*$//' "$site" | grep -Eq "^[[:space:]]*listen[[:space:]]+([^;[:space:]]*:)?${public_port}([[:space:]]|;).*ssl"; then
     fitgrid_error "所选 vhost 未监听 HTTPS 端口 $public_port"
+    return 1
+  fi
+}
+
+discover_nginx_tls_pair() {
+  domain=$1
+  dump=$(mktemp)
+  if ! nginx -T >"$dump" 2>&1; then
+    rm -f "$dump"
+    fitgrid_error "无法读取当前 nginx 配置"
+    return 1
+  fi
+
+  pairs=$(awk -v wanted="$domain" '
+    function trim(value) {
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      return value
+    }
+    function inspect(block, normalized, count, statements, idx, statement, fields, field, matched, certificate, key) {
+      normalized = block
+      gsub(/[{}]/, ";", normalized)
+      count = split(normalized, statements, ";")
+      matched = 0
+      certificate = ""
+      key = ""
+      for (idx = 1; idx <= count; idx++) {
+        statement = trim(statements[idx])
+        if (statement == "") continue
+        split(statement, fields, /[[:space:]]+/)
+        if (fields[1] == "server_name") {
+          for (field = 2; fields[field] != ""; field++) {
+            if (fields[field] == wanted) matched = 1
+          }
+        } else if (fields[1] == "ssl_certificate") {
+          certificate = fields[2]
+        } else if (fields[1] == "ssl_certificate_key") {
+          key = fields[2]
+        }
+      }
+      if (matched && certificate != "" && key != "") print certificate "\t" key
+    }
+    {
+      code = $0
+      sub(/#.*/, "", code)
+      if (!inside && code ~ /(^|[[:space:]])server[[:space:]]*\{/) {
+        inside = 1
+        depth = 0
+        block = ""
+      }
+      if (inside) {
+        block = block "\n" code
+        braces = code
+        opens = gsub(/\{/, "", braces)
+        braces = code
+        closes = gsub(/\}/, "", braces)
+        depth += opens - closes
+        if (depth == 0) {
+          inspect(block)
+          inside = 0
+          block = ""
+        }
+      }
+    }
+  ' "$dump" | sort -u)
+  rm -f "$dump"
+
+  pair_count=$(printf '%s\n' "$pairs" | awk 'NF { count++ } END { print count + 0 }')
+  if [ "$pair_count" -eq 0 ]; then
+    fitgrid_error "未在当前 nginx 配置中找到域名 $domain 的 TLS 证书"
+    return 1
+  fi
+  if [ "$pair_count" -ne 1 ]; then
+    fitgrid_error "域名 $domain 使用了多组 TLS 证书，无法安全自动选择"
+    return 1
+  fi
+  printf '%s\n' "$pairs"
+}
+
+render_dedicated_nginx_site() {
+  domain=$1
+  public_port=$2
+  certificate=$3
+  certificate_key=$4
+  cat <<EOF
+# fitgridweb-vhost-managed
+server {
+    listen ${public_port} ssl;
+    server_name ${domain};
+
+    ssl_certificate ${certificate};
+    ssl_certificate_key ${certificate_key};
+
+    location / {
+        return 404;
+    }
+}
+EOF
+}
+
+validate_local_nginx_https_endpoint() {
+  domain=$1
+  public_port=$2
+  suffix=
+  [ "$public_port" -eq 443 ] || suffix=":$public_port"
+  curl --silent --show-error --output /dev/null --max-time 10 \
+    --resolve "$domain:$public_port:127.0.0.1" "https://$domain$suffix/" \
+    || { fitgrid_error "新 nginx vhost 未能在本机通过 HTTPS/TLS 验证"; return 1; }
+}
+
+validate_public_nginx_https_endpoint() {
+  domain=$1
+  public_port=$2
+  suffix=
+  [ "$public_port" -eq 443 ] || suffix=":$public_port"
+  curl --silent --show-error --output /dev/null --max-time 10 "https://$domain$suffix/" \
+    || { fitgrid_error "公网 HTTPS 地址无法连接：https://$domain$suffix/"; return 1; }
+}
+
+rollback_new_dedicated_nginx_site() {
+  site=$1
+  rm -f "$site"
+  if ! nginx -t; then
+    fitgrid_error "移除新 vhost 后 nginx -t 仍失败，请立即人工检查"
+    return 1
+  fi
+  if ! systemctl reload nginx; then
+    fitgrid_error "移除新 vhost 后 nginx reload 失败，请立即人工检查"
+    return 1
+  fi
+}
+
+prepare_dedicated_nginx_site() {
+  site=$1
+  domain=$2
+  public_port=$3
+
+  if [ -e "$site" ]; then
+    [ -f "$site" ] || { fitgrid_error "nginx vhost 不是普通文件：$site"; return 1; }
+    validate_nginx_site "$site" "$domain" "$public_port" \
+      || { fitgrid_error "已存在的专用 vhost 与本次域名或端口不匹配，拒绝覆盖：$site"; return 1; }
+    validate_local_nginx_https_endpoint "$domain" "$public_port" || return 1
+    validate_public_nginx_https_endpoint "$domain" "$public_port" || return 1
+    return 0
+  fi
+
+  nginx_tcp_port_available "$public_port" \
+    || { fitgrid_error "HTTPS TCP 端口 $public_port 在配置期间被其他服务占用"; return 1; }
+
+  tls_pair=$(discover_nginx_tls_pair "$domain") || return 1
+  certificate=$(printf '%s\n' "$tls_pair" | awk -F '\t' 'NR == 1 { print $1 }')
+  certificate_key=$(printf '%s\n' "$tls_pair" | awk -F '\t' 'NR == 1 { print $2 }')
+  case $certificate in /*) : ;; *) fitgrid_error "TLS 证书路径不是绝对路径"; return 1 ;; esac
+  case $certificate_key in /*) : ;; *) fitgrid_error "TLS 私钥路径不是绝对路径"; return 1 ;; esac
+  [ -f "$certificate" ] || { fitgrid_error "TLS 证书文件不存在：$certificate"; return 1; }
+  [ -f "$certificate_key" ] || { fitgrid_error "TLS 私钥文件不存在：$certificate_key"; return 1; }
+  [ -d "$(dirname "$site")" ] || { fitgrid_error "nginx vhost 目录不存在：$(dirname "$site")"; return 1; }
+
+  site_temp=$(mktemp "${site}.tmp.XXXXXX")
+  render_dedicated_nginx_site "$domain" "$public_port" "$certificate" "$certificate_key" >"$site_temp"
+  chmod 644 "$site_temp"
+  mv "$site_temp" "$site"
+
+  if ! nginx -t; then
+    rm -f "$site"
+    fitgrid_error "nginx -t 失败，已移除新建的 FitGrid vhost"
+    return 1
+  fi
+  if ! systemctl reload nginx; then
+    rm -f "$site"
+    nginx -t >/dev/null 2>&1 || true
+    fitgrid_error "nginx reload 失败，已移除新建的 FitGrid vhost；运行中的旧配置未改变"
+    return 1
+  fi
+  if ! validate_local_nginx_https_endpoint "$domain" "$public_port"; then
+    rollback_new_dedicated_nginx_site "$site" || true
+    return 1
+  fi
+  if ! validate_public_nginx_https_endpoint "$domain" "$public_port"; then
+    rollback_new_dedicated_nginx_site "$site" || true
     return 1
   fi
 }

@@ -15,6 +15,22 @@ interface Workflow {
 }
 
 describe("server image release workflow", () => {
+  it("keeps the grid contract fixture in the Docker build context", () => {
+    const dockerignore = readFileSync(
+      path.join(process.cwd(), ".dockerignore"),
+      "utf8",
+    );
+    const rules = dockerignore.split(/\r?\n/);
+
+    for (const requiredRule of [
+      "!docs/fit-replication/",
+      "!docs/fit-replication/fixtures/",
+      "!docs/fit-replication/fixtures/grid-algorithm-v2.1.0.json",
+    ]) {
+      expect(rules).toContain(requiredRule);
+    }
+  });
+
   it("publishes a verified immutable amd64 image compiled for /fitgrid", () => {
     const source = readFileSync(
       path.join(process.cwd(), ".github/workflows/server-image.yml"),
