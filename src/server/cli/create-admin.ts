@@ -50,6 +50,30 @@ async function readLine(prompt: string): Promise<string> {
   });
 }
 
+type CredentialReader = (prompt: string) => Promise<string>;
+type ErrorReporter = (message: string) => void;
+
+export async function collectAdminCredentials(
+  usernameReader: CredentialReader = readLine,
+  passwordReader: CredentialReader = readHidden,
+  reportError: ErrorReporter = (message) => process.stderr.write(`${message}\n`),
+) {
+  while (true) {
+    const usernameValue = await usernameReader("Username: ");
+    const passwordValue = await passwordReader("Password: ");
+    const confirmation = await passwordReader("Confirm password: ");
+    if (passwordValue !== confirmation) {
+      reportError("Passwords do not match");
+      continue;
+    }
+    try {
+      return validateCredentials(usernameValue, passwordValue);
+    } catch (error: unknown) {
+      reportError(error instanceof Error ? error.message : "Invalid administrator credentials");
+    }
+  }
+}
+
 export async function createInitialAdmin(): Promise<void> {
   if (process.argv.some((argument) => /password/i.test(argument))) {
     throw new Error("Password arguments are forbidden; use the interactive prompt");
@@ -58,11 +82,7 @@ export async function createInitialAdmin(): Promise<void> {
   if ((await prisma.user.count()) !== 0) {
     throw new Error("Initial administrator can only be created in an empty user database");
   }
-  const usernameValue = await readLine("Username: ");
-  const passwordValue = await readHidden("Password: ");
-  const confirmation = await readHidden("Confirm password: ");
-  if (passwordValue !== confirmation) throw new Error("Passwords do not match");
-  const { username, password } = validateCredentials(usernameValue, passwordValue);
+  const { username, password } = await collectAdminCredentials();
   const userId = randomUUID();
   const passwordHash = await hashPassword(password);
   await prisma.$transaction(async (transaction) => {

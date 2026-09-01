@@ -34,7 +34,13 @@ n=$((n + 1))
 printf '%s' "$n" >"${counter}"
 printf '%064x\\n' "$n"`);
   await executable(bin, "git", 'printf "%s\\n" "${GIT_SHA:-2ca7f41000000000000000000000000000000000}\trefs/heads/main"');
-  await executable(bin, "docker", 'printf "docker %s\\n" "$*" >>"$COMMAND_LOG"; [ "${MANIFEST_OK:-1}" = 1 ]');
+  await executable(bin, "docker", `
+printf "docker %s\\n" "$*" >>"$COMMAND_LOG"
+case "$*" in
+  "ps --filter publish=3300 --format "*) [ "\${FITGRID_OWNS_PORT:-0}" = 1 ] && printf 'fitgridweb\\n' ;;
+  ps*) : ;;
+  *) [ "\${MANIFEST_OK:-1}" = 1 ] ;;
+esac`);
   await executable(bin, "curl", `
 case "$*" in
   *"api.github.com/repos/zhshy7713950/FitGridWeb/commits/"*) printf '{"sha": "%s"}' "\${CURL_COMMIT_SHA:-}" ;;
@@ -118,10 +124,29 @@ describe("installer preflight", () => {
     expect(run(`assert_public_image ${image}`, files, { MANIFEST_OK: "0", CURL_MANIFEST_OK: "1" }).status).toBe(0);
   });
 
-  it("rejects an occupied app port unless FitGrid owns it", async () => {
+  it("accepts an occupied app port when the FitGrid Compose project owns it", async () => {
+    const files = await fixture();
+    expect(run("assert_app_port_available 3300", files, {
+      PORT_BUSY: "1",
+      FITGRID_OWNS_PORT: "1",
+    }).status).toBe(0);
+  });
+
+  it("rejects an occupied app port owned by another process", async () => {
     const files = await fixture();
     expect(run("assert_app_port_available 3300", files, { PORT_BUSY: "1" }).status).toBe(1);
     expect(run("assert_app_port_available 3300", files, { PORT_BUSY: "0" }).status).toBe(0);
+  });
+
+  it("prompts for another app port after an external port conflict", async () => {
+    const files = await fixture();
+    const result = run(`
+prompt_value() { printf '3301\\n'; }
+choose_app_port 3300`, files, { PORT_BUSY: "1" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.trim()).toBe("3301");
+    expect(result.stderr).toContain("本地端口 3300 已被非 FitGrid 服务占用");
   });
 
   it("rejects using the same host port for nginx and the application", async () => {

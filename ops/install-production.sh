@@ -73,8 +73,19 @@ validate_upgrade_invariants() {
 assert_app_port_available() {
   port=$1
   ss -ltnH 2>/dev/null | awk '{ print $4 }' | grep -Eq "(^|:)$port$" || return 0
-  owner=$(docker ps --filter "publish=127.0.0.1:$port" --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null | head -n 1 || true)
+  owner=$(docker ps --filter "publish=$port" --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null \
+    | awk '$0 == "fitgridweb" { print; exit }' || true)
   [ "$owner" = fitgridweb ] || { fitgrid_error "本地端口 $port 已被非 FitGrid 服务占用"; return 1; }
+}
+choose_app_port() {
+  candidate=$1
+  while :; do
+    if validate_port "$candidate" 1024 && assert_app_port_available "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+    candidate=$(prompt_value "请重新输入 FitGrid 本地回环端口" "$candidate")
+  done
 }
 resolve_ref() {
   git_ref=$2
@@ -176,15 +187,14 @@ if [ "$from_installed" = false ]; then
   printf '\nFitGridWeb 低内存生产安装器（固定路径 /fitgrid）\n' >&2
   domain=$(prompt_value "现有 nginx HTTPS 域名（不含协议和路径）" "${domain:-grid.example.com}")
   app_port=$(prompt_value "FitGrid 本地回环端口" "$app_port")
+  app_port=$(choose_app_port "$app_port")
   git_ref=$(prompt_value "要部署的公开 Git ref" "$git_ref")
   swap_choice=$(prompt_yes_no "总 Swap 不足 2 GiB 时补足" "$swap_choice")
   admin_choice=$(prompt_yes_no "部署成功后创建首个管理员" "$admin_choice")
 
   validate_domain "$domain"
-  validate_port "$app_port" 1024
   case $nginx_site in /*) : ;; *) fitgrid_error "nginx vhost 必须是绝对路径"; exit 1 ;; esac
   case $nginx_site in *[[:space:]]*) fitgrid_error "nginx vhost 路径不能含空白字符"; exit 1 ;; esac
-  assert_app_port_available "$app_port"
   resolved_sha=$(resolve_ref "$REPOSITORY_URL" "$git_ref")
   image=$(image_for_sha "$resolved_sha")
   assert_public_image "$image"
@@ -207,7 +217,7 @@ if [ "$from_installed" = false ]; then
   require_root
   validate_host /etc/os-release /proc/meminfo /
   validate_domain "$domain"
-  validate_port "$app_port" 1024
+  app_port=$(choose_app_port "$app_port")
   if [ -f "$ENVIRONMENT_FILE" ] && [ -n "$(environment_value PUBLIC_HTTPS_PORT "$ENVIRONMENT_FILE")" ]; then
     public_port=$(environment_value PUBLIC_HTTPS_PORT "$ENVIRONMENT_FILE")
   else
