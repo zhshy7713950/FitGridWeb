@@ -153,8 +153,11 @@ export function GridWorkspaceView({
         ) : controller.nextCursor ? (
           <button
             type="button"
-            disabled={controller.pageLoading}
-            onClick={() => void controller.loadMore()}
+            aria-disabled={controller.pageLoading}
+            aria-busy={controller.pageLoading}
+            onClick={() => {
+              if (!controller.pageLoading) void controller.loadMore();
+            }}
           >
             {controller.pageLoading ? "正在加载…" : "加载更多"}
           </button>

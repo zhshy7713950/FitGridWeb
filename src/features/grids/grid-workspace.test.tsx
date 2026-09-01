@@ -158,14 +158,20 @@ it("supports keyboard load more and page retry", async () => {
   expect(retryValue.retryPage).toHaveBeenCalledTimes(1);
 });
 
-it("disables pagination while a page is loading", () => {
-  render(
-    <GridWorkspaceView
-      controller={controller({ nextCursor: "c2", pageLoading: true })}
-    />,
-  );
+it("keeps busy pagination focusable without dispatching another load", async () => {
+  const value = controller({ nextCursor: "c2", pageLoading: true });
+  render(<GridWorkspaceView controller={value} />);
 
-  expect(screen.getByRole("button", { name: "正在加载…" })).toBeDisabled();
+  const loadMore = screen.getByRole("button", { name: "正在加载…" });
+  expect(loadMore).not.toBeDisabled();
+  expect(loadMore).toHaveAttribute("aria-disabled", "true");
+  expect(loadMore).toHaveAttribute("aria-busy", "true");
+
+  loadMore.focus();
+  expect(loadMore).toHaveFocus();
+  await userEvent.keyboard("{Enter}");
+  await userEvent.click(loadMore);
+  expect(value.loadMore).not.toHaveBeenCalled();
 });
 
 it("falls back to the product code when the product name is blank", () => {
