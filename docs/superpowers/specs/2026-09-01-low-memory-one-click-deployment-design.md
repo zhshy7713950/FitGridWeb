@@ -2,7 +2,7 @@
 
 ## 1. 目标与已确认约束
 
-本设计面向一台 Ubuntu 24.04 VPS：2 个虚拟 CPU、2 GiB RAM、20 GiB 磁盘，预计只有 1–2 人偶尔使用 FitGridWeb。宿主机同时运行现有 `sing-box` 和 nginx，FitGridWeb 挂载在现有 HTTPS 域名的固定子路径 `/fitgrid`，不独占或写死公网 `80/443`。
+本设计面向一台 Ubuntu 24.04 VPS：2 个虚拟 CPU、2 GiB RAM、20 GiB 磁盘，预计只有 1–2 人偶尔使用 FitGridWeb。宿主机同时运行现有 `sing-box` 和 nginx，FitGridWeb 挂载在现有 HTTPS 域名的固定子路径 `/fitgrid`。安装器优先使用空闲的 `443/TCP`，若被占用才由用户选择其他端口，不触碰 sing-box 已有监听。
 
 交付目标是：运维人员下载并运行一个交互式安装脚本后，由脚本安装依赖、生成秘密、配置低内存容器、接入现有 nginx、执行迁移、创建首个管理员、验证服务，并配置 VPS 重启后的自动恢复。安装过程不得覆盖 sing-box，也不得无备份地修改 nginx 或已有 FitGridWeb 数据。
 
@@ -76,8 +76,8 @@ sudo bash /tmp/fitgridweb-install.sh
 安装器仅支持 Ubuntu 24.04 x86_64，必须以 root 运行。它交互收集：
 
 - HTTPS 域名；
-- 现有 nginx HTTPS 监听端口，默认 `443`，只验证、不重写 listen；
-- 只包含一个目标 `server {}` 的 nginx 站点文件；
+- 自动检查 `443/TCP`，被占用时才交互收集另一个空闲 HTTPS 端口；
+- 自动创建或复用 `/etc/nginx/conf.d/fitgridweb.conf`，不要求用户识别 nginx vhost 路径；
 - 应用 loopback 端口，默认 `3300`；
 - Git ref 或完整提交，默认 `main`；
 - 是否把总 Swap 扩充到 2 GiB；
@@ -91,8 +91,9 @@ sudo bash /tmp/fitgridweb-install.sh
 
 - Ubuntu 版本、架构、至少 1.5 GiB 总内存、至少 8 GiB可用磁盘；
 - 目标应用端口当前未被其他进程占用，或已由 FitGridWeb 占用；
-- nginx 站点文件存在、只有一个 server block、包含目标域名和输入的监听端口；
-- 现有 HTTPS 地址可连接；
+- 当前 nginx 配置中存在目标域名唯一的一组 TLS 证书和私钥；
+- 专用 nginx 站点只有一个 server block，并包含目标域名和选定监听端口；
+- 新建或复用专用站点后 HTTPS 地址可连接；
 - 不打印 `.env`、数据库 URL、密码、Cookie 或 token。
 
 脚本通过 Docker 官方 apt 仓库安装或升级 Docker Engine、Compose plugin、Git、curl、OpenSSL、CA 证书、nginx 和必要的基础工具。它启用 Docker 和 nginx systemd 服务，但不重写 nginx 的全局配置。
@@ -156,7 +157,7 @@ sudo bash /tmp/fitgridweb-install.sh
 - 关闭代理缓冲以兼容 Next.js streaming；
 - 合理的连接、读取和发送超时。
 
-安装器只向用户选择的单-server站点文件插入一行带受管标记的 include。修改前把站点文件和已有同名 snippet 复制到带 UTC 时间戳的备份目录。写入后运行 `nginx -t`：失败时原子恢复两个文件并再次验证；成功后使用 reload，不中断其他 nginx 站点。重复安装不得产生重复 include 或 location。
+安装器从当前已加载的 nginx 配置中查找目标域名使用的证书和私钥。若 `443/TCP` 空闲则自动选择 443；若已占用则循环要求用户输入另一个空闲端口，且公网端口不得与应用 loopback 端口相同。它创建或复用 `/etc/nginx/conf.d/fitgridweb.conf`，不覆盖不匹配的已有文件，也不修改其他 server。写入前再次检查端口，写入后依次运行 `nginx -t`、reload、本机 `--resolve` SNI/TLS 验证和公网 HTTPS 验证；新建站点的任一步失败都会删除新文件并再次 reload旧配置。随后只向该单-server专用站点插入一行带受管标记的 include；修改前把站点文件和已有同名 snippet 复制到带 UTC 时间戳的备份目录。任何验证或 reload 失败都原子恢复受管文件，重复安装不得产生重复 include 或 location。
 
 ## 10. 迁移、启动和管理员
 
@@ -229,7 +230,7 @@ docker compose --env-file /etc/fitgridweb/fitgridweb.env ps
 
 ## 15. 非目标
 
-- 不自动申请或替换现有域名的 TLS 证书；目标 nginx server 必须已经可通过 HTTPS 工作。
+- 不自动申请、续期或替换现有域名的 TLS 证书；安装器只复用当前 nginx 已加载且唯一匹配该域名的证书文件。
 - 不把 FitGridWeb 挂载到可变子路径；首期固定 `/fitgrid`。
 - 不配置多实例、负载均衡、Redis 或外部 PostgreSQL。
 - 不修改 sing-box、SSH 或防火墙规则。

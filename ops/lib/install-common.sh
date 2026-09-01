@@ -86,6 +86,13 @@ validate_port() {
   fi
 }
 
+validate_distinct_ports() {
+  public_port=$1
+  app_port=$2
+  [ "$public_port" -ne "$app_port" ] \
+    || { fitgrid_error "公网 HTTPS 端口不能与 FitGrid 本地应用端口相同"; return 1; }
+}
+
 resolve_ref() {
   repository=$1
   git_ref=$2
@@ -146,7 +153,7 @@ assert_public_image() {
     "https://ghcr.io/v2/$repository/manifests/$tag" >/dev/null 2>&1; then
     return 0
   fi
-  fitgrid_error "镜像无法匿名读取：$image；请确认 GitHub Actions 已完成且 GHCR package 已设为 Public"
+  fitgrid_error "镜像无法匿名读取：$image；请检查 https://github.com/zhshy7713950/FitGridWeb/actions 并确认 GHCR package 已设为 Public"
   return 1
 }
 

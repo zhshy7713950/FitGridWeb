@@ -23,12 +23,46 @@ async function fixture(serverBlocks = 1) {
   const site = path.join(root, "site.conf");
   const desiredSnippet = path.join(root, "desired.conf");
   const installedSnippet = path.join(root, "installed.conf");
+  const dedicatedSite = path.join(root, "fitgridweb.conf");
+  const nginxDump = path.join(root, "nginx-dump.txt");
+  const certificate = path.join(root, "grid.example.com.crt");
+  const certificateKey = path.join(root, "grid.example.com.key");
   const log = path.join(root, "commands.log");
   const block = `server {\n    listen 8443 ssl;\n    server_name grid.example.com;\n    location /existing { return 200; }\n}\n`;
   await writeFile(site, block.repeat(serverBlocks));
-  await executable(bin, "nginx", 'printf "nginx %s\\n" "$*" >>"$COMMAND_LOG"; [ "${NGINX_OK:-1}" = 1 ]');
+  await writeFile(certificate, "test certificate\n");
+  await writeFile(certificateKey, "test key\n");
+  await writeFile(nginxDump, `# configuration file /etc/nginx/conf.d/existing.conf:\nserver {\n    listen 10256 ssl;\n    server_name grid.example.com;\n    ssl_certificate ${certificate};ssl_certificate_key ${certificateKey};\n}\n`);
+  await executable(bin, "nginx", `
+printf "nginx %s\\n" "$*" >>"$COMMAND_LOG"
+case "\${1:-}" in
+  -T) cat "\$NGINX_DUMP_FILE" ;;
+  -t) [ "\${NGINX_OK:-1}" = 1 ] ;;
+esac`);
   await executable(bin, "systemctl", 'printf "systemctl %s\\n" "$*" >>"$COMMAND_LOG"; [ "${SYSTEMCTL_OK:-1}" = 1 ]');
-  return { root, bin, backups, site, desiredSnippet, installedSnippet, log };
+  await executable(bin, "curl", `
+printf 'curl %s\\n' "\$*" >>"\$COMMAND_LOG"
+case "\$*" in
+  *--resolve*) [ "\${LOCAL_HTTPS_OK:-1}" = 1 ] ;;
+  *) [ "\${PUBLIC_HTTPS_OK:-1}" = 1 ] ;;
+esac`);
+  await executable(bin, "ss", `
+for port in \${BUSY_PORTS:-}; do
+  printf 'LISTEN 0 511 0.0.0.0:%s 0.0.0.0:*\\n' "\$port"
+done`);
+  return {
+    root,
+    bin,
+    backups,
+    site,
+    desiredSnippet,
+    installedSnippet,
+    dedicatedSite,
+    nginxDump,
+    certificate,
+    certificateKey,
+    log,
+  };
 }
 
 function run(command: string, files: Awaited<ReturnType<typeof fixture>>, env: Record<string, string> = {}) {
@@ -40,6 +74,7 @@ function run(command: string, files: Awaited<ReturnType<typeof fixture>>, env: R
       COMMAND_LOG: files.log,
       FITGRID_NGINX_SNIPPET_PATH: files.installedSnippet,
       FITGRID_BACKUP_ID: "test-backup",
+      NGINX_DUMP_FILE: files.nginxDump,
       ...env,
     },
   });
@@ -56,6 +91,98 @@ describe("nginx site validation", () => {
   it("rejects files containing multiple server blocks", async () => {
     const files = await fixture(2);
     expect(run(`validate_nginx_site "${files.site}" grid.example.com 8443`, files).status).toBe(1);
+  });
+});
+
+describe("dedicated nginx site preparation", () => {
+  it("uses a free TCP port but reuses a matching managed endpoint when it is already listening", async () => {
+    const files = await fixture();
+
+    expect(run(`resolve_nginx_public_port "${files.dedicatedSite}" grid.example.com 443`, files).stdout.trim()).toBe("443");
+    expect(run(`resolve_nginx_public_port "${files.dedicatedSite}" grid.example.com 443`, files, { BUSY_PORTS: "443" }).status).toBe(1);
+    expect(run(`resolve_nginx_public_port "${files.site}" grid.example.com 8443`, files, { BUSY_PORTS: "8443" }).stdout.trim()).toBe("8443");
+  });
+
+  it("asks for an alternative when the preferred HTTPS port is occupied", async () => {
+    const files = await fixture();
+    const result = run(
+      `prompt_value() { printf '8443\\n'; }; choose_nginx_public_port "${files.dedicatedSite}" grid.example.com 443`,
+      files,
+      { BUSY_PORTS: "443" },
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.trim()).toBe("8443");
+    expect(result.stderr).toContain("443");
+  });
+
+  it("creates a separate TLS vhost from the domain's loaded certificate", async () => {
+    const files = await fixture();
+    const sourceSite = await readFile(files.site, "utf8");
+
+    const result = run(
+      `prepare_dedicated_nginx_site "${files.dedicatedSite}" grid.example.com 443 "${files.backups}"`,
+      files,
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await readFile(files.site, "utf8")).toBe(sourceSite);
+    const dedicated = await readFile(files.dedicatedSite, "utf8");
+    expect(dedicated).toContain("listen 443 ssl;");
+    expect(dedicated).toContain("server_name grid.example.com;");
+    expect(dedicated).toContain(`ssl_certificate ${files.certificate};`);
+    expect(dedicated).toContain(`ssl_certificate_key ${files.certificateKey};`);
+    const log = await readFile(files.log, "utf8");
+    expect(log).toContain("nginx -T");
+    expect(log).toContain("nginx -t");
+    expect(log).toContain("systemctl reload nginx");
+  });
+
+  it("removes a newly created vhost when nginx validation fails", async () => {
+    const files = await fixture();
+
+    const result = run(
+      `prepare_dedicated_nginx_site "${files.dedicatedSite}" grid.example.com 443 "${files.backups}"`,
+      files,
+      { NGINX_OK: "0" },
+    );
+
+    expect(result.status).toBe(1);
+    await expect(readFile(files.dedicatedSite, "utf8")).rejects.toThrow();
+    const log = await readFile(files.log, "utf8");
+    expect(log).not.toContain("systemctl reload nginx");
+  });
+
+  it("rolls back the new vhost when the local TLS endpoint is not actually listening", async () => {
+    const files = await fixture();
+
+    const result = run(
+      `prepare_dedicated_nginx_site "${files.dedicatedSite}" grid.example.com 443 "${files.backups}"`,
+      files,
+      { LOCAL_HTTPS_OK: "0" },
+    );
+
+    expect(result.status).toBe(1);
+    await expect(readFile(files.dedicatedSite, "utf8")).rejects.toThrow();
+    const log = await readFile(files.log, "utf8");
+    expect(log).toContain("--resolve grid.example.com:443:127.0.0.1");
+    expect(log.match(/systemctl reload nginx/g)).toHaveLength(2);
+  });
+
+  it("rolls back the new vhost when the public HTTPS endpoint is unreachable", async () => {
+    const files = await fixture();
+
+    const result = run(
+      `prepare_dedicated_nginx_site "${files.dedicatedSite}" grid.example.com 443 "${files.backups}"`,
+      files,
+      { PUBLIC_HTTPS_OK: "0" },
+    );
+
+    expect(result.status).toBe(1);
+    await expect(readFile(files.dedicatedSite, "utf8")).rejects.toThrow();
+    const log = await readFile(files.log, "utf8");
+    expect(log).toContain("https://grid.example.com/");
+    expect(log.match(/systemctl reload nginx/g)).toHaveLength(2);
   });
 });
 

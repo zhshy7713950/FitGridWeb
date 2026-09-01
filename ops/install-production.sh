@@ -56,6 +56,11 @@ validate_port() {
   [ "$port" -ge "$minimum" ] && [ "$port" -le 65535 ] \
     || { fitgrid_error "端口必须在 ${minimum}–65535 之间"; return 1; }
 }
+validate_distinct_ports() {
+  public_port=$1; app_port=$2
+  [ "$public_port" -ne "$app_port" ] \
+    || { fitgrid_error "公网 HTTPS 端口不能与 FitGrid 本地应用端口相同"; return 1; }
+}
 validate_upgrade_invariants() {
   environment_file=$1; domain=$2; app_port=$3; public_port=$4; nginx_site=$5
   [ -f "$environment_file" ] || return 0
@@ -88,7 +93,7 @@ assert_public_image() {
   [ -n "$token" ] && curl -fsSI -H "Authorization: Bearer $token" \
     -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
     "https://ghcr.io/v2/$repository/manifests/$tag" >/dev/null 2>&1 \
-    || { fitgrid_error "镜像无法匿名读取：$image"; return 1; }
+    || { fitgrid_error "镜像无法匿名读取：$image；请检查 https://github.com/zhshy7713950/FitGridWeb/actions 并确认 GHCR package 已设为 Public"; return 1; }
 }
 validate_https_endpoint() {
   suffix=; [ "$2" -eq 443 ] || suffix=":$2"
@@ -110,7 +115,7 @@ git_ref=main
 domain=
 app_port=3300
 public_port=443
-nginx_site=
+nginx_site=/etc/nginx/conf.d/fitgridweb.conf
 swap_choice=yes
 admin_choice=
 
@@ -170,28 +175,20 @@ validate_host /etc/os-release /proc/meminfo /
 if [ "$from_installed" = false ]; then
   printf '\nFitGridWeb 低内存生产安装器（固定路径 /fitgrid）\n' >&2
   domain=$(prompt_value "现有 nginx HTTPS 域名（不含协议和路径）" "${domain:-grid.example.com}")
-  public_port=$(prompt_value "该 nginx 站点的公网 HTTPS 端口" "$public_port")
-  nginx_site=$(prompt_value "仅含一个 server 块的 nginx vhost 文件绝对路径" "${nginx_site:-/etc/nginx/sites-available/default}")
   app_port=$(prompt_value "FitGrid 本地回环端口" "$app_port")
   git_ref=$(prompt_value "要部署的公开 Git ref" "$git_ref")
   swap_choice=$(prompt_yes_no "总 Swap 不足 2 GiB 时补足" "$swap_choice")
   admin_choice=$(prompt_yes_no "部署成功后创建首个管理员" "$admin_choice")
 
   validate_domain "$domain"
-  validate_port "$public_port" 1
   validate_port "$app_port" 1024
   case $nginx_site in /*) : ;; *) fitgrid_error "nginx vhost 必须是绝对路径"; exit 1 ;; esac
   case $nginx_site in *[[:space:]]*) fitgrid_error "nginx vhost 路径不能含空白字符"; exit 1 ;; esac
-  [ -f "$nginx_site" ] || { fitgrid_error "nginx vhost 文件不存在：$nginx_site"; exit 1; }
-  if [ "$upgrade" = true ]; then
-    validate_upgrade_invariants "$ENVIRONMENT_FILE" "$domain" "$app_port" "$public_port" "$nginx_site"
-  fi
   assert_app_port_available "$app_port"
   resolved_sha=$(resolve_ref "$REPOSITORY_URL" "$git_ref")
   image=$(image_for_sha "$resolved_sha")
   assert_public_image "$image"
   validate_disk_pressure /
-  validate_https_endpoint "$domain" "$public_port"
 
   if [ -z "$temporary_bootstrap" ]; then
     temporary_bootstrap=$(mktemp -d)
@@ -205,16 +202,24 @@ if [ "$from_installed" = false ]; then
   . "$pinned_common_library"
   # shellcheck disable=SC1090
   . "$preflight_nginx_library"
+  [ "${FITGRID_NGINX_INSTALLER_PROTOCOL:-0}" -ge 2 ] \
+    || { fitgrid_error "所选 Git ref 的安装器协议过旧；请使用当前 main 或更新版本"; exit 1; }
   require_root
   validate_host /etc/os-release /proc/meminfo /
   validate_domain "$domain"
-  validate_port "$public_port" 1
   validate_port "$app_port" 1024
+  if [ -f "$ENVIRONMENT_FILE" ] && [ -n "$(environment_value PUBLIC_HTTPS_PORT "$ENVIRONMENT_FILE")" ]; then
+    public_port=$(environment_value PUBLIC_HTTPS_PORT "$ENVIRONMENT_FILE")
+  else
+    public_port=$(choose_nginx_public_port "$nginx_site" "$domain" 443)
+  fi
+  validate_port "$public_port" 1
+  validate_distinct_ports "$public_port" "$app_port"
   [ "$upgrade" = false ] || validate_upgrade_invariants "$ENVIRONMENT_FILE" "$domain" "$app_port" "$public_port" "$nginx_site"
   assert_app_port_available "$app_port"
   assert_public_image "$image"
   validate_disk_pressure /
-  validate_https_endpoint "$domain" "$public_port"
+  prepare_dedicated_nginx_site "$nginx_site" "$domain" "$public_port"
   validate_nginx_site "$nginx_site" "$domain" "$public_port"
 
   export DEBIAN_FRONTEND=noninteractive
