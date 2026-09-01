@@ -41,6 +41,16 @@ describe("requestJson", () => {
     expect((error as Error).message).not.toContain("upstream proxy error");
   });
 
+  it("uses the public fallback error for a null JSON response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(null, { status: 502 })));
+
+    await expect(requestJson("/health")).rejects.toMatchObject({
+      status: 502,
+      code: "REQUEST_FAILED",
+      message: "请求失败",
+    });
+  });
+
   it("accepts an empty 204 response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
 

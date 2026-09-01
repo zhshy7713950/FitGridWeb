@@ -23,9 +23,9 @@
 
 ## 功能验收
 
-| ID | 服务端证据 | 状态 |
+| ID | 自动化证据 | 状态 |
 |---|---|---|
-| FUN-01 | `grid-service.test.ts`：owner A/B 列表隔离；新 owner 返回空页 | 服务端通过；页面空态待前端 |
+| FUN-01 | `grid-service.test.ts`：owner A/B 列表隔离；`grid-workspace.test.tsx`：空账号与搜索无结果分离 | 服务端与前端组件自动化通过；真实登录数据库浏览器验收受环境门控 |
 | FUN-02 | `grid-service.test.ts`：名称/代码搜索和清空查询的 owner 范围 | 通过 |
 | FUN-03 | `grid-service.test.ts`：`sortOrder, createdAt, id` 稳定分页 | 通过 |
 | FUN-04 | `grid-service.test.ts`：创建后直接返回权威计算；`dto.test.ts`：严格输入 | 通过 |
@@ -35,8 +35,8 @@
 | FUN-08 | `grid-service.test.ts`、`calculate-grid.test.ts`：详情包含输入、汇总和全行结果 | 服务端通过；移动/桌面展示待前端 |
 | FUN-09 | `grid-service.test.ts`：重算幂等且不修改持久化元数据 | 通过 |
 | FUN-10 | `calculate-grid.test.ts`：普通/中/大网 `GridItemResult` 逐字段匹配 | 服务端通过；页面展示待前端 |
-| FUN-11 | `session.test.ts`、`grid-service.test.ts`：匿名 401、登录 owner UUID 隔离 | 服务端通过；登录后页面回跳待前端 |
-| FUN-12 | `json-response.test.ts`、`route-factory.test.ts`：统一错误信封和 requestId | 服务端通过；表单保留与提示待前端 |
+| FUN-11 | `session.test.ts`、`grid-service.test.ts`、`session-routing.test.ts`、`login-form.test.tsx`：匿名 401、owner UUID 隔离与安全登录回跳 | 服务端与前端路由/表单自动化通过；真实 Better Auth + 数据库浏览器登录受环境门控 |
+| FUN-12 | `json-response.test.ts`、`route-factory.test.ts`、`login-form.test.tsx`、`use-grid-trades.test.tsx`：统一错误信封、输入保留、requestId 与重试提示 | 服务端与前端错误状态自动化通过；真实数据库浏览器错误流程受环境门控 |
 
 ## 算法与数据兼容
 

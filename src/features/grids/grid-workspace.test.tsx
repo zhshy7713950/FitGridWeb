@@ -29,6 +29,7 @@ function controller(
     items: [product],
     nextCursor: null,
     initialLoading: false,
+    refreshing: false,
     pageLoading: false,
     initialError: "",
     pageError: "",
@@ -69,6 +70,25 @@ it("renders the four App fields in semantic desktop and mobile representations",
   }
 });
 
+it("keeps maximum-length mobile codes and decimal values intact", () => {
+  const maximumProduct = {
+    ...product,
+    productCode: "A".repeat(64),
+    maxPrice: "12345678901234567890.1234567890",
+    perShare: "99999999999999999999.9999999999",
+  };
+  render(<GridWorkspaceView controller={controller({ items: [maximumProduct] })} />);
+
+  const cards = screen.getByRole("list", { name: "网格产品卡片" });
+  for (const exactValue of [
+    "A".repeat(64),
+    "12,345,678,901,234,567,890.1234567890",
+    "99,999,999,999,999,999,999.9999999999",
+  ]) {
+    expect(within(cards).getByText(exactValue, { exact: true })).toBeVisible();
+  }
+});
+
 it("renders initial loading and initial failure states with retry", async () => {
   const value = controller({ items: [], initialLoading: true });
   const { rerender } = render(<GridWorkspaceView controller={value} />);
@@ -101,6 +121,24 @@ it("keeps existing rows visible when refresh fails and exposes a retry", async (
   expect(value.refresh).toHaveBeenCalledTimes(1);
 });
 
+it("keeps retained rows visible and exposes a focusable live refresh state", async () => {
+  const value = controller({ initialLoading: true, refreshing: true });
+  render(<GridWorkspaceView controller={value} />);
+
+  expect(screen.getAllByText("黄金ETF网格")).toHaveLength(2);
+  const refresh = screen.getByRole("button", { name: "正在刷新…" });
+  expect(refresh).not.toBeDisabled();
+  expect(refresh).toHaveAttribute("aria-disabled", "true");
+  expect(refresh).toHaveAttribute("aria-busy", "true");
+  expect(within(refresh).getByText("正在刷新…")).toHaveAttribute("aria-live", "polite");
+
+  refresh.focus();
+  expect(refresh).toHaveFocus();
+  await userEvent.keyboard("{Enter}");
+  await userEvent.click(refresh);
+  expect(value.refresh).not.toHaveBeenCalled();
+});
+
 it("distinguishes an empty account from an empty search", () => {
   const { rerender } = render(
     <GridWorkspaceView controller={controller({ items: [] })} />,
@@ -111,6 +149,16 @@ it("distinguishes an empty account from an empty search", () => {
     <GridWorkspaceView controller={controller({ items: [], query: "gold" })} />,
   );
   expect(screen.getByText("没有匹配的产品")).toBeInTheDocument();
+});
+
+it("treats whitespace-only input as an unfiltered empty account", () => {
+  render(
+    <GridWorkspaceView controller={controller({ items: [], query: "   " })} />,
+  );
+
+  expect(screen.getByText("还没有网格产品")).toBeInTheDocument();
+  expect(screen.queryByText("没有匹配的产品")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "清除搜索" })).not.toBeInTheDocument();
 });
 
 it("forwards search edits and clears an active query", async () => {

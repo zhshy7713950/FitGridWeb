@@ -28,7 +28,8 @@ export function GridWorkspaceView({
     }
   }
 
-  const emptyText = controller.query
+  const hasQuery = controller.query.trim().length > 0;
+  const emptyText = hasQuery
     ? "没有匹配的产品"
     : "还没有网格产品";
 
@@ -39,8 +40,17 @@ export function GridWorkspaceView({
           <span>Grid strategies · 已载入 {controller.items.length} 项</span>
           <h1 id="grid-title">网格产品</h1>
         </div>
-        <button type="button" onClick={() => void controller.refresh()}>
-          刷新
+        <button
+          type="button"
+          aria-disabled={controller.refreshing}
+          aria-busy={controller.refreshing}
+          onClick={() => {
+            if (!controller.refreshing) void controller.refresh();
+          }}
+        >
+          <span aria-live="polite">
+            {controller.refreshing ? "正在刷新…" : "刷新"}
+          </span>
         </button>
       </header>
 
@@ -52,7 +62,7 @@ export function GridWorkspaceView({
           value={controller.query}
           onChange={(event) => controller.setQuery(event.target.value)}
         />
-        {controller.query ? (
+        {hasQuery ? (
           <button type="button" onClick={controller.clearQuery}>
             清除搜索
           </button>

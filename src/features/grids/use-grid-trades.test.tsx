@@ -137,6 +137,63 @@ it("retains visible items and exposes a request ID when refresh fails", async ()
   expect(result.current.initialError).toBe("加载产品失败，请求 ID：01REFRESH");
 });
 
+it("coalesces repeated refresh while retained data is still refreshing", async () => {
+  const refreshed = deferred<GridTradePage>();
+  const request = vi.fn()
+    .mockResolvedValueOnce({ items: [item("visible")], nextCursor: null })
+    .mockImplementationOnce(() => refreshed.promise)
+    .mockResolvedValueOnce({ items: [item("refreshed-again")], nextCursor: null });
+  const { result } = renderHook(() => useGridTrades({ request }));
+  await waitFor(() => expect(result.current.items).toHaveLength(1));
+
+  let firstRefresh!: Promise<void>;
+  let duplicateRefresh!: Promise<void>;
+  act(() => {
+    firstRefresh = result.current.refresh();
+    duplicateRefresh = result.current.refresh();
+  });
+
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(result.current.refreshing).toBe(true);
+
+  await act(async () => {
+    refreshed.resolve({ items: [item("refreshed")], nextCursor: null });
+    await Promise.all([firstRefresh, duplicateRefresh]);
+  });
+  expect(result.current.refreshing).toBe(false);
+  expect(result.current.items.map((entry) => entry.id)).toEqual(["refreshed"]);
+
+  await act(async () => result.current.refresh());
+  expect(request).toHaveBeenCalledTimes(3);
+  expect(result.current.items.map((entry) => entry.id)).toEqual(["refreshed-again"]);
+});
+
+it("aborts an in-flight retained-data refresh when unmounted", async () => {
+  const refreshed = deferred<GridTradePage>();
+  let refreshSignal: AbortSignal | undefined;
+  const request = vi.fn()
+    .mockResolvedValueOnce({ items: [item("visible")], nextCursor: null })
+    .mockImplementationOnce((input?: { signal?: AbortSignal }) => {
+      refreshSignal = input?.signal;
+      return refreshed.promise;
+    });
+  const { result, unmount } = renderHook(() => useGridTrades({ request }));
+  await waitFor(() => expect(result.current.items).toHaveLength(1));
+
+  let pendingRefresh!: Promise<void>;
+  act(() => {
+    pendingRefresh = result.current.refresh();
+  });
+  await waitFor(() => expect(refreshSignal).toBeInstanceOf(AbortSignal));
+
+  unmount();
+  expect(refreshSignal?.aborted).toBe(true);
+
+  refreshed.resolve({ items: [item("late-refresh")], nextCursor: null });
+  await pendingRefresh;
+  expect(result.current.items.map((entry) => entry.id)).toEqual(["visible"]);
+});
+
 it("retains loaded items when a cursor fails and retries the same cursor", async () => {
   const request = vi.fn()
     .mockResolvedValueOnce({ items: [item("first")], nextCursor: "c2" })
@@ -171,6 +228,33 @@ it("suppresses a duplicate request for the same in-flight cursor", async () => {
   });
 
   expect(result.current.items.map((entry) => entry.id)).toEqual(["first", "second"]);
+});
+
+it("aborts an in-flight cursor request when unmounted", async () => {
+  const nextPage = deferred<GridTradePage>();
+  let cursorSignal: AbortSignal | undefined;
+  const request = vi.fn()
+    .mockResolvedValueOnce({ items: [item("first")], nextCursor: "c2" })
+    .mockImplementationOnce((input?: { signal?: AbortSignal }) => {
+      cursorSignal = input?.signal;
+      return nextPage.promise;
+    });
+  const { result, unmount } = renderHook(() => useGridTrades({ request }));
+  await waitFor(() => expect(result.current.nextCursor).toBe("c2"));
+
+  let pendingPage!: Promise<void>;
+  act(() => {
+    pendingPage = result.current.loadMore();
+  });
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+
+  unmount();
+  expect(cursorSignal).toBeInstanceOf(AbortSignal);
+  expect(cursorSignal?.aborted).toBe(true);
+
+  nextPage.resolve({ items: [item("late-page")], nextCursor: null });
+  await pendingPage;
+  expect(result.current.items.map((entry) => entry.id)).toEqual(["first"]);
 });
 
 it("keeps a cursor owned across refresh until the older request settles", async () => {

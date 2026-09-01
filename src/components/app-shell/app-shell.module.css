@@ -54,7 +54,7 @@
   gap: 14px;
   padding: 0 18px;
   border-bottom: 1px solid var(--line);
-  color: var(--text-muted);
+  color: var(--text);
   background: var(--surface);
   font-size: 12px;
 }
@@ -123,7 +123,7 @@
   margin: 0;
   padding: 7px 9px;
   border: 1px solid var(--negative);
-  color: #ff7b84;
+  color: var(--text);
   background: var(--surface-raised);
 }
 
@@ -208,5 +208,13 @@
   .content {
     grid-row: 2;
     padding: 16px 12px;
+  }
+
+  .logout {
+    min-height: 44px;
+  }
+
+  .logoutArea p {
+    top: 46px;
   }
 }

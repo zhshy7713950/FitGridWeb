@@ -11,7 +11,7 @@
 }
 
 .heading span {
-  color: var(--text-muted);
+  color: var(--text);
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -58,7 +58,7 @@
 
 .searchBar label {
   grid-column: 1 / -1;
-  color: var(--text-muted);
+  color: var(--text);
   font-size: 12px;
 }
 
@@ -80,7 +80,7 @@
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--negative) 45%, var(--line));
   border-radius: 6px;
-  color: var(--negative);
+  color: var(--text);
   background: color-mix(in srgb, var(--negative) 8%, var(--surface));
 }
 
@@ -108,7 +108,7 @@
 .desktopTable th {
   position: sticky;
   top: 0;
-  color: var(--text-muted);
+  color: var(--text);
   background: var(--surface-raised);
   font-size: 11px;
 }
@@ -133,14 +133,14 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: var(--negative);
+  color: var(--text);
 }
 
 .empty,
 .loading {
   padding: 72px 20px;
   border: 1px solid var(--line);
-  color: var(--text-muted);
+  color: var(--text);
   background: var(--surface);
   text-align: center;
 }
@@ -188,12 +188,13 @@
   .mobileCards h2 {
     margin: 0 0 14px;
     font-size: 16px;
+    overflow-wrap: anywhere;
   }
 
   .mobileCards dl {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    grid-template-columns: 1fr;
+    gap: 12px;
     margin: 0;
   }
 
@@ -202,16 +203,17 @@
   }
 
   .mobileCards dt {
-    color: var(--text-muted);
+    color: var(--text);
     font-size: 11px;
   }
 
   .mobileCards dd {
     margin: 5px 0 0;
-    overflow: hidden;
     font-family: "SFMono-Regular", Consolas, monospace;
     font-size: 12px;
-    text-overflow: ellipsis;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    white-space: normal;
     font-variant-numeric: tabular-nums;
   }
 }

@@ -33,7 +33,12 @@ export async function requestJson<T>(
 
   if (response.status === 401 && path !== "/auth/login") onUnauthorized();
 
-  const body = await response.json().catch(() => ({})) as Partial<{
+  const parsedBody: unknown = await response.json().catch(() => ({}));
+  const body = (
+    parsedBody !== null && typeof parsedBody === "object" && !Array.isArray(parsedBody)
+      ? parsedBody
+      : {}
+  ) as Partial<{
     code: string;
     message: string;
     requestId: string;
