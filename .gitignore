@@ -9,6 +9,7 @@
 node_modules/
 .next/
 coverage/
+.superpowers/
 *.tsbuildinfo
 *.log
 .DS_Store
