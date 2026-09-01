@@ -1,0 +1,13 @@
+# Android source repository is retained locally as a read-only behavior reference.
+# It belongs to github.com/zhshy7713950/FitProj and must never be committed here.
+/FitProj/
+
+# Local secrets and generated artifacts
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+coverage/
+*.log
+.DS_Store

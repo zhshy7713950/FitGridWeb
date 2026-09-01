@@ -1,0 +1,975 @@
+openapi: 3.1.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+info:
+  title: FitGridWeb API
+  version: 1.0.0
+  description: >-
+    FitGridWeb 网格交易 API。所有产品接口自动限定为当前登录账号；API 不接受或返回 ownerId。
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+security:
+  - cookieAuth: []
+tags:
+  - name: System
+    description: 服务存活与就绪检查
+  - name: Auth
+    description: 登录、会话与密码管理
+  - name: Invitations
+    description: 私有一次性邀请
+  - name: Admin
+    description: 账号、邀请和禁用状态管理，不读取用户产品
+  - name: GridTrades
+    description: 当前登录账号的网格产品与权威计算
+  - name: ImportExport
+    description: 当前登录账号的数据导入、兼容导出与完整备份
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      operationId: getHealth
+      summary: 检查服务是否就绪
+      security: []
+      responses:
+        '200':
+          description: 应用和数据库就绪
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: 使用用户名和密码登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功并设置安全会话 Cookie
+          headers:
+            Set-Cookie:
+              schema: {type: string}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: 撤销当前会话
+      responses:
+        '204': {description: 当前会话已撤销}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/session:
+    get:
+      tags: [Auth]
+      operationId: getSession
+      summary: 获取当前会话
+      responses:
+        '200':
+          description: 当前会话
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      operationId: changePassword
+      summary: 修改当前账号密码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '204': {description: 密码已更新，其他会话已撤销}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /invitations/{token}:
+    parameters:
+      - $ref: '#/components/parameters/InvitationToken'
+    get:
+      tags: [Invitations]
+      operationId: getInvitationStatus
+      summary: 查询邀请是否可用
+      security: []
+      responses:
+        '200':
+          description: 邀请状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationStatusResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /invitations/{token}/accept:
+    parameters:
+      - $ref: '#/components/parameters/InvitationToken'
+    post:
+      tags: [Invitations]
+      operationId: acceptInvitation
+      summary: 接受邀请并创建账号
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptInvitationRequest'
+      responses:
+        '201':
+          description: 用户已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/invitations:
+    post:
+      tags: [Admin, Invitations]
+      operationId: createInvitation
+      summary: 创建一次性邀请
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvitationRequest'
+      responses:
+        '201':
+          description: 邀请已创建；明文 token 只返回一次
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateInvitationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /admin/users:
+    get:
+      tags: [Admin]
+      operationId: listUsers
+      summary: 列出账号及状态
+      description: 只返回账号与状态，不返回产品数量或产品数据。
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 账号列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/users/{userId}/status:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    patch:
+      tags: [Admin]
+      operationId: updateUserStatus
+      summary: 启用或禁用账号
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status]
+              properties:
+                status: {$ref: '#/components/schemas/UserStatus'}
+      responses:
+        '200':
+          description: 状态已更新
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /grid-trades:
+    get:
+      tags: [GridTrades]
+      operationId: listGridTrades
+      summary: 搜索和分页列出自己的产品
+      description: 仅查询当前会话 ownerId 的产品。
+      parameters:
+        - name: q
+          in: query
+          schema: {type: string, maxLength: 120}
+          description: 产品名称或产品代码模糊搜索
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 当前账号产品页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GridTradePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [GridTrades]
+      operationId: createGridTrade
+      summary: 创建自己的网格产品
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GridTradeCreateRequest'
+      responses:
+        '201':
+          description: 产品已创建并计算
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GridTradeDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /grid-trades/{id}:
+    parameters:
+      - $ref: '#/components/parameters/GridTradeId'
+    get:
+      tags: [GridTrades]
+      operationId: getGridTrade
+      summary: 获取自己的产品和计算结果
+      description: 不存在或属于其他账号时均返回 404。
+      responses:
+        '200':
+          description: 产品输入与权威计算结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GridTradeDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [GridTrades]
+      operationId: updateGridTrade
+      summary: 更新自己的产品并重算
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GridTradeUpdateRequest'
+      responses:
+        '200':
+          description: 产品已更新并重算
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GridTradeDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [GridTrades]
+      operationId: deleteGridTrade
+      summary: 删除自己的产品
+      responses:
+        '204': {description: 产品已删除}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /grid-trades/{id}/recalculate:
+    parameters:
+      - $ref: '#/components/parameters/GridTradeId'
+    post:
+      tags: [GridTrades]
+      operationId: recalculateGridTrade
+      summary: 重新计算自己的产品
+      responses:
+        '200':
+          description: 使用记录保存的算法版本重新计算
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GridTradeDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /grid-trades/import/preview:
+    post:
+      tags: [ImportExport]
+      operationId: previewGridTradeImport
+      summary: 预检 Android JSON 导入
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 当前账号范围内的导入预检
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportPreviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /grid-trades/import/commit:
+    post:
+      tags: [ImportExport]
+      operationId: commitGridTradeImport
+      summary: 按冲突策略提交导入
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportCommitRequest'
+      responses:
+        '200':
+          description: 事务导入结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportCommitResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /grid-trades/export:
+    get:
+      tags: [ImportExport]
+      operationId: exportGridTrades
+      summary: 导出自己的网格产品
+      parameters:
+        - name: format
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [android, web]
+      responses:
+        '200':
+          description: 当前账号的下载文件
+          headers:
+            Content-Disposition:
+              schema: {type: string}
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items: {$ref: '#/components/schemas/AndroidGridTrade'}
+                  - $ref: '#/components/schemas/WebBackup'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: fitgridweb.session_token
+
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      schema: {type: string, maxLength: 512}
+      description: 服务端签名的不透明游标
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    GridTradeId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    InvitationToken:
+      name: token
+      in: path
+      required: true
+      schema: {type: string, minLength: 32, maxLength: 512}
+
+  responses:
+    BadRequest:
+      description: 请求格式错误
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Unauthorized:
+      description: 未认证或会话失效
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Forbidden:
+      description: 当前角色无权执行管理操作
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    NotFound:
+      description: 资源不存在；跨账号产品也使用本响应
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Conflict:
+      description: 唯一性、版本或邀请状态冲突
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    PayloadTooLarge:
+      description: 文件或请求体超限
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    ValidationError:
+      description: 字段或算法校验失败
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    RateLimited:
+      description: 请求过快
+      headers:
+        Retry-After:
+          schema: {type: integer, minimum: 1}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    ServiceUnavailable:
+      description: 服务未就绪
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+
+  schemas:
+    DecimalString:
+      type: string
+      pattern: '^-?(0|[1-9][0-9]*)(\.[0-9]+)?$'
+      examples: ['1.05', '2000', '0.1856']
+    PositiveDecimalString:
+      allOf:
+        - $ref: '#/components/schemas/DecimalString'
+      description: 解析后的十进制值必须大于 0
+    UserRole:
+      type: string
+      enum: [member, admin]
+    UserStatus:
+      type: string
+      enum: [active, disabled]
+    AlgorithmVersion:
+      type: string
+      enum: [android-v2.1.0]
+    GridType:
+      type: integer
+      enum: [1, 2, 3]
+      description: 1 小网、2 中网、3 大网
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code: {type: string, pattern: '^[A-Z0-9_]+$'}
+        message: {type: string}
+        fieldErrors:
+          type: object
+          additionalProperties:
+            type: array
+            items: {type: string}
+        requestId: {type: string}
+
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status, database]
+      properties:
+        status: {type: string, enum: [ok]}
+        database: {type: string, enum: [ok]}
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: {type: string, minLength: 3, maxLength: 64}
+        password: {type: string, minLength: 12, maxLength: 128}
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: {type: string, minLength: 1, maxLength: 128}
+        newPassword: {type: string, minLength: 12, maxLength: 128}
+    AcceptInvitationRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: {type: string, minLength: 3, maxLength: 64}
+        password: {type: string, minLength: 12, maxLength: 128}
+    CreateInvitationRequest:
+      type: object
+      additionalProperties: false
+      required: [expiresInHours]
+      properties:
+        expiresInHours: {type: integer, minimum: 1, maximum: 168, default: 24}
+    InvitationStatusResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: {type: string, enum: [valid, used, expired]}
+        expiresAt: {type: [string, 'null'], format: date-time}
+    CreateInvitationResponse:
+      type: object
+      additionalProperties: false
+      required: [id, inviteUrl, expiresAt]
+      properties:
+        id: {type: string, format: uuid}
+        inviteUrl: {type: string, format: uri}
+        expiresAt: {type: string, format: date-time}
+
+    UserResponse:
+      type: object
+      additionalProperties: false
+      required: [id, username, role, status, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        username: {type: string}
+        role: {$ref: '#/components/schemas/UserRole'}
+        status: {$ref: '#/components/schemas/UserStatus'}
+        createdAt: {type: string, format: date-time}
+    SessionResponse:
+      type: object
+      additionalProperties: false
+      required: [user, expiresAt]
+      properties:
+        user: {$ref: '#/components/schemas/UserResponse'}
+        expiresAt: {type: string, format: date-time}
+    UserPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/UserResponse'}}
+        nextCursor: {type: [string, 'null']}
+
+    GridTradeCreateRequest:
+      $ref: '#/components/schemas/GridTradeMutationInput'
+    GridTradeUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedUpdatedAt]
+      properties:
+        expectedUpdatedAt: {type: string, format: date-time}
+        productName: {type: [string, 'null'], maxLength: 120}
+        productCode: {type: string, minLength: 1, maxLength: 64}
+        maxPrice: {$ref: '#/components/schemas/PositiveDecimalString'}
+        minTradeQuantity: {$ref: '#/components/schemas/PositiveDecimalString'}
+        gearAmplitude: {$ref: '#/components/schemas/PositiveDecimalString'}
+        perShare: {$ref: '#/components/schemas/PositiveDecimalString'}
+        keepShare: {type: integer, minimum: 0}
+        increaseAmplitude: {type: integer, minimum: 0}
+        mediumAmplitude: {type: [integer, 'null'], minimum: 1}
+        bigAmplitude: {type: [integer, 'null'], minimum: 1}
+        maxAmplitude: {type: integer, minimum: 1, maximum: 100}
+        isShort: {type: boolean}
+        category: {type: [string, 'null'], maxLength: 120}
+        sortOrder: {type: integer}
+    GridTradeMutationInput:
+      type: object
+      additionalProperties: false
+      required:
+        - productCode
+        - maxPrice
+        - minTradeQuantity
+        - gearAmplitude
+        - perShare
+        - keepShare
+        - increaseAmplitude
+        - maxAmplitude
+        - isShort
+      properties:
+        productName: {type: [string, 'null'], maxLength: 120, default: null}
+        productCode: {type: string, minLength: 1, maxLength: 64}
+        maxPrice: {$ref: '#/components/schemas/PositiveDecimalString'}
+        minTradeQuantity: {$ref: '#/components/schemas/PositiveDecimalString'}
+        gearAmplitude: {$ref: '#/components/schemas/PositiveDecimalString'}
+        perShare: {$ref: '#/components/schemas/PositiveDecimalString'}
+        keepShare: {type: integer, minimum: 0}
+        increaseAmplitude: {type: integer, minimum: 0}
+        mediumAmplitude: {type: [integer, 'null'], minimum: 1, default: null}
+        bigAmplitude: {type: [integer, 'null'], minimum: 1, default: null}
+        maxAmplitude: {type: integer, minimum: 1, maximum: 100}
+        isShort: {type: boolean}
+        category: {type: [string, 'null'], maxLength: 120, default: null}
+        sortOrder: {type: integer, default: 0}
+
+    GridTradeSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - productName
+        - productCode
+        - maxPrice
+        - perShare
+        - isShort
+        - algorithmVersion
+        - createdAt
+        - updatedAt
+      properties:
+        id: {type: string, format: uuid}
+        productName: {type: [string, 'null']}
+        productCode: {type: string}
+        maxPrice: {$ref: '#/components/schemas/DecimalString'}
+        perShare: {$ref: '#/components/schemas/DecimalString'}
+        isShort: {type: boolean}
+        algorithmVersion: {$ref: '#/components/schemas/AlgorithmVersion'}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    GridTradePage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/GridTradeSummary'}}
+        nextCursor: {type: [string, 'null']}
+    GridTradeDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - productName
+        - productCode
+        - maxPrice
+        - perShare
+        - isShort
+        - algorithmVersion
+        - createdAt
+        - updatedAt
+        - input
+        - calculation
+      properties:
+        id: {type: string, format: uuid}
+        productName: {type: [string, 'null']}
+        productCode: {type: string}
+        maxPrice: {$ref: '#/components/schemas/DecimalString'}
+        perShare: {$ref: '#/components/schemas/DecimalString'}
+        isShort: {type: boolean}
+        algorithmVersion: {$ref: '#/components/schemas/AlgorithmVersion'}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        input: {$ref: '#/components/schemas/GridTradeStoredInput'}
+        calculation: {$ref: '#/components/schemas/GridCalculation'}
+    GridTradeStoredInput:
+      type: object
+      additionalProperties: false
+      required:
+        - productCode
+        - maxPrice
+        - minTradeQuantity
+        - gearAmplitude
+        - perShare
+        - keepShare
+        - increaseAmplitude
+        - maxAmplitude
+        - isShort
+        - sortOrder
+        - algorithmVersion
+      properties:
+        productName: {type: [string, 'null'], maxLength: 120, default: null}
+        productCode: {type: string, minLength: 1, maxLength: 64}
+        maxPrice: {$ref: '#/components/schemas/PositiveDecimalString'}
+        minTradeQuantity: {$ref: '#/components/schemas/PositiveDecimalString'}
+        gearAmplitude: {$ref: '#/components/schemas/PositiveDecimalString'}
+        perShare: {$ref: '#/components/schemas/PositiveDecimalString'}
+        keepShare: {type: integer, minimum: 0}
+        increaseAmplitude: {type: integer, minimum: 0}
+        mediumAmplitude: {type: [integer, 'null'], minimum: 1, default: null}
+        bigAmplitude: {type: [integer, 'null'], minimum: 1, default: null}
+        maxAmplitude: {type: integer, minimum: 1, maximum: 100}
+        isShort: {type: boolean}
+        category: {type: [string, 'null'], maxLength: 120, default: null}
+        sortOrder: {type: integer, default: 0}
+        algorithmVersion: {$ref: '#/components/schemas/AlgorithmVersion'}
+    GridCalculation:
+      type: object
+      additionalProperties: false
+      required: [items, totalBuyAmount, totalProfitAmount, totalProfitRate]
+      properties:
+        items: {type: array, maxItems: 10000, items: {$ref: '#/components/schemas/GridItem'}}
+        totalBuyAmount: {$ref: '#/components/schemas/DecimalString'}
+        totalProfitAmount: {$ref: '#/components/schemas/DecimalString'}
+        totalProfitRate: {$ref: '#/components/schemas/DecimalString'}
+    GridItem:
+      type: object
+      additionalProperties: false
+      required:
+        - sequence
+        - gridType
+        - gear
+        - buyPrice
+        - buyCount
+        - buyAmount
+        - sellPrice
+        - sellCount
+        - sellAmount
+        - profitAmount
+        - profitRate
+        - keepProfit
+        - keepCount
+      properties:
+        sequence: {type: integer, minimum: 1}
+        gridType: {$ref: '#/components/schemas/GridType'}
+        gear: {$ref: '#/components/schemas/DecimalString'}
+        buyPrice: {$ref: '#/components/schemas/DecimalString'}
+        buyCount: {$ref: '#/components/schemas/DecimalString'}
+        buyAmount: {$ref: '#/components/schemas/DecimalString'}
+        sellPrice: {$ref: '#/components/schemas/DecimalString'}
+        sellCount: {$ref: '#/components/schemas/DecimalString'}
+        sellAmount: {$ref: '#/components/schemas/DecimalString'}
+        profitAmount: {$ref: '#/components/schemas/DecimalString'}
+        profitRate: {$ref: '#/components/schemas/DecimalString'}
+        keepProfit: {$ref: '#/components/schemas/DecimalString'}
+        keepCount: {$ref: '#/components/schemas/DecimalString'}
+
+    ImportPreviewItem:
+      type: object
+      additionalProperties: false
+      required: [index, productCode]
+      properties:
+        index: {type: integer, minimum: 0}
+        productCode: {type: string}
+        warnings: {type: array, items: {type: string}, default: []}
+        fieldErrors:
+          type: object
+          additionalProperties: {type: array, items: {type: string}}
+    ImportPreviewResponse:
+      type: object
+      additionalProperties: false
+      required: [previewToken, expiresAt, creates, conflicts, invalid, warnings]
+      properties:
+        previewToken: {type: string}
+        expiresAt: {type: string, format: date-time}
+        creates: {type: array, items: {$ref: '#/components/schemas/ImportPreviewItem'}}
+        conflicts: {type: array, items: {$ref: '#/components/schemas/ImportPreviewItem'}}
+        invalid: {type: array, items: {$ref: '#/components/schemas/ImportPreviewItem'}}
+        warnings: {type: array, items: {type: string}}
+    ImportCommitRequest:
+      type: object
+      additionalProperties: false
+      required: [previewToken, conflictPolicy]
+      properties:
+        previewToken: {type: string}
+        conflictPolicy: {type: string, enum: [skip, overwrite]}
+    ImportCommitResponse:
+      type: object
+      additionalProperties: false
+      required: [created, overwritten, skipped, invalid]
+      properties:
+        created: {type: integer, minimum: 0}
+        overwritten: {type: integer, minimum: 0}
+        skipped: {type: integer, minimum: 0}
+        invalid: {type: integer, minimum: 0}
+
+    AndroidGridTrade:
+      type: object
+      description: Android Gson 兼容导出对象；数值使用 JSON number。导入的宽松历史兼容规则以独立 JSON Schema 为准。
+      additionalProperties: false
+      required:
+        - productCode
+        - maxPrice
+        - perShare
+        - gearAmplitude
+        - keepShare
+        - increaseAmplitude
+        - maxAmplitude
+        - minTradeQuantity
+        - sortOrder
+        - totalBuyAmount
+        - totalProfitAmount
+        - totalProfitRate
+        - gridItems
+        - isShort
+      properties:
+        productName: {type: [string, 'null'], maxLength: 120}
+        productCode: {type: string}
+        maxPrice: {type: number}
+        perShare: {type: number}
+        gearAmplitude: {type: number}
+        keepShare: {type: integer}
+        increaseAmplitude: {type: integer}
+        mediumAmplitude: {type: [integer, 'null']}
+        bigAmplitude: {type: [integer, 'null']}
+        maxAmplitude: {type: integer}
+        minTradeQuantity: {type: number}
+        category: {type: [string, 'null'], maxLength: 120}
+        sortOrder: {type: integer}
+        totalBuyAmount: {type: number}
+        totalProfitAmount: {type: number}
+        totalProfitRate: {type: number}
+        gridItems:
+          type: array
+          maxItems: 10000
+          items: {$ref: '#/components/schemas/AndroidGridItem'}
+        isShort: {type: boolean}
+    AndroidGridItem:
+      type: object
+      additionalProperties: false
+      required:
+        - sequence
+        - gridType
+        - gear
+        - buyPrice
+        - buyCount
+        - buyAmount
+        - sellPrice
+        - sellCount
+        - sellAmount
+        - profitAmount
+        - profitRate
+        - keepProfit
+        - keepCount
+      properties:
+        sequence: {type: integer, minimum: 1}
+        gridType: {$ref: '#/components/schemas/GridType'}
+        gear: {type: number}
+        buyPrice: {type: number}
+        buyCount: {type: number}
+        buyAmount: {type: number}
+        sellPrice: {type: number}
+        sellCount: {type: number}
+        sellAmount: {type: number}
+        profitAmount: {type: number}
+        profitRate: {type: number}
+        keepProfit: {type: number}
+        keepCount: {type: number}
+    WebBackup:
+      type: object
+      additionalProperties: false
+      required: [format, formatVersion, exportedAt, ownerRef, products]
+      properties:
+        format: {type: string, const: fitgridweb-backup}
+        formatVersion: {type: string, const: 1.0.0}
+        exportedAt: {type: string, format: date-time}
+        ownerRef: {type: string, pattern: '^hmac-sha256:[0-9a-f]{64}$'}
+        products:
+          type: array
+          maxItems: 5000
+          items: {$ref: '#/components/schemas/WebBackupProduct'}
+    WebBackupProduct:
+      type: object
+      additionalProperties: false
+      required:
+        - exportId
+        - productCode
+        - maxPrice
+        - minTradeQuantity
+        - gearAmplitude
+        - perShare
+        - keepShare
+        - increaseAmplitude
+        - maxAmplitude
+        - isShort
+        - sortOrder
+        - algorithmVersion
+        - createdAt
+        - updatedAt
+      properties:
+        exportId: {type: string, format: uuid}
+        productName: {type: [string, 'null'], maxLength: 120}
+        productCode: {type: string, minLength: 1, maxLength: 64}
+        maxPrice: {$ref: '#/components/schemas/PositiveDecimalString'}
+        minTradeQuantity: {$ref: '#/components/schemas/PositiveDecimalString'}
+        gearAmplitude: {$ref: '#/components/schemas/PositiveDecimalString'}
+        perShare: {$ref: '#/components/schemas/PositiveDecimalString'}
+        keepShare: {type: integer, minimum: 0}
+        increaseAmplitude: {type: integer, minimum: 0}
+        mediumAmplitude: {type: [integer, 'null'], minimum: 1}
+        bigAmplitude: {type: [integer, 'null'], minimum: 1}
+        maxAmplitude: {type: integer, minimum: 1, maximum: 100}
+        isShort: {type: boolean}
+        category: {type: [string, 'null'], maxLength: 120}
+        sortOrder: {type: integer}
+        algorithmVersion: {$ref: '#/components/schemas/AlgorithmVersion'}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}

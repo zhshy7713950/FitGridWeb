@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "fixtureVersion": "1.0.0",
+  "algorithmVersion": "android-v2.1.0",
+  "sourceCommit": "a6452ac10ce3e792d245ff4868f4866b5e1fb78e",
+  "generatedBy": "temporary JUnit characterization test calling GridTradeRepositoryImpl.buildGrid",
+  "notes": [
+    "androidResult is the exact Gson shape emitted by the Kotlin v2.1.0 implementation.",
+    "Numbers are JSON numbers because this is an Android characterization fixture; the Web API uses decimal strings.",
+    "The temporary test source was deleted after capture and is not part of the Android repository."
+  ],
+  "cases": [
+    {
+      "id": "long-default",
+      "description": "默认做多，覆盖小网、中网、大网、逐格加码和留存利润",
+      "androidResult": {
+        "productName": "默认做多",
+        "productCode": "LONG_DEFAULT",
+        "maxPrice": 1.0,
+        "perShare": 2000.0,
+        "gearAmplitude": 5.0,
+        "keepShare": 2,
+        "increaseAmplitude": 5,
+        "mediumAmplitude": 15,
+        "bigAmplitude": 30,
+        "maxAmplitude": 60,
+        "minTradeQuantity": 100.0,
+        "category": "",
+        "sortOrder": 0,
+        "totalBuyAmount": 53225.0,
+        "totalProfitAmount": 9880.0,
+        "totalProfitRate": 0.1856,
+        "gridItems": [
+          {"sequence":1,"gridType":1,"gear":100.0,"buyPrice":1.0,"buyCount":2000.0,"buyAmount":2000.0,"sellPrice":1.05,"sellCount":1800.0,"sellAmount":1890.0,"profitAmount":100.0,"profitRate":0.05,"keepProfit":210.0,"keepCount":200.0},
+          {"sequence":2,"gridType":1,"gear":95.0,"buyPrice":0.95,"buyCount":2200.0,"buyAmount":2090.0,"sellPrice":1.0,"sellCount":2000.0,"sellAmount":2000.0,"profitAmount":110.0,"profitRate":0.0526,"keepProfit":200.0,"keepCount":200.0},
+          {"sequence":3,"gridType":1,"gear":90.0,"buyPrice":0.9,"buyCount":2500.0,"buyAmount":2250.0,"sellPrice":0.95,"sellCount":2200.0,"sellAmount":2090.0,"profitAmount":125.0,"profitRate":0.0556,"keepProfit":285.0,"keepCount":300.0},
+          {"sequence":4,"gridType":1,"gear":85.0,"buyPrice":0.85,"buyCount":2700.0,"buyAmount":2295.0,"sellPrice":0.9,"sellCount":2400.0,"sellAmount":2160.0,"profitAmount":135.0,"profitRate":0.0588,"keepProfit":270.0,"keepCount":300.0},
+          {"sequence":5,"gridType":2,"gear":85.0,"buyPrice":0.85,"buyCount":2700.0,"buyAmount":2295.0,"sellPrice":1.0,"sellCount":2700.0,"sellAmount":2700.0,"profitAmount":405.0,"profitRate":0.1765,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":6,"gridType":1,"gear":80.0,"buyPrice":0.8,"buyCount":3000.0,"buyAmount":2400.0,"sellPrice":0.85,"sellCount":2600.0,"sellAmount":2210.0,"profitAmount":150.0,"profitRate":0.0625,"keepProfit":340.0,"keepCount":400.0},
+          {"sequence":7,"gridType":1,"gear":75.0,"buyPrice":0.75,"buyCount":3400.0,"buyAmount":2550.0,"sellPrice":0.8,"sellCount":3000.0,"sellAmount":2400.0,"profitAmount":170.0,"profitRate":0.0667,"keepProfit":320.0,"keepCount":400.0},
+          {"sequence":8,"gridType":1,"gear":70.0,"buyPrice":0.7,"buyCount":3800.0,"buyAmount":2660.0,"sellPrice":0.75,"sellCount":3300.0,"sellAmount":2475.0,"profitAmount":190.0,"profitRate":0.0714,"keepProfit":375.0,"keepCount":500.0},
+          {"sequence":9,"gridType":2,"gear":70.0,"buyPrice":0.7,"buyCount":3800.0,"buyAmount":2660.0,"sellPrice":0.85,"sellCount":3800.0,"sellAmount":3230.0,"profitAmount":570.0,"profitRate":0.2143,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":10,"gridType":3,"gear":70.0,"buyPrice":0.7,"buyCount":3800.0,"buyAmount":2660.0,"sellPrice":1.0,"sellCount":3800.0,"sellAmount":3800.0,"profitAmount":1140.0,"profitRate":0.4286,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":11,"gridType":1,"gear":65.0,"buyPrice":0.65,"buyCount":4300.0,"buyAmount":2795.0,"sellPrice":0.7,"sellCount":3700.0,"sellAmount":2590.0,"profitAmount":215.0,"profitRate":0.0769,"keepProfit":420.0,"keepCount":600.0},
+          {"sequence":12,"gridType":1,"gear":60.0,"buyPrice":0.6,"buyCount":4900.0,"buyAmount":2940.0,"sellPrice":0.65,"sellCount":4100.0,"sellAmount":2665.0,"profitAmount":245.0,"profitRate":0.0833,"keepProfit":520.0,"keepCount":800.0},
+          {"sequence":13,"gridType":1,"gear":55.0,"buyPrice":0.55,"buyCount":5600.0,"buyAmount":3080.0,"sellPrice":0.6,"sellCount":4700.0,"sellAmount":2820.0,"profitAmount":280.0,"profitRate":0.0909,"keepProfit":540.0,"keepCount":900.0},
+          {"sequence":14,"gridType":2,"gear":55.0,"buyPrice":0.55,"buyCount":5600.0,"buyAmount":3080.0,"sellPrice":0.7,"sellCount":5600.0,"sellAmount":3920.0,"profitAmount":840.0,"profitRate":0.2727,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":15,"gridType":1,"gear":50.0,"buyPrice":0.5,"buyCount":6500.0,"buyAmount":3250.0,"sellPrice":0.55,"sellCount":5300.0,"sellAmount":2915.0,"profitAmount":325.0,"profitRate":0.1,"keepProfit":660.0,"keepCount":1200.0},
+          {"sequence":16,"gridType":1,"gear":45.0,"buyPrice":0.45,"buyCount":7600.0,"buyAmount":3420.0,"sellPrice":0.5,"sellCount":6100.0,"sellAmount":3050.0,"profitAmount":380.0,"profitRate":0.1111,"keepProfit":750.0,"keepCount":1500.0},
+          {"sequence":17,"gridType":1,"gear":40.0,"buyPrice":0.4,"buyCount":9000.0,"buyAmount":3600.0,"sellPrice":0.45,"sellCount":7000.0,"sellAmount":3150.0,"profitAmount":450.0,"profitRate":0.125,"keepProfit":900.0,"keepCount":2000.0},
+          {"sequence":18,"gridType":2,"gear":40.0,"buyPrice":0.4,"buyCount":9000.0,"buyAmount":3600.0,"sellPrice":0.55,"sellCount":9000.0,"sellAmount":4950.0,"profitAmount":1350.0,"profitRate":0.375,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":19,"gridType":3,"gear":40.0,"buyPrice":0.4,"buyCount":9000.0,"buyAmount":3600.0,"sellPrice":0.7,"sellCount":9000.0,"sellAmount":6300.0,"profitAmount":2700.0,"profitRate":0.75,"keepProfit":0.0,"keepCount":0.0}
+        ],
+        "isShort": false
+      }
+    },
+    {
+      "id": "short-default",
+      "description": "默认做空，覆盖价格与预算幂增长、做空盈利率和反向展示数据",
+      "androidResult": {
+        "productName":"默认做空","productCode":"SHORT_DEFAULT","maxPrice":1.0,"perShare":2000.0,"gearAmplitude":5.0,"keepShare":2,"increaseAmplitude":5,"mediumAmplitude":15,"bigAmplitude":30,"maxAmplitude":60,"minTradeQuantity":100.0,"category":"","sortOrder":0,"totalBuyAmount":33652.0,"totalProfitAmount":1772.0,"totalProfitRate":0.0527,
+        "gridItems":[
+          {"sequence":1,"gridType":1,"gear":100.0,"buyPrice":1.706,"buyCount":2000.0,"buyAmount":3412.0,"sellPrice":1.796,"sellCount":2000.0,"sellAmount":3592.0,"profitAmount":180.0,"profitRate":0.0501,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":2,"gridType":1,"gear":95.0,"buyPrice":1.625,"buyCount":2000.0,"buyAmount":3250.0,"sellPrice":1.71,"sellCount":2000.0,"sellAmount":3420.0,"profitAmount":170.0,"profitRate":0.0497,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":3,"gridType":1,"gear":90.0,"buyPrice":1.548,"buyCount":2000.0,"buyAmount":3096.0,"sellPrice":1.629,"sellCount":2000.0,"sellAmount":3258.0,"profitAmount":162.0,"profitRate":0.0497,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":4,"gridType":1,"gear":85.0,"buyPrice":1.473,"buyCount":2000.0,"buyAmount":2946.0,"sellPrice":1.551,"sellCount":2000.0,"sellAmount":3102.0,"profitAmount":156.0,"profitRate":0.0503,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":5,"gridType":1,"gear":80.0,"buyPrice":1.403,"buyCount":2000.0,"buyAmount":2806.0,"sellPrice":1.477,"sellCount":2000.0,"sellAmount":2954.0,"profitAmount":148.0,"profitRate":0.0501,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":6,"gridType":1,"gear":75.0,"buyPrice":1.337,"buyCount":2000.0,"buyAmount":2674.0,"sellPrice":1.407,"sellCount":2000.0,"sellAmount":2814.0,"profitAmount":140.0,"profitRate":0.0498,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":7,"gridType":1,"gear":70.0,"buyPrice":1.273,"buyCount":2000.0,"buyAmount":2546.0,"sellPrice":1.34,"sellCount":2000.0,"sellAmount":2680.0,"profitAmount":134.0,"profitRate":0.05,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":8,"gridType":1,"gear":65.0,"buyPrice":1.212,"buyCount":2000.0,"buyAmount":2424.0,"sellPrice":1.276,"sellCount":2000.0,"sellAmount":2552.0,"profitAmount":128.0,"profitRate":0.0502,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":9,"gridType":1,"gear":60.0,"buyPrice":1.155,"buyCount":2000.0,"buyAmount":2310.0,"sellPrice":1.216,"sellCount":2000.0,"sellAmount":2432.0,"profitAmount":122.0,"profitRate":0.0502,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":10,"gridType":1,"gear":55.0,"buyPrice":1.1,"buyCount":2000.0,"buyAmount":2200.0,"sellPrice":1.158,"sellCount":2000.0,"sellAmount":2316.0,"profitAmount":116.0,"profitRate":0.0501,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":11,"gridType":1,"gear":50.0,"buyPrice":1.047,"buyCount":2000.0,"buyAmount":2094.0,"sellPrice":1.102,"sellCount":2000.0,"sellAmount":2204.0,"profitAmount":110.0,"profitRate":0.0499,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":12,"gridType":1,"gear":45.0,"buyPrice":0.997,"buyCount":2000.0,"buyAmount":1994.0,"sellPrice":1.05,"sellCount":2000.0,"sellAmount":2100.0,"profitAmount":106.0,"profitRate":0.0505,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":13,"gridType":1,"gear":40.0,"buyPrice":0.95,"buyCount":2000.0,"buyAmount":1900.0,"sellPrice":1.0,"sellCount":2000.0,"sellAmount":2000.0,"profitAmount":100.0,"profitRate":0.05,"keepProfit":0.0,"keepCount":0.0}
+        ],"isShort":true
+      }
+    },
+    {
+      "id":"long-non-divisible",
+      "description":"做多，7.5% 档位不能整除 55%，同时锁定首档卖价截断行为",
+      "androidResult":{
+        "productName":"非整除振幅","productCode":"LONG_NON_DIVISIBLE","maxPrice":10.0,"perShare":1234.56,"gearAmplitude":7.5,"keepShare":1,"increaseAmplitude":8,"mediumAmplitude":20,"bigAmplitude":35,"maxAmplitude":55,"minTradeQuantity":10.0,"category":"","sortOrder":0,"totalBuyAmount":18030.0,"totalProfitAmount":3341.5,"totalProfitRate":0.1853,
+        "gridItems":[
+          {"sequence":1,"gridType":1,"gear":100.0,"buyPrice":10.0,"buyCount":120.0,"buyAmount":1200.0,"sellPrice":10.7,"sellCount":110.0,"sellAmount":1177.0,"profitAmount":84.0,"profitRate":0.07,"keepProfit":107.0,"keepCount":10.0},
+          {"sequence":2,"gridType":1,"gear":92.5,"buyPrice":9.25,"buyCount":140.0,"buyAmount":1295.0,"sellPrice":10.0,"sellCount":130.0,"sellAmount":1300.0,"profitAmount":105.0,"profitRate":0.0811,"keepProfit":100.0,"keepCount":10.0},
+          {"sequence":3,"gridType":1,"gear":85.0,"buyPrice":8.5,"buyCount":170.0,"buyAmount":1445.0,"sellPrice":9.25,"sellCount":160.0,"sellAmount":1480.0,"profitAmount":127.5,"profitRate":0.0882,"keepProfit":92.5,"keepCount":10.0},
+          {"sequence":4,"gridType":2,"gear":80.0,"buyPrice":8.0,"buyCount":180.0,"buyAmount":1440.0,"sellPrice":10.0,"sellCount":180.0,"sellAmount":1800.0,"profitAmount":360.0,"profitRate":0.25,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":5,"gridType":1,"gear":77.5,"buyPrice":7.75,"buyCount":200.0,"buyAmount":1550.0,"sellPrice":8.5,"sellCount":180.0,"sellAmount":1530.0,"profitAmount":150.0,"profitRate":0.0968,"keepProfit":170.0,"keepCount":20.0},
+          {"sequence":6,"gridType":1,"gear":70.0,"buyPrice":7.0,"buyCount":240.0,"buyAmount":1680.0,"sellPrice":7.75,"sellCount":220.0,"sellAmount":1705.0,"profitAmount":180.0,"profitRate":0.1071,"keepProfit":155.0,"keepCount":20.0},
+          {"sequence":7,"gridType":3,"gear":65.0,"buyPrice":6.5,"buyCount":260.0,"buyAmount":1690.0,"sellPrice":10.0,"sellCount":260.0,"sellAmount":2600.0,"profitAmount":910.0,"profitRate":0.5385,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":8,"gridType":1,"gear":62.5,"buyPrice":6.25,"buyCount":290.0,"buyAmount":1812.5,"sellPrice":7.0,"sellCount":260.0,"sellAmount":1820.0,"profitAmount":217.5,"profitRate":0.12,"keepProfit":210.0,"keepCount":30.0},
+          {"sequence":9,"gridType":2,"gear":60.0,"buyPrice":6.0,"buyCount":300.0,"buyAmount":1800.0,"sellPrice":8.0,"sellCount":300.0,"sellAmount":2400.0,"profitAmount":600.0,"profitRate":0.3333,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":10,"gridType":1,"gear":55.0,"buyPrice":5.5,"buyCount":360.0,"buyAmount":1980.0,"sellPrice":6.25,"sellCount":320.0,"sellAmount":2000.0,"profitAmount":270.0,"profitRate":0.1364,"keepProfit":250.0,"keepCount":40.0},
+          {"sequence":11,"gridType":1,"gear":47.5,"buyPrice":4.75,"buyCount":450.0,"buyAmount":2137.5,"sellPrice":5.5,"sellCount":390.0,"sellAmount":2145.0,"profitAmount":337.5,"profitRate":0.1579,"keepProfit":330.0,"keepCount":60.0}
+        ],"isShort":false
+      }
+    },
+    {
+      "id":"long-min-quantity-one",
+      "description":"做多且最小交易数量为 1，覆盖细粒度数量取整和三倍留存",
+      "androidResult":{
+        "productName":"最小数量一","productCode":"LONG_MIN_QTY_ONE","maxPrice":2.345,"perShare":987.65,"gearAmplitude":12.5,"keepShare":3,"increaseAmplitude":0,"mediumAmplitude":25,"bigAmplitude":50,"maxAmplitude":50,"minTradeQuantity":1.0,"category":"","sortOrder":0,"totalBuyAmount":7898.94,"totalProfitAmount":2676.77,"totalProfitRate":0.3389,
+        "gridItems":[
+          {"sequence":1,"gridType":1,"gear":100.0,"buyPrice":2.345,"buyCount":421.0,"buyAmount":987.24,"sellPrice":2.626,"sellCount":286.0,"sellAmount":751.04,"profitAmount":118.3,"profitRate":0.1198,"keepProfit":354.51,"keepCount":135.0},
+          {"sequence":2,"gridType":1,"gear":87.5,"buyPrice":2.052,"buyCount":481.0,"buyAmount":987.01,"sellPrice":2.345,"sellCount":301.0,"sellAmount":705.85,"profitAmount":140.93,"profitRate":0.1428,"keepProfit":422.1,"keepCount":180.0},
+          {"sequence":3,"gridType":1,"gear":75.0,"buyPrice":1.759,"buyCount":561.0,"buyAmount":986.8,"sellPrice":2.052,"sellCount":321.0,"sellAmount":658.69,"profitAmount":164.37,"profitRate":0.1666,"keepProfit":492.48,"keepCount":240.0},
+          {"sequence":4,"gridType":2,"gear":75.0,"buyPrice":1.759,"buyCount":561.0,"buyAmount":986.8,"sellPrice":2.345,"sellCount":561.0,"sellAmount":1315.55,"profitAmount":328.75,"profitRate":0.3331,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":5,"gridType":1,"gear":62.5,"buyPrice":1.466,"buyCount":674.0,"buyAmount":988.08,"sellPrice":1.759,"sellCount":337.0,"sellAmount":592.78,"profitAmount":197.48,"profitRate":0.1999,"keepProfit":592.78,"keepCount":337.0},
+          {"sequence":6,"gridType":1,"gear":50.0,"buyPrice":1.173,"buyCount":842.0,"buyAmount":987.67,"sellPrice":1.466,"sellCount":337.0,"sellAmount":494.04,"profitAmount":246.71,"profitRate":0.2498,"keepProfit":740.33,"keepCount":505.0},
+          {"sequence":7,"gridType":2,"gear":50.0,"buyPrice":1.173,"buyCount":842.0,"buyAmount":987.67,"sellPrice":1.759,"sellCount":842.0,"sellAmount":1481.08,"profitAmount":493.41,"profitRate":0.4996,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":8,"gridType":3,"gear":50.0,"buyPrice":1.173,"buyCount":842.0,"buyAmount":987.67,"sellPrice":2.345,"sellCount":842.0,"sellAmount":1974.49,"profitAmount":986.82,"profitRate":0.9991,"keepProfit":0.0,"keepCount":0.0}
+        ],"isShort":false
+      }
+    },
+    {
+      "id":"short-non-divisible",
+      "description":"做空，6.5% 不能整除 17%，验证 floor 和最小数量 10",
+      "androidResult":{
+        "productName":"做空非整除","productCode":"SHORT_NON_DIVISIBLE","maxPrice":3.21,"perShare":1500.0,"gearAmplitude":6.5,"keepShare":0,"increaseAmplitude":10,"mediumAmplitude":15,"bigAmplitude":30,"maxAmplitude":17,"minTradeQuantity":10.0,"category":"","sortOrder":0,"totalBuyAmount":4647.03,"totalProfitAmount":323.29,"totalProfitRate":0.0696,
+        "gridItems":[
+          {"sequence":1,"gridType":1,"gear":100.0,"buyPrice":3.404,"buyCount":500.0,"buyAmount":1702.0,"sellPrice":3.641,"sellCount":500.0,"sellAmount":1820.5,"profitAmount":118.5,"profitRate":0.0651,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":2,"gridType":1,"gear":93.5,"buyPrice":3.197,"buyCount":480.0,"buyAmount":1534.56,"sellPrice":3.419,"sellCount":480.0,"sellAmount":1641.12,"profitAmount":106.56,"profitRate":0.0649,"keepProfit":0.0,"keepCount":0.0},
+          {"sequence":3,"gridType":1,"gear":87.0,"buyPrice":3.001,"buyCount":470.0,"buyAmount":1410.47,"sellPrice":3.21,"sellCount":470.0,"sellAmount":1508.7,"profitAmount":98.23,"profitRate":0.0651,"keepProfit":0.0,"keepCount":0.0}
+        ],"isShort":true
+      }
+    }
+  ],
+  "webValidationCases": [
+    {"id":"zero-gear-amplitude","patch":{"gearAmplitude":"0"},"expectedCode":"GEAR_AMPLITUDE_MUST_BE_GT_ZERO"},
+    {"id":"negative-price","patch":{"maxPrice":"-1"},"expectedCode":"MAX_PRICE_MUST_BE_GT_ZERO"},
+    {"id":"zero-min-quantity","patch":{"minTradeQuantity":"0"},"expectedCode":"MIN_TRADE_QUANTITY_MUST_BE_GT_ZERO"},
+    {"id":"negative-budget","patch":{"perShare":"-0.01"},"expectedCode":"PER_SHARE_MUST_BE_GT_ZERO"},
+    {"id":"zero-medium-grid","patch":{"isShort":false,"mediumAmplitude":0},"expectedCode":"MEDIUM_AMPLITUDE_MUST_BE_GT_ZERO"},
+    {"id":"zero-big-grid","patch":{"isShort":false,"bigAmplitude":0},"expectedCode":"BIG_AMPLITUDE_MUST_BE_GT_ZERO"},
+    {"id":"amplitude-over-one-hundred","patch":{"maxAmplitude":101},"expectedCode":"MAX_AMPLITUDE_OUT_OF_RANGE"},
+    {"id":"grid-size-limit","patch":{"gearAmplitude":"0.0001","maxAmplitude":100},"expectedCode":"GRID_SIZE_LIMIT_EXCEEDED"}
+  ]
+}
