@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fitgridweb.example/schemas/android-grid-trade.schema.json",
+  "title": "Fit Android GridTrade Export",
+  "description": "Android v2-v4 compatible raw GridTrade array. Derived values are accepted for compatibility but ignored and recalculated during Web import.",
+  "type": "array",
+  "maxItems": 5000,
+  "items": {"$ref": "#/$defs/gridTrade"},
+  "$defs": {
+    "finiteNumber": {"type": "number"},
+    "gridItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sequence": {"type": "integer", "minimum": 0},
+        "gridType": {"type": "integer", "enum": [0, 1, 2, 3]},
+        "gear": {"$ref": "#/$defs/finiteNumber"},
+        "buyPrice": {"$ref": "#/$defs/finiteNumber"},
+        "buyCount": {"$ref": "#/$defs/finiteNumber"},
+        "buyAmount": {"$ref": "#/$defs/finiteNumber"},
+        "sellPrice": {"$ref": "#/$defs/finiteNumber"},
+        "sellCount": {"$ref": "#/$defs/finiteNumber"},
+        "sellAmount": {"$ref": "#/$defs/finiteNumber"},
+        "profitAmount": {"$ref": "#/$defs/finiteNumber"},
+        "profitRate": {"$ref": "#/$defs/finiteNumber"},
+        "keepProfit": {"$ref": "#/$defs/finiteNumber"},
+        "keepCount": {"$ref": "#/$defs/finiteNumber"}
+      }
+    },
+    "gridTrade": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["productCode", "maxPrice", "perShare", "gearAmplitude", "maxAmplitude"],
+      "properties": {
+        "productName": {"type": ["string", "null"], "maxLength": 120},
+        "productCode": {"type": "string", "minLength": 1, "maxLength": 64},
+        "maxPrice": {"$ref": "#/$defs/finiteNumber"},
+        "perShare": {"$ref": "#/$defs/finiteNumber"},
+        "gearAmplitude": {"$ref": "#/$defs/finiteNumber"},
+        "keepShare": {"type": ["integer", "null"]},
+        "increaseAmplitude": {"type": ["integer", "null"]},
+        "mediumAmplitude": {"type": ["integer", "null"]},
+        "bigAmplitude": {"type": ["integer", "null"]},
+        "maxAmplitude": {"type": "integer"},
+        "minTradeQuantity": {"$ref": "#/$defs/finiteNumber"},
+        "category": {"type": ["string", "null"], "maxLength": 120},
+        "sortOrder": {"type": ["integer", "null"]},
+        "totalBuyAmount": {"$ref": "#/$defs/finiteNumber"},
+        "totalProfitAmount": {"$ref": "#/$defs/finiteNumber"},
+        "totalProfitRate": {"$ref": "#/$defs/finiteNumber"},
+        "gridItems": {"type": ["array", "null"], "items": {"$ref": "#/$defs/gridItem"}},
+        "isShort": {"type": "boolean"}
+      }
+    }
+  }
+}

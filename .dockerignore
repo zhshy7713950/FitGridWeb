@@ -1,0 +1,12 @@
+.git
+.github
+.next
+node_modules
+coverage
+docs
+.env
+.env.*
+!.env.example
+FitProj
+*.log
+*.tsbuildinfo

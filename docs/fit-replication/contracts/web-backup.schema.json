@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fitgridweb.example/schemas/web-backup.schema.json",
+  "title": "FitGridWeb User Backup",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "formatVersion", "exportedAt", "ownerRef", "products"],
+  "properties": {
+    "format": {"const": "fitgridweb-backup"},
+    "formatVersion": {"const": "1.0.0"},
+    "exportedAt": {"type": "string", "format": "date-time"},
+    "ownerRef": {"type": "string", "pattern": "^hmac-sha256:[0-9a-f]{64}$"},
+    "products": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {"$ref": "#/$defs/product"}
+    }
+  },
+  "$defs": {
+    "decimal": {"type": "string", "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exportId", "productCode", "maxPrice", "minTradeQuantity",
+        "gearAmplitude", "perShare", "keepShare", "increaseAmplitude",
+        "maxAmplitude", "isShort", "sortOrder", "algorithmVersion",
+        "createdAt", "updatedAt"
+      ],
+      "properties": {
+        "exportId": {"type": "string", "format": "uuid"},
+        "productName": {"type": ["string", "null"], "maxLength": 120},
+        "productCode": {"type": "string", "minLength": 1, "maxLength": 64},
+        "maxPrice": {"$ref": "#/$defs/decimal"},
+        "minTradeQuantity": {"$ref": "#/$defs/decimal"},
+        "gearAmplitude": {"$ref": "#/$defs/decimal"},
+        "perShare": {"$ref": "#/$defs/decimal"},
+        "keepShare": {"type": "integer", "minimum": 0},
+        "increaseAmplitude": {"type": "integer", "minimum": 0},
+        "mediumAmplitude": {"type": ["integer", "null"], "minimum": 1},
+        "bigAmplitude": {"type": ["integer", "null"], "minimum": 1},
+        "maxAmplitude": {"type": "integer", "minimum": 1, "maximum": 100},
+        "isShort": {"type": "boolean"},
+        "category": {"type": ["string", "null"], "maxLength": 120},
+        "sortOrder": {"type": "integer"},
+        "algorithmVersion": {"const": "android-v2.1.0"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}
