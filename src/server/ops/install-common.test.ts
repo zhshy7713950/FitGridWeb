@@ -62,6 +62,9 @@ function run(command: string, files: Awaited<ReturnType<typeof fixture>>, env: R
 describe("installer preflight", () => {
   it("completes external preflight before apt and checkout mutations", async () => {
     const installer = await readFile(path.join(process.cwd(), "ops/install-production.sh"), "utf8");
+    expect(installer).not.toContain("$RAW_ROOT/main/ops/lib/install-common.sh");
+    expect(installer).toContain("$RAW_ROOT/$resolved_sha/ops/lib/install-common.sh");
+    expect(installer.indexOf('. "$pinned_common_library"')).toBeLessThan(installer.indexOf("apt-get update"));
     const apt = installer.indexOf("apt-get update");
     const checkout = installer.indexOf("ensure_checkout");
     for (const check of ["assert_public_image", "validate_disk_pressure", "validate_https_endpoint", "validate_nginx_site"]) {

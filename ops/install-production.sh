@@ -9,16 +9,100 @@ BACKUP_KEY_FILE=/etc/fitgridweb/backup.key
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 temporary_bootstrap=
+
+# Keep the standalone, pre-resolution bootstrap self-contained. A downloaded
+# installer must not source mutable code from main while running as root.
+fitgrid_error() { printf '错误：%s\n' "$*" >&2; }
+require_root() {
+  [ "$(id -u)" -eq 0 ] || { fitgrid_error "请使用 sudo 运行安装脚本"; return 1; }
+}
+bootstrap_environment_value() {
+  key=$1
+  file=$2
+  [ -f "$file" ] || return 0
+  awk -F= -v wanted="$key" '$1 == wanted { sub(/^[^=]*=/, ""); print; exit }' "$file"
+}
+environment_value() { bootstrap_environment_value "$@"; }
+validate_host() {
+  release_file=${1:-/etc/os-release}
+  meminfo_file=${2:-/proc/meminfo}
+  disk_path=${3:-/}
+  architecture=${4:-$(uname -m)}
+  os_id=$(awk -F= '$1 == "ID" { gsub(/"/, "", $2); print $2; exit }' "$release_file")
+  os_version=$(awk -F= '$1 == "VERSION_ID" { gsub(/"/, "", $2); print $2; exit }' "$release_file")
+  [ "$os_id" = ubuntu ] && [ "$os_version" = 24.04 ] \
+    || { fitgrid_error "仅支持 Ubuntu 24.04 LTS"; return 1; }
+  [ "$architecture" = x86_64 ] || [ "$architecture" = amd64 ] \
+    || { fitgrid_error "仅支持 x86_64/amd64"; return 1; }
+  memory_kb=$(awk '/^MemTotal:/ { print $2; exit }' "$meminfo_file")
+  [ -n "$memory_kb" ] && [ "$memory_kb" -ge 1572864 ] \
+    || { fitgrid_error "至少需要 1.5 GiB RAM"; return 1; }
+  available_kb=$(df -Pk "$disk_path" | awk 'NR == 2 { print $4 }')
+  [ -n "$available_kb" ] && [ "$available_kb" -ge 8388608 ] \
+    || { fitgrid_error "至少需要 8 GiB 可用磁盘空间"; return 1; }
+}
+validate_disk_pressure() {
+  used_percent=$(df -Pk "${1:-/}" | awk 'NR == 2 { value=$5; gsub(/%/, "", value); print value }')
+  case $used_percent in ""|*[!0-9]*) fitgrid_error "无法读取磁盘使用率"; return 1 ;; esac
+  [ "$used_percent" -lt 85 ] || { fitgrid_error "磁盘使用率 ${used_percent}% 已达到 85% 停止线"; return 1; }
+  [ "$used_percent" -lt 70 ] || printf '警告：磁盘使用率已达到 %s%%；请安排清理或扩容。\n' "$used_percent" >&2
+}
+validate_domain() {
+  case ${1:-} in ""|*://*|*/*|*:*|*[!A-Za-z0-9.-]*) fitgrid_error "域名格式无效"; return 1 ;; esac
+}
+validate_port() {
+  port=${1:-}; minimum=${2:-1}
+  case $port in ""|*[!0-9]*) fitgrid_error "端口必须是数字"; return 1 ;; esac
+  [ "$port" -ge "$minimum" ] && [ "$port" -le 65535 ] \
+    || { fitgrid_error "端口必须在 ${minimum}–65535 之间"; return 1; }
+}
+validate_upgrade_invariants() {
+  environment_file=$1; domain=$2; app_port=$3; public_port=$4; nginx_site=$5
+  [ -f "$environment_file" ] || return 0
+  [ "$domain" = "$(bootstrap_environment_value DOMAIN "$environment_file")" ] \
+    && [ "$app_port" = "$(bootstrap_environment_value APP_PORT "$environment_file")" ] \
+    && [ "$public_port" = "$(bootstrap_environment_value PUBLIC_HTTPS_PORT "$environment_file")" ] \
+    && [ "$nginx_site" = "$(bootstrap_environment_value NGINX_SITE "$environment_file")" ] \
+    || { fitgrid_error "--upgrade 不允许同时更换域名、端口或 nginx vhost"; return 1; }
+}
+assert_app_port_available() {
+  port=$1
+  ss -ltnH 2>/dev/null | awk '{ print $4 }' | grep -Eq "(^|:)$port$" || return 0
+  owner=$(docker ps --filter "publish=127.0.0.1:$port" --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null | head -n 1 || true)
+  [ "$owner" = fitgridweb ] || { fitgrid_error "本地端口 $port 已被非 FitGrid 服务占用"; return 1; }
+}
+resolve_ref() {
+  git_ref=$2
+  case $git_ref in ""|*[!A-Za-z0-9._/-]*) fitgrid_error "Git ref 格式无效"; return 1 ;; esac
+  sha=$(curl -fsSL "https://api.github.com/repos/zhshy7713950/FitGridWeb/commits/$git_ref" 2>/dev/null \
+    | sed -n 's/.*"sha"[[:space:]]*:[[:space:]]*"\([a-fA-F0-9]\{40\}\)".*/\1/p' | head -n 1 || true)
+  case $sha in ""|*[!a-fA-F0-9]*) fitgrid_error "无法解析公开 Git ref：$git_ref"; return 1 ;; esac
+  [ "${#sha}" -eq 40 ] || { fitgrid_error "Git ref 未解析为完整 commit SHA"; return 1; }
+  printf '%s\n' "$(printf '%s' "$sha" | tr 'A-F' 'a-f')"
+}
+image_for_sha() { printf 'ghcr.io/zhshy7713950/fitgridweb:sha-%s\n' "$1"; }
+assert_public_image() {
+  image=$1; repository=${image#ghcr.io/}; tag=${repository##*:}; repository=${repository%:*}
+  token=$(curl -fsSL "https://ghcr.io/token?service=ghcr.io&scope=repository:$repository:pull" \
+    | sed -n 's/.*"token":"\([^"]*\)".*/\1/p' || true)
+  [ -n "$token" ] && curl -fsSI -H "Authorization: Bearer $token" \
+    -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+    "https://ghcr.io/v2/$repository/manifests/$tag" >/dev/null 2>&1 \
+    || { fitgrid_error "镜像无法匿名读取：$image"; return 1; }
+}
+validate_https_endpoint() {
+  suffix=; [ "$2" -eq 443 ] || suffix=":$2"
+  curl --silent --show-error --output /dev/null --max-time 10 "https://$1$suffix/" \
+    || { fitgrid_error "现有 nginx HTTPS 地址无法连接"; return 1; }
+}
+
 if [ -f "$script_directory/lib/install-common.sh" ]; then
   common_library=$script_directory/lib/install-common.sh
-else
-  temporary_bootstrap=$(mktemp -d)
-  trap 'test -z "$temporary_bootstrap" || rm -rf "$temporary_bootstrap"' EXIT HUP INT TERM
-  common_library=$temporary_bootstrap/install-common.sh
-  curl -fsSL "$RAW_ROOT/main/ops/lib/install-common.sh" -o "$common_library"
+  # An installed copy is pinned to the current release and is safe to use for
+  # collecting input. The selected release library is sourced again below.
+  # shellcheck disable=SC1090
+  . "$common_library"
 fi
-# shellcheck disable=SC1090
-. "$common_library"
 
 from_installed=false
 upgrade=false
@@ -113,10 +197,24 @@ if [ "$from_installed" = false ]; then
     temporary_bootstrap=$(mktemp -d)
     trap 'test -z "$temporary_bootstrap" || rm -rf "$temporary_bootstrap"' EXIT HUP INT TERM
   fi
+  pinned_common_library=$temporary_bootstrap/install-common.sh
   preflight_nginx_library=$temporary_bootstrap/install-nginx.sh
+  curl -fsSL "$RAW_ROOT/$resolved_sha/ops/lib/install-common.sh" -o "$pinned_common_library"
   curl -fsSL "$RAW_ROOT/$resolved_sha/ops/lib/install-nginx.sh" -o "$preflight_nginx_library"
   # shellcheck disable=SC1090
+  . "$pinned_common_library"
+  # shellcheck disable=SC1090
   . "$preflight_nginx_library"
+  require_root
+  validate_host /etc/os-release /proc/meminfo /
+  validate_domain "$domain"
+  validate_port "$public_port" 1
+  validate_port "$app_port" 1024
+  [ "$upgrade" = false ] || validate_upgrade_invariants "$ENVIRONMENT_FILE" "$domain" "$app_port" "$public_port" "$nginx_site"
+  assert_app_port_available "$app_port"
+  assert_public_image "$image"
+  validate_disk_pressure /
+  validate_https_endpoint "$domain" "$public_port"
   validate_nginx_site "$nginx_site" "$domain" "$public_port"
 
   export DEBIAN_FRONTEND=noninteractive
