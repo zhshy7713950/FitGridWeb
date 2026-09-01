@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSession } from "@/server/auth/session";
 import { apiHandler, json, parseJsonBody } from "@/server/http/route-factory";
 import { getRuntimeServices } from "@/server/runtime/services";
+import { ownerMutationRequests } from "@/server/security/request-protection";
 
 const querySchema = z.strictObject({
   q: z.string().max(120).optional(),
@@ -28,6 +29,7 @@ export async function POST(request: Request): Promise<Response> {
   return apiHandler(request, async ({ requestId }) => {
     const services = getRuntimeServices();
     const user = await requireSession(request.headers, services.auth);
+    ownerMutationRequests.consume(user.id);
     const created = await services.grid.create(user.id, await parseJsonBody(request));
     return json(created, 201, requestId);
   });

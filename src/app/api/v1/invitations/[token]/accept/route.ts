@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { apiHandler, json, parseJsonBody } from "@/server/http/route-factory";
 import { getRuntimeServices } from "@/server/runtime/services";
+import { clientIp, invitationAcceptRequests } from "@/server/security/request-protection";
 
 const tokenSchema = z.string().min(32).max(512);
 const bodySchema = z.strictObject({
@@ -14,6 +15,7 @@ export async function POST(
   context: { params: Promise<{ token: string }> },
 ): Promise<Response> {
   return apiHandler(request, async ({ requestId }) => {
+    invitationAcceptRequests.consume(clientIp(request.headers));
     const { token } = await context.params;
     const body = bodySchema.parse(await parseJsonBody(request));
     const user = await getRuntimeServices().invitations.accept(

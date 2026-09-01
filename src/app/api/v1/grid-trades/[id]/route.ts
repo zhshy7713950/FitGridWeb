@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSession } from "@/server/auth/session";
 import { apiHandler, json, noContent, parseJsonBody } from "@/server/http/route-factory";
 import { getRuntimeServices } from "@/server/runtime/services";
+import { ownerMutationRequests } from "@/server/security/request-protection";
 
 const idSchema = z.string().uuid();
 type RouteContext = { params: Promise<{ id: string }> };
@@ -24,6 +25,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
 export async function PATCH(request: Request, context: RouteContext): Promise<Response> {
   return apiHandler(request, async ({ requestId }) => {
     const { services, ownerId, id } = await ownerAndId(request, context);
+    ownerMutationRequests.consume(ownerId);
     const updated = await services.grid.update(ownerId, id, await parseJsonBody(request));
     return json(updated, 200, requestId);
   });
@@ -32,6 +34,7 @@ export async function PATCH(request: Request, context: RouteContext): Promise<Re
 export async function DELETE(request: Request, context: RouteContext): Promise<Response> {
   return apiHandler(request, async ({ requestId }) => {
     const { services, ownerId, id } = await ownerAndId(request, context);
+    ownerMutationRequests.consume(ownerId);
     await services.grid.delete(ownerId, id);
     return noContent(requestId);
   });

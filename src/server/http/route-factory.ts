@@ -1,5 +1,6 @@
 import { ApiError, toErrorResponse } from "./api-error";
 import { requestIdFromHeaders } from "./request-context";
+import { assertSameOrigin } from "@/server/security/request-protection";
 
 export interface ApiContext {
   requestId: string;
@@ -11,6 +12,7 @@ export async function apiHandler(
 ): Promise<Response> {
   const requestId = requestIdFromHeaders(request.headers);
   try {
+    assertSameOrigin(request);
     const response = await handler({ requestId });
     response.headers.set("x-request-id", requestId);
     return response;

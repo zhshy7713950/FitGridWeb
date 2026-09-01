@@ -8,6 +8,7 @@ export class ApiError extends Error {
     public readonly code: string,
     message: string,
     public readonly fieldErrors?: FieldErrors,
+    public readonly responseHeaders?: HeadersInit,
   ) {
     super(message);
     this.name = "ApiError";
@@ -45,6 +46,12 @@ export function toErrorResponse(error: unknown, requestId: string): Response {
       ...(normalized.fieldErrors ? { fieldErrors: normalized.fieldErrors } : {}),
       requestId,
     },
-    { status: normalized.status, headers: { "x-request-id": requestId } },
+    {
+      status: normalized.status,
+      headers: {
+        ...Object.fromEntries(new Headers(normalized.responseHeaders)),
+        "x-request-id": requestId,
+      },
+    },
   );
 }
