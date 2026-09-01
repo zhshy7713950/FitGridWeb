@@ -4,13 +4,13 @@ import { requireSession } from "@/server/auth/session";
 import { apiHandler, json } from "@/server/http/route-factory";
 import { getRuntimeServices } from "@/server/runtime/services";
 
-const formatSchema = z.enum(["android", "web"]);
+const querySchema = z.strictObject({ format: z.enum(["android", "web"]) });
 
 export async function GET(request: Request): Promise<Response> {
   return apiHandler(request, async ({ requestId }) => {
     const services = getRuntimeServices();
     const user = await requireSession(request.headers, services.auth);
-    const format = formatSchema.parse(new URL(request.url).searchParams.get("format"));
+    const { format } = querySchema.parse(Object.fromEntries(new URL(request.url).searchParams));
     const date = new Date().toISOString().slice(0, 10);
     const body = format === "android"
       ? await services.exports.android(user.id)

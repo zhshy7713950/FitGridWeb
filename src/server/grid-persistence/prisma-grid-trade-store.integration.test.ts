@@ -41,6 +41,12 @@ integration("Prisma owner-scoped grid store", () => {
   });
 
   afterAll(async () => {
+    await withOwnerScope(ownerA, async (store) => {
+      for (const record of await store.all()) await store.delete(record.id);
+    }, prisma);
+    await withOwnerScope(ownerB, async (store) => {
+      for (const record of await store.all()) await store.delete(record.id);
+    }, prisma);
     await prisma.user.deleteMany({ where: { id: { in: [ownerA, ownerB] } } });
     await prisma.$disconnect();
   });
@@ -53,5 +59,6 @@ integration("Prisma owner-scoped grid store", () => {
     await expect(
       withOwnerScope(ownerA, (store) => store.list({ limit: 20 }), prisma),
     ).resolves.toMatchObject({ items: [{ productCode: "SAME-CODE" }] });
+    await expect(prisma.gridTrade.findMany()).resolves.toEqual([]);
   });
 });

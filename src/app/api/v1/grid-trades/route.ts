@@ -16,11 +16,7 @@ export async function GET(request: Request): Promise<Response> {
     const services = getRuntimeServices();
     const user = await requireSession(request.headers, services.auth);
     const url = new URL(request.url);
-    const query = querySchema.parse({
-      q: url.searchParams.get("q") ?? undefined,
-      cursor: url.searchParams.get("cursor") ?? undefined,
-      limit: url.searchParams.get("limit") ?? undefined,
-    });
+    const query = querySchema.parse(Object.fromEntries(url.searchParams));
     return json(await services.grid.list(user.id, query), 200, requestId);
   });
 }

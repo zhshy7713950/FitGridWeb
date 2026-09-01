@@ -84,4 +84,15 @@ describe("ImportService", () => {
       service.commit("owner-a", preview.previewToken, "skip", new Date("2026-09-01T00:02:00Z")),
     ).rejects.toMatchObject({ code: "IMPORT_PREVIEW_NOT_FOUND" });
   });
+
+  it("skips current-owner conflicts without treating another owner's code as a conflict", async () => {
+    const repository = new MemoryImports();
+    repository.existing.set("owner-a", new Set(["EXISTING"]));
+    repository.existing.set("owner-b", new Set(["NEW"]));
+    const service = new ImportService(repository);
+    const preview = await service.preview("owner-a", androidFile, new Date("2026-09-01T00:00:00Z"));
+    await expect(
+      service.commit("owner-a", preview.previewToken, "skip", new Date("2026-09-01T00:01:00Z")),
+    ).resolves.toEqual({ created: 1, overwritten: 0, skipped: 1, invalid: 0 });
+  });
 });

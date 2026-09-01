@@ -8,10 +8,7 @@ cd "$PROJECT_DIR"
 load_fitgrid_environment
 validate_fitgrid_environment
 
-if [ "$(stat -c '%a' "${ENV_FILE:-.env}")" -gt 600 ]; then
-  echo "Environment file must have mode 600 or stricter" >&2
-  exit 1
-fi
+require_private_file "${ENV_FILE:-.env}" "Environment file"
 
 docker compose pull db caddy
 if ! docker compose pull app; then

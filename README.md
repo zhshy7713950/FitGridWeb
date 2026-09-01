@@ -13,6 +13,9 @@ Android 源仓库仅作为只读行为参考，不属于本仓库，也不得把
 ```bash
 pnpm install
 pnpm prisma generate
+set -a
+. ./.env
+set +a
 DATABASE_URL="$MIGRATION_DATABASE_URL" pnpm prisma migrate deploy
 pnpm admin:create
 pnpm dev

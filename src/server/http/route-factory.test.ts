@@ -31,4 +31,19 @@ describe("API route factory", () => {
     });
     await expect(parseJsonBody(request)).rejects.toMatchObject({ status: 400, code: "JSON_INVALID" });
   });
+
+  it("rejects owner identity supplied through query parameters", async () => {
+    const response = await apiHandler(
+      new Request("http://localhost/api/v1/test?ownerId=attacker"),
+      (context) => json({ leaked: true }, 200, context.requestId),
+    );
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ code: "OWNER_FIELD_FORBIDDEN" });
+  });
+
+  it("forwards response headers while adding the request ID", () => {
+    const response = json({ ok: true }, 200, "request-id", { "set-cookie": "session=token; HttpOnly" });
+    expect(response.headers.get("set-cookie")).toContain("session=token");
+    expect(response.headers.get("x-request-id")).toBe("request-id");
+  });
 });

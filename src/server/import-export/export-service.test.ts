@@ -23,6 +23,7 @@ describe("ExportService", () => {
   it("emits Android-compatible numeric calculations without Web identity", async () => {
     const database = new InMemoryGridDatabase(new Date("2026-09-01T00:00:00Z"));
     await new GridService(database.scope).create("owner-a", createBody);
+    await new GridService(database.scope).create("owner-b", { ...createBody, productCode: "PRIVATE-B" });
     const exported = await new ExportService(database.scope, "owner-secret-32-characters-minimum").android(
       "owner-a",
     );
@@ -37,11 +38,13 @@ describe("ExportService", () => {
     expect(exported[0].gridItems[0].buyPrice).toBeTypeOf("number");
     expect(exported[0]).not.toHaveProperty("id");
     expect(exported[0]).not.toHaveProperty("ownerId");
+    expect(JSON.stringify(exported)).not.toContain("PRIVATE-B");
   });
 
   it("emits a versioned Web backup with an anonymous stable ownerRef", async () => {
     const database = new InMemoryGridDatabase(new Date("2026-09-01T00:00:00Z"));
     await new GridService(database.scope).create("owner-a", createBody);
+    await new GridService(database.scope).create("owner-b", { ...createBody, productCode: "PRIVATE-B" });
     const service = new ExportService(
       database.scope,
       "owner-secret-32-characters-minimum",
@@ -57,5 +60,6 @@ describe("ExportService", () => {
       products: [{ productCode: "DEMO", maxPrice: "1", algorithmVersion: "android-v2.1.0" }],
     });
     expect(JSON.stringify(backup)).not.toContain("owner-a");
+    expect(JSON.stringify(backup)).not.toContain("PRIVATE-B");
   });
 });

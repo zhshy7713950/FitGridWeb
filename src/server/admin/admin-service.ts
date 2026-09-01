@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { UserStatus } from "@/generated/prisma/client";
 import { ApiError } from "@/server/http/api-error";
+import { signScopedToken, verifyScopedToken } from "@/server/security/signed-token";
 
 export interface ManagedUser {
   id: string;
@@ -29,10 +30,48 @@ function response(user: ManagedUser) {
 }
 
 export class AdminService {
-  constructor(private readonly repository: AdminRepository) {}
+  constructor(
+    private readonly repository: AdminRepository,
+    private readonly cursorSecret = process.env.CURSOR_SIGNING_SECRET ?? process.env.BETTER_AUTH_SECRET,
+  ) {}
 
-  async listUsers() {
-    return { items: (await this.repository.list()).map(response), nextCursor: null };
+  async listUsers(query: { cursor?: string; limit?: number } = {}) {
+    const limit = query.limit ?? 20;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      throw new ApiError(422, "LIMIT_OUT_OF_RANGE", "limit 必须介于 1 和 100 之间");
+    }
+    const users = await this.repository.list();
+    let start = 0;
+    if (query.cursor) {
+      if (!this.cursorSecret || this.cursorSecret.length < 32) {
+        throw new Error("CURSOR_SIGNING_SECRET or BETTER_AUTH_SECRET must contain at least 32 characters");
+      }
+      const cursor = verifyScopedToken<{ ownerId: string; id: string; exp: number }>(
+        query.cursor,
+        this.cursorSecret,
+        { ownerId: "admin-users" },
+      );
+      const index = users.findIndex((user) => user.id === cursor.id);
+      if (index < 0) throw new ApiError(400, "SIGNED_TOKEN_INVALID", "分页游标无效");
+      start = index + 1;
+    }
+    const page = users.slice(start, start + limit);
+    const hasMore = start + page.length < users.length;
+    let nextCursor: string | null = null;
+    if (hasMore) {
+      if (!this.cursorSecret || this.cursorSecret.length < 32) {
+        throw new Error("CURSOR_SIGNING_SECRET or BETTER_AUTH_SECRET must contain at least 32 characters");
+      }
+      nextCursor = signScopedToken(
+        {
+          ownerId: "admin-users",
+          id: page.at(-1)!.id,
+          exp: Math.floor(Date.now() / 1_000) + 24 * 60 * 60,
+        },
+        this.cursorSecret,
+      );
+    }
+    return { items: page.map(response), nextCursor };
   }
 
   async updateStatus(userId: string, status: "active" | "disabled") {

@@ -15,8 +15,12 @@ export async function POST(request: Request): Promise<Response> {
       throw new ApiError(400, "CONTENT_TYPE_INVALID", "导入必须使用 multipart/form-data");
     }
     const form = await request.formData();
-    const file = form.get("file");
-    if (!(file instanceof File)) {
+    const files = form.getAll("file");
+    if ([...form.keys()].some((key) => key !== "file")) {
+      throw new ApiError(422, "IMPORT_FIELD_UNKNOWN", "导入表单包含未知字段");
+    }
+    const file = files[0];
+    if (files.length !== 1 || !(file instanceof File)) {
       throw new ApiError(400, "IMPORT_FILE_REQUIRED", "缺少导入文件");
     }
     if (file.size > MAX_IMPORT_BYTES) {

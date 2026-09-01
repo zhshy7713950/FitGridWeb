@@ -36,6 +36,14 @@ const ANDROID_FIELDS = new Set([
   "isShort",
 ]);
 
+const WEB_FIELDS = new Set([
+  "exportId",
+  "algorithmVersion",
+  "createdAt",
+  "updatedAt",
+  ...ANDROID_FIELDS,
+]);
+
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new ApiError(422, "IMPORT_RECORD_INVALID", "导入记录必须是对象");
@@ -100,11 +108,10 @@ export function normalizeImportDocument(document: unknown): NormalizedImportItem
     try {
       const source = object(raw);
       const isWeb = "algorithmVersion" in source || "exportId" in source;
-      if (!isWeb) {
-        const unknown = Object.keys(source).filter((key) => !ANDROID_FIELDS.has(key));
-        if (unknown.length > 0) {
-          throw new GridDomainError("IMPORT_UNKNOWN_FIELD", `未知字段：${unknown.join(", ")}`);
-        }
+      const allowedFields = isWeb ? WEB_FIELDS : ANDROID_FIELDS;
+      const unknown = Object.keys(source).filter((key) => !allowedFields.has(key));
+      if (unknown.length > 0) {
+        throw new GridDomainError("IMPORT_UNKNOWN_FIELD", `未知字段：${unknown.join(", ")}`);
       }
       productCode = typeof source.productCode === "string" ? source.productCode.trim() : "";
       const defaulted = (field: string, value: unknown, fallback: unknown) => {

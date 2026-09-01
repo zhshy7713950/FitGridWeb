@@ -56,6 +56,15 @@ describe("AdminService", () => {
     });
   });
 
+  it("returns a stable opaque cursor instead of ignoring the documented limit", async () => {
+    const service = new AdminService(new MemoryAdmins(), "admin-cursor-secret-at-least-32-chars");
+    const first = await service.listUsers({ limit: 1 });
+    expect(first.items).toHaveLength(1);
+    expect(first.nextCursor).toBeTypeOf("string");
+    const second = await service.listUsers({ limit: 1, cursor: first.nextCursor! });
+    expect(second.items.map((item) => item.id)).toEqual(["member"]);
+  });
+
   it("disables a member and revokes every session", async () => {
     const repository = new MemoryAdmins();
     await expect(new AdminService(repository).updateStatus("member", "disabled")).resolves.toMatchObject({

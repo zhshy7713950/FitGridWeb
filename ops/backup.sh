@@ -12,6 +12,7 @@ for variable_name in BACKUP_DIR BACKUP_REMOTE_DIR BACKUP_ENCRYPTION_KEY_FILE; do
   require_fitgrid_value "$variable_name"
 done
 [ -f "$BACKUP_ENCRYPTION_KEY_FILE" ] || { echo "Backup encryption key file is missing" >&2; exit 1; }
+require_private_file "$BACKUP_ENCRYPTION_KEY_FILE" "Backup encryption key"
 case "$BACKUP_DIR" in ""|/) echo "Unsafe BACKUP_DIR" >&2; exit 1 ;; esac
 case "$BACKUP_REMOTE_DIR" in ""|/) echo "Unsafe BACKUP_REMOTE_DIR" >&2; exit 1 ;; esac
 

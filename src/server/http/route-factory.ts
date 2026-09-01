@@ -12,6 +12,9 @@ export async function apiHandler(
 ): Promise<Response> {
   const requestId = requestIdFromHeaders(request.headers);
   try {
+    if (new URL(request.url).searchParams.has("ownerId")) {
+      throw new ApiError(422, "OWNER_FIELD_FORBIDDEN", "ownerId 只能从当前会话确定");
+    }
     assertSameOrigin(request);
     const response = await handler({ requestId });
     response.headers.set("x-request-id", requestId);
@@ -27,10 +30,9 @@ export function json(
   requestId: string,
   headers?: HeadersInit,
 ): Response {
-  return Response.json(body, {
-    status,
-    headers: { ...Object.fromEntries(new Headers(headers)), "x-request-id": requestId },
-  });
+  const responseHeaders = new Headers(headers);
+  responseHeaders.set("x-request-id", requestId);
+  return Response.json(body, { status, headers: responseHeaders });
 }
 
 export function noContent(requestId: string, headers?: HeadersInit): Response {

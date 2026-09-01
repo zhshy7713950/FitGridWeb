@@ -55,4 +55,19 @@ describe("Android import normalization", () => {
       expect.objectContaining({ code: "IMPORT_ITEM_LIMIT_EXCEEDED" }),
     );
   });
+
+  it.each([
+    [{ ownerId: "attacker" }],
+    [{ ownerId: "attacker", exportId: "00000000-0000-4000-8000-000000000000", algorithmVersion: "android-v2.1.0" }],
+  ])("rejects owner identity from Android and Web import records", (identityFields) => {
+    const parsed = parseStrictJsonBytes(Buffer.from(JSON.stringify([{
+      productCode: "OWNED",
+      maxPrice: 1,
+      perShare: 2000,
+      gearAmplitude: 5,
+      maxAmplitude: 60,
+      ...identityFields,
+    }])));
+    expect(normalizeImportDocument(parsed)[0].fieldErrors).toHaveProperty("record");
+  });
 });

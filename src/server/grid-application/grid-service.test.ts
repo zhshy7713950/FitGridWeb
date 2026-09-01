@@ -39,6 +39,13 @@ describe("GridService", () => {
       status: 404,
       code: "GRID_TRADE_NOT_FOUND",
     });
+    await expect(service.recalculate("owner-a", createdB.id)).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.update("owner-a", createdB.id, {
+        expectedUpdatedAt: createdB.updatedAt,
+        productName: "stolen",
+      }),
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it("rejects a duplicate code only inside the current owner", async () => {
@@ -65,6 +72,9 @@ describe("GridService", () => {
       "B",
       "C",
     ]);
+    await expect(service.list("owner-b", { limit: 2, cursor: pageOne.nextCursor! })).rejects.toMatchObject({
+      code: "SIGNED_TOKEN_INVALID",
+    });
   });
 
   it("updates with optimistic locking and permits retaining its own code", async () => {

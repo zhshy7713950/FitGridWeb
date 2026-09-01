@@ -27,10 +27,30 @@ validate_fitgrid_environment() {
   case "$APP_IMAGE" in *:latest|*:latest@*) echo "APP_IMAGE must not use latest" >&2; exit 1 ;; esac
   case "$APP_IMAGE" in *:*|*@sha256:*) : ;; *) echo "APP_IMAGE must use a fixed tag or digest" >&2; exit 1 ;; esac
   case "$POSTGRES_PASSWORD" in password|postgres|changeme|change-me) echo "POSTGRES_PASSWORD uses a default value" >&2; exit 1 ;; esac
+  for variable_value in "$APP_IMAGE" "$POSTGRES_PASSWORD" "$APP_DATABASE_PASSWORD" "$BETTER_AUTH_SECRET" "$OWNER_REF_SECRET" "$DATABASE_URL" "$MIGRATION_DATABASE_URL"; do
+    case "$variable_value" in *REPLACE*|*replace_with*|*APP_PASSWORD*|*MIGRATION_PASSWORD*) echo "Environment still contains an example placeholder" >&2; exit 1 ;; esac
+  done
   [ "${#POSTGRES_PASSWORD}" -ge 32 ] || { echo "POSTGRES_PASSWORD must contain at least 32 characters" >&2; exit 1; }
   [ "${#APP_DATABASE_PASSWORD}" -ge 32 ] || { echo "APP_DATABASE_PASSWORD must contain at least 32 characters" >&2; exit 1; }
   [ "${#BETTER_AUTH_SECRET}" -ge 32 ] || { echo "BETTER_AUTH_SECRET must contain at least 32 characters" >&2; exit 1; }
   [ "${#OWNER_REF_SECRET}" -ge 32 ] || { echo "OWNER_REF_SECRET must contain at least 32 characters" >&2; exit 1; }
   [ "$BETTER_AUTH_SECRET" != "$OWNER_REF_SECRET" ] || { echo "Authentication and owner reference secrets must differ" >&2; exit 1; }
   [ "$DATABASE_URL" != "$MIGRATION_DATABASE_URL" ] || { echo "Runtime and migration database URLs must differ" >&2; exit 1; }
+  [ "$APP_DATABASE_USER" != "$POSTGRES_USER" ] || { echo "Runtime and migration database roles must differ" >&2; exit 1; }
+  case "$DATABASE_URL" in postgres://"$APP_DATABASE_USER":*|postgresql://"$APP_DATABASE_USER":*) : ;; *) echo "DATABASE_URL must use APP_DATABASE_USER" >&2; exit 1 ;; esac
+  case "$MIGRATION_DATABASE_URL" in postgres://"$POSTGRES_USER":*|postgresql://"$POSTGRES_USER":*) : ;; *) echo "MIGRATION_DATABASE_URL must use POSTGRES_USER" >&2; exit 1 ;; esac
+}
+
+require_private_file() {
+  private_file=$1
+  private_label=$2
+  if private_mode=$(stat -c '%a' "$private_file" 2>/dev/null); then
+    :
+  else
+    private_mode=$(stat -f '%Lp' "$private_file")
+  fi
+  case "$private_mode" in
+    ?00|??00) : ;;
+    *) echo "$private_label must not be readable or writable by group/others" >&2; exit 1 ;;
+  esac
 }

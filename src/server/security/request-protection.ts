@@ -19,6 +19,18 @@ function retryAfter(entry: WindowEntry, now: number): number {
   return Math.ceil((entry.resetAt - now) / 1_000);
 }
 
+function compact(windows: Map<string, WindowEntry>, now: number): void {
+  if (windows.size < 10_000) return;
+  for (const [key, entry] of windows) {
+    if (entry.resetAt <= now) windows.delete(key);
+  }
+  while (windows.size >= 10_000) {
+    const oldest = windows.keys().next().value as string | undefined;
+    if (!oldest) break;
+    windows.delete(oldest);
+  }
+}
+
 export class FixedWindowRateLimiter {
   private readonly windows = new Map<string, WindowEntry>();
 
@@ -30,6 +42,7 @@ export class FixedWindowRateLimiter {
 
   consume(key: string): void {
     const now = this.clock();
+    compact(this.windows, now);
     const current = this.windows.get(key);
     if (!current || current.resetAt <= now) {
       this.windows.set(key, { count: 1, resetAt: now + this.windowMilliseconds });
@@ -61,6 +74,7 @@ export class LoginAttemptLimiter {
 
   recordFailure(key: string): void {
     const now = this.clock();
+    compact(this.failures, now);
     const current = this.failures.get(key);
     if (!current || current.resetAt <= now) {
       this.failures.set(key, { count: 1, resetAt: now + this.windowMilliseconds });

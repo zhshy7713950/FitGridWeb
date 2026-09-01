@@ -26,6 +26,7 @@ async function fixture() {
   const commandLog = path.join(root, "commands.log");
   const keyFile = path.join(root, "backup.key");
   await writeFile(keyFile, "test-only-encryption-key");
+  await chmod(keyFile, 0o600);
   await writeFile(environmentFile, [
     "DOMAIN=grid.example.com",
     "APP_IMAGE=ghcr.io/example/fitgridweb:sha-2ca7f41",
@@ -88,7 +89,7 @@ printf 'valid custom dump' >"$output"`);
     await executable(files.bin, "find", "printf 'find %s\\n' \"$*\" >>\"$COMMAND_LOG\"");
 
     const result = run("backup.sh", files);
-    expect(result.status).toBe(9);
+    expect(result.status, result.stderr).toBe(9);
     await expect(readFile(files.commandLog, "utf8")).rejects.toThrow();
   });
 });
