@@ -50,7 +50,7 @@ export function useGridTrades(
   const [initialError, setInitialError] = useState("");
   const [pageError, setPageError] = useState("");
   const requestVersion = useRef(0);
-  const pageInFlight = useRef<string | null>(null);
+  const cursorsInFlight = useRef(new Set<string>());
   const failedCursor = useRef<string | null>(null);
   const abortController = useRef<AbortController | null>(null);
   const effectiveQueryRef = useRef("");
@@ -65,7 +65,6 @@ export function useGridTrades(
     setNextCursor(null);
     if (!preserveCurrent) setItems([]);
     failedCursor.current = null;
-    pageInFlight.current = null;
   }, []);
 
   useEffect(() => {
@@ -129,10 +128,10 @@ export function useGridTrades(
   }, [clearVersion, effectiveQuery, request]);
 
   const loadCursor = useCallback(async (cursor: string) => {
-    if (pageInFlight.current === cursor) return;
+    if (cursorsInFlight.current.has(cursor)) return;
 
     const version = requestVersion.current;
-    pageInFlight.current = cursor;
+    cursorsInFlight.current.add(cursor);
     setPageLoading(true);
     setPageError("");
 
@@ -148,8 +147,8 @@ export function useGridTrades(
         setPageError(publicMessage(error, "加载更多失败"));
       }
     } finally {
+      cursorsInFlight.current.delete(cursor);
       if (version === requestVersion.current) {
-        pageInFlight.current = null;
         setPageLoading(false);
       }
     }

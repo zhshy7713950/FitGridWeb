@@ -173,6 +173,80 @@ it("suppresses a duplicate request for the same in-flight cursor", async () => {
   expect(result.current.items.map((entry) => entry.id)).toEqual(["first", "second"]);
 });
 
+it("keeps a cursor owned across refresh until the older request settles", async () => {
+  const olderPage = deferred<GridTradePage>();
+  const currentPage = deferred<GridTradePage>();
+  const request = vi.fn()
+    .mockResolvedValueOnce({ items: [item("first")], nextCursor: "c2" })
+    .mockImplementationOnce(() => olderPage.promise)
+    .mockResolvedValueOnce({ items: [item("refreshed")], nextCursor: "c2" })
+    .mockImplementationOnce(() => currentPage.promise);
+  const { result } = renderHook(() => useGridTrades({ request }));
+  await waitFor(() => expect(result.current.nextCursor).toBe("c2"));
+
+  let olderLoad!: Promise<void>;
+  act(() => {
+    olderLoad = result.current.loadMore();
+  });
+  await act(async () => result.current.refresh());
+  expect(result.current.items.map((entry) => entry.id)).toEqual(["refreshed"]);
+
+  let suppressedLoad!: Promise<void>;
+  act(() => {
+    suppressedLoad = result.current.loadMore();
+  });
+  expect(request).toHaveBeenCalledTimes(3);
+  await suppressedLoad;
+
+  await act(async () => {
+    olderPage.resolve({ items: [item("stale")], nextCursor: null });
+    await olderLoad;
+  });
+  expect(result.current.items.map((entry) => entry.id)).toEqual(["refreshed"]);
+
+  let currentLoad!: Promise<void>;
+  act(() => {
+    currentLoad = result.current.loadMore();
+  });
+  expect(request).toHaveBeenCalledTimes(4);
+  expect(request.mock.calls[3][0].cursor).toBe("c2");
+  await act(async () => {
+    currentPage.resolve({ items: [item("current")], nextCursor: null });
+    await currentLoad;
+  });
+  expect(result.current.items.map((entry) => entry.id)).toEqual(["refreshed", "current"]);
+});
+
+it("does not append a late cursor page after a new query resolves", async () => {
+  vi.useFakeTimers();
+  const olderPage = deferred<GridTradePage>();
+  const newQueryPage = deferred<GridTradePage>();
+  const request = vi.fn()
+    .mockResolvedValueOnce({ items: [item("first")], nextCursor: "c2" })
+    .mockImplementationOnce(() => olderPage.promise)
+    .mockImplementationOnce(() => newQueryPage.promise);
+  const { result } = renderHook(() => useGridTrades({ request }));
+  await act(async () => {});
+
+  let olderLoad!: Promise<void>;
+  act(() => {
+    olderLoad = result.current.loadMore();
+  });
+  act(() => result.current.setQuery("oil"));
+  act(() => vi.advanceTimersByTime(250));
+  expect(request.mock.calls[2][0]).toMatchObject({ q: "oil" });
+
+  await act(async () => {
+    newQueryPage.resolve({ items: [item("oil")], nextCursor: null });
+  });
+  await act(async () => {
+    olderPage.resolve({ items: [item("stale")], nextCursor: null });
+    await olderLoad;
+  });
+
+  expect(result.current.items.map((entry) => entry.id)).toEqual(["oil"]);
+});
+
 it("includes the request ID in an initial service error", async () => {
   const request = vi.fn().mockRejectedValue(
     new ClientApiError(503, "UNAVAILABLE", "不可用", "01GRID"),
