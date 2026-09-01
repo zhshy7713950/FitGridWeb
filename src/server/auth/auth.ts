@@ -5,6 +5,7 @@ import { APIError } from "better-auth/api";
 import { username } from "better-auth/plugins";
 
 import type { PrismaClient } from "@/generated/prisma/client";
+import { cookiePath } from "@/server/config/base-path";
 import { getPrismaClient } from "@/server/db/client";
 
 export function createAuth(prisma: PrismaClient) {
@@ -77,7 +78,7 @@ export function createAuth(prisma: PrismaClient) {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        path: "/",
+        path: cookiePath(process.env.APP_BASE_PATH),
       },
       database: {
         generateId: () => randomUUID(),

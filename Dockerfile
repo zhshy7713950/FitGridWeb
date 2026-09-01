@@ -6,6 +6,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 FROM dependencies AS builder
+ARG NEXT_BASE_PATH=""
+ENV NEXT_BASE_PATH=${NEXT_BASE_PATH}
 COPY . .
 RUN pnpm build
 
