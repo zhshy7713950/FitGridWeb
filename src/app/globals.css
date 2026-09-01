@@ -1,0 +1,49 @@
+:root {
+  --canvas: #0b0f14;
+  --surface: #131722;
+  --surface-raised: #1e222d;
+  --line: #2a2e39;
+  --action: #2962ff;
+  --positive: #089981;
+  --negative: #f23645;
+  --text: #d1d4dc;
+  --text-muted: #787b86;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background: var(--canvas);
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--canvas);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
