@@ -187,6 +187,17 @@ describe("dedicated nginx site preparation", () => {
 });
 
 describe("nginx managed include", () => {
+  it("proxies the canonical /fitgrid entry without redirecting to a trailing slash", async () => {
+    const files = await fixture();
+    const result = run("render_nginx_snippet 3300", files);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).not.toContain("return 308 /fitgrid/");
+    expect(result.stdout).toMatch(
+      /location = \/fitgrid \{[\s\S]*?proxy_pass http:\/\/127\.0\.0\.1:3300;[\s\S]*?\}/,
+    );
+  });
+
   it("renders subpath-safe proxy directives", async () => {
     const files = await fixture();
     const result = run("render_nginx_snippet 3300", files);

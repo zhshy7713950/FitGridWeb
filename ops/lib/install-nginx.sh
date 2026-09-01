@@ -269,15 +269,12 @@ prepare_dedicated_nginx_site() {
   fi
 }
 
-render_nginx_snippet() {
-  app_port=$1
-  case $app_port in ""|*[!0-9]*) fitgrid_error "应用端口无效"; return 1 ;; esac
+render_proxy_location() {
+  qualifier=$1
+  path=$2
+  app_port=$3
   cat <<EOF
-location = /fitgrid {
-    return 308 /fitgrid/;
-}
-
-location ^~ /fitgrid/ {
+location ${qualifier} ${path} {
     proxy_pass http://127.0.0.1:${app_port};
     proxy_http_version 1.1;
     proxy_set_header Host \$http_host;
@@ -295,6 +292,14 @@ location ^~ /fitgrid/ {
     client_max_body_size 10m;
 }
 EOF
+}
+
+render_nginx_snippet() {
+  app_port=$1
+  case $app_port in ""|*[!0-9]*) fitgrid_error "应用端口无效"; return 1 ;; esac
+  render_proxy_location = /fitgrid "$app_port"
+  printf '\n'
+  render_proxy_location '^~' /fitgrid/ "$app_port"
 }
 
 portable_mode() {
