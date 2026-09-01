@@ -65,6 +65,21 @@
   font-weight: 750;
 }
 
+.username {
+  min-width: 0;
+  flex: 1 1 12rem;
+  max-width: 32rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobileBrand,
+.role,
+.logoutArea {
+  flex: 0 0 auto;
+}
+
 .connection::before {
   content: "";
   display: inline-block;
@@ -150,6 +165,7 @@
     grid-column: 1;
     grid-row: 1;
     justify-content: space-between;
+    gap: 8px;
     padding-inline: 12px;
   }
 

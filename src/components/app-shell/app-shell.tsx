@@ -20,8 +20,10 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
       <header className={styles.accountBar}>
         <span className={styles.mobileBrand}>FitGrid</span>
         <span className={styles.connection}>安全连接</span>
-        <span>{user.username}</span>
-        <span>{user.role === "admin" ? "管理员" : "普通用户"}</span>
+        <span className={styles.username} title={user.username}>
+          {user.username}
+        </span>
+        <span className={styles.role}>{user.role === "admin" ? "管理员" : "普通用户"}</span>
         <LogoutButton />
       </header>
       <main className={styles.content}>{children}</main>
