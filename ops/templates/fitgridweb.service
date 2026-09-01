@@ -1,0 +1,17 @@
+[Unit]
+Description=FitGridWeb application and database
+Requires=docker.service
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/fitgridweb
+ExecStart=/usr/bin/docker compose --project-name fitgridweb --env-file /etc/fitgridweb/fitgridweb.env -f /opt/fitgridweb/docker-compose.yml -f /opt/fitgridweb/docker-compose.low-memory.yml up -d --wait db app
+ExecStop=/usr/bin/docker compose --project-name fitgridweb --env-file /etc/fitgridweb/fitgridweb.env -f /opt/fitgridweb/docker-compose.yml -f /opt/fitgridweb/docker-compose.low-memory.yml stop app db
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target
