@@ -1,5 +1,8 @@
 import { readFileSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
@@ -15,6 +18,28 @@ interface Workflow {
 }
 
 describe("server image release workflow", () => {
+  it("starts the same standalone runtime that the production image uses", async () => {
+    const packageJson = JSON.parse(
+      readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
+    ) as { scripts: Record<string, string> };
+    const root = await mkdtemp(path.join(tmpdir(), "fitgrid-standalone-"));
+    const source = path.join(root, ".next/static/chunks");
+    await mkdir(source, { recursive: true });
+    await writeFile(path.join(source, "app.css"), "body{}\n");
+
+    const result = spawnSync(
+      process.execPath,
+      [path.join(process.cwd(), "ops/start-standalone.mjs"), "--prepare-only"],
+      { cwd: root, encoding: "utf8" },
+    );
+
+    expect(packageJson.scripts.start).toBe("node ops/start-standalone.mjs");
+    expect(result.status, result.stderr).toBe(0);
+    await expect(
+      readFile(path.join(root, ".next/standalone/.next/static/chunks/app.css"), "utf8"),
+    ).resolves.toBe("body{}\n");
+  });
+
   it("keeps the grid contract fixture in the Docker build context", () => {
     const dockerignore = readFileSync(
       path.join(process.cwd(), ".dockerignore"),

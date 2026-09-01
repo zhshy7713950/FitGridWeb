@@ -1,0 +1,220 @@
+.page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: var(--canvas);
+}
+
+.loginCard {
+  width: min(1040px, 100%);
+  min-height: 620px;
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+  padding: 48px;
+  border-right: 1px solid var(--line);
+}
+
+.wordmark {
+  position: absolute;
+  top: 32px;
+  left: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+}
+
+.wordmark span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  color: white;
+  background: var(--action);
+  font-size: 11px;
+}
+
+.ladder {
+  position: absolute;
+  inset: 72px 24px auto;
+  width: calc(100% - 48px);
+  color: var(--action);
+}
+
+.gridLines {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+.stepLine {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-dasharray: 900;
+  animation: draw-ladder 600ms ease-out both;
+}
+
+.nodes {
+  fill: #6e91ff;
+  stroke: var(--surface);
+  stroke-width: 4;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: var(--text);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: clamp(32px, 4vw, 52px);
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+}
+
+.brandCopy {
+  max-width: 460px;
+  margin: 18px 0 0;
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px;
+  animation: panel-in 600ms ease-out both;
+}
+
+.panel h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+
+.panelIntro {
+  margin: 0 0 28px;
+  color: var(--text);
+}
+
+.form {
+  display: grid;
+  gap: 18px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.field input {
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--canvas);
+}
+
+.field input:focus {
+  border-color: var(--action);
+}
+
+.field span {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.submit {
+  min-height: 44px;
+  border: 0;
+  border-radius: 5px;
+  color: white;
+  background: var(--action);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.error {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@keyframes draw-ladder {
+  from {
+    stroke-dashoffset: 900;
+    opacity: 0.2;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding: 0;
+  }
+
+  .loginCard {
+    min-height: 100dvh;
+    grid-template-columns: 1fr;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .brand {
+    min-height: 310px;
+    padding: 32px 24px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .panel {
+    padding: 32px 24px 48px;
+  }
+
+  .ladder {
+    top: 54px;
+  }
+}

@@ -9,23 +9,30 @@ export interface AuthenticatedUser {
   status: "active";
 }
 
-export async function requireSession(
+export async function getOptionalSession(
   headers: Headers,
   auth: FitGridAuth = getAuth(),
-): Promise<AuthenticatedUser> {
+): Promise<AuthenticatedUser | null> {
   const session = await auth.api.getSession({ headers });
   const user = session?.user as
     | { id: string; username?: string | null; name: string; role?: string; status?: string }
     | undefined;
-  if (!user || user.status !== "active") {
-    throw new ApiError(401, "UNAUTHORIZED", "未登录或会话已失效");
-  }
+  if (!user || user.status !== "active") return null;
   return {
     id: user.id,
     username: user.username ?? user.name,
     role: user.role === "admin" ? "admin" : "member",
     status: "active",
   };
+}
+
+export async function requireSession(
+  headers: Headers,
+  auth: FitGridAuth = getAuth(),
+): Promise<AuthenticatedUser> {
+  const user = await getOptionalSession(headers, auth);
+  if (!user) throw new ApiError(401, "UNAUTHORIZED", "未登录或会话已失效");
+  return user;
 }
 
 export async function requireAdmin(

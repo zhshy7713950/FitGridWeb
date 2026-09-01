@@ -1,0 +1,220 @@
+.shell {
+  min-height: 100dvh;
+  display: grid;
+  grid-template: 44px 1fr / 176px 1fr;
+  background: var(--canvas);
+}
+
+.rail {
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 10px;
+  border-right: 1px solid var(--line);
+  background: #0d141d;
+}
+
+.logo {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: 0 8px 20px;
+  border-radius: 6px;
+  color: white;
+  background: var(--action);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.rail a {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 11px;
+  border-radius: 5px;
+  color: var(--text);
+  text-decoration: none;
+  background: var(--surface-raised);
+}
+
+.rail svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.accountBar {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.mobileBrand {
+  display: none;
+  color: var(--text);
+  font-weight: 750;
+}
+
+.username {
+  min-width: 0;
+  flex: 1 1 12rem;
+  max-width: 32rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobileBrand,
+.role,
+.logoutArea {
+  flex: 0 0 auto;
+}
+
+.connection::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--positive);
+}
+
+.content {
+  min-width: 0;
+  overflow: auto;
+  padding: 24px;
+}
+
+.logoutArea {
+  position: relative;
+}
+
+.logout {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.logout:disabled {
+  cursor: wait;
+}
+
+.logoutArea p {
+  position: absolute;
+  right: 0;
+  top: 34px;
+  z-index: 1;
+  width: max-content;
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--negative);
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+@media (max-width: 1023px) {
+  .shell {
+    grid-template-columns: 56px 1fr;
+  }
+
+  .rail {
+    align-items: center;
+    padding-inline: 6px;
+  }
+
+  .rail a {
+    width: 44px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .rail a span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .logo {
+    margin-inline: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .shell {
+    grid-template: 48px 1fr 56px / 1fr;
+  }
+
+  .accountBar {
+    grid-column: 1;
+    grid-row: 1;
+    justify-content: space-between;
+    gap: 8px;
+    padding-inline: 12px;
+  }
+
+  .mobileBrand {
+    display: inline;
+  }
+
+  .connection {
+    display: none;
+  }
+
+  .rail {
+    grid-column: 1;
+    grid-row: 3;
+    flex-direction: row;
+    justify-content: center;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-width: 1px 0 0;
+  }
+
+  .rail .logo {
+    display: none;
+  }
+
+  .rail a {
+    width: auto;
+    min-width: 96px;
+    padding: 0 14px;
+  }
+
+  .rail a span {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+
+  .content {
+    grid-row: 2;
+    padding: 16px 12px;
+  }
+
+  .logout {
+    min-height: 44px;
+  }
+
+  .logoutArea p {
+    top: 46px;
+  }
+}

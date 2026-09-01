@@ -1,0 +1,219 @@
+.workspace {
+  min-width: 0;
+}
+
+.heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.heading span {
+  color: var(--text);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.heading h1 {
+  margin: 5px 0 0;
+  font-size: 26px;
+  letter-spacing: -0.035em;
+}
+
+.heading button,
+.searchBar button,
+.pagination button,
+.errorBanner button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.heading button:focus-visible,
+.searchBar button:focus-visible,
+.searchBar input:focus-visible,
+.pagination button:focus-visible,
+.errorBanner button:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+}
+
+.searchBar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  background: var(--canvas);
+}
+
+.searchBar label {
+  grid-column: 1 / -1;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.searchBar input {
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.errorBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--negative) 45%, var(--line));
+  border-radius: 6px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--negative) 8%, var(--surface));
+}
+
+.listViewport {
+  max-height: calc(100dvh - 220px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.desktopTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.desktopTable th,
+.desktopTable td {
+  min-height: 44px;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.desktopTable th {
+  position: sticky;
+  top: 0;
+  color: var(--text);
+  background: var(--surface-raised);
+  font-size: 11px;
+}
+
+.desktopTable th:not(:first-child),
+.desktopTable td:not(:first-child) {
+  text-align: right;
+}
+
+.numeric {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.mobileCards {
+  display: none;
+}
+
+.pagination {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text);
+}
+
+.empty,
+.loading {
+  padding: 72px 20px;
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: var(--surface);
+  text-align: center;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .heading {
+    align-items: center;
+  }
+
+  .desktopTable {
+    display: none;
+  }
+
+  .listViewport {
+    max-height: calc(100dvh - 270px);
+    overflow: auto;
+    border: 0;
+    background: transparent;
+  }
+
+  .mobileCards {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .mobileCards li {
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+  }
+
+  .mobileCards h2 {
+    margin: 0 0 14px;
+    font-size: 16px;
+    overflow-wrap: anywhere;
+  }
+
+  .mobileCards dl {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin: 0;
+  }
+
+  .mobileCards dl div {
+    min-width: 0;
+  }
+
+  .mobileCards dt {
+    color: var(--text);
+    font-size: 11px;
+  }
+
+  .mobileCards dd {
+    margin: 5px 0 0;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    font-variant-numeric: tabular-nums;
+  }
+}

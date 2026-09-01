@@ -1,7 +1,7 @@
 # 服务端实现状态与验收追踪
 
 日期：2026-09-01  
-范围：Next.js `/api/v1`、Better Auth 标准数据库会话、领域算法、PostgreSQL/Prisma、导入导出与 VPS 运维资产。响应式页面行为不在本阶段范围内。
+范围：Next.js `/api/v1`、Better Auth 标准数据库会话、领域算法、PostgreSQL/Prisma、导入导出、前端基础与 VPS 运维资产。
 
 ## 状态摘要
 
@@ -12,11 +12,20 @@
 - 已实现 `/fitgrid` 固定生产子路径、Better Auth Cookie Path、GHCR 完整 SHA 流水线、2 GiB 低内存 Compose、现有 nginx 安全集成、迁移前置/应用回滚和 systemd 开机恢复。
 - 当前主机没有 Docker，也没有提供 `TEST_DATABASE_URL`，因此真实 PostgreSQL RLS、GHCR 镜像拉取、HTTPS 部署、VPS 重启、备份和恢复演练仍是发布前环境门控。
 
+## 前端基础
+
+- 登录、会话恢复和受保护布局使用现有 Better Auth 数据库会话；浏览器不读取 token。
+- `/grids` 已连接 owner-scoped `GET /api/v1/grid-trades`，覆盖搜索、清除、稳定游标分页和保留数据重试。
+- TradingView 风格桌面表格和手机卡片通过组件测试与 `/fitgrid` 生产构建。
+- 新增、详情、导入导出和管理页面仍属于后续前端阶段。
+
+证据边界：完整自动化门禁和 `/fitgrid` 生产构建已在本机执行；1440×900 与 390×844 浏览器检查覆盖匿名入口、受保护路由回跳、登录键盘顺序、装饰动画、响应式登录布局、静态资源和控制台。当前主机没有 Docker、Podman 或 PostgreSQL 工具，未设置 `DATABASE_URL`/`TEST_DATABASE_URL`，也没有项目环境文件或本地 PostgreSQL 监听，因此没有绕过 Better Auth 会话门禁；登录成功、用户数据隔离、搜索/清除/刷新/加载更多/失败重试/退出和登录后桌面表格/手机卡片仍等待可丢弃的本地 PostgreSQL 环境实跑。当前浏览器控制面也不提供 reduced-motion 模拟；代码中的 `prefers-reduced-motion` 规则和单次动画自动化证据不记作 reduced-motion 浏览器实跑。
+
 ## 功能验收
 
-| ID | 服务端证据 | 状态 |
+| ID | 自动化证据 | 状态 |
 |---|---|---|
-| FUN-01 | `grid-service.test.ts`：owner A/B 列表隔离；新 owner 返回空页 | 服务端通过；页面空态待前端 |
+| FUN-01 | `grid-service.test.ts`：owner A/B 列表隔离；`grid-workspace.test.tsx`：空账号与搜索无结果分离 | 服务端与前端组件自动化通过；真实登录数据库浏览器验收受环境门控 |
 | FUN-02 | `grid-service.test.ts`：名称/代码搜索和清空查询的 owner 范围 | 通过 |
 | FUN-03 | `grid-service.test.ts`：`sortOrder, createdAt, id` 稳定分页 | 通过 |
 | FUN-04 | `grid-service.test.ts`：创建后直接返回权威计算；`dto.test.ts`：严格输入 | 通过 |
@@ -26,8 +35,8 @@
 | FUN-08 | `grid-service.test.ts`、`calculate-grid.test.ts`：详情包含输入、汇总和全行结果 | 服务端通过；移动/桌面展示待前端 |
 | FUN-09 | `grid-service.test.ts`：重算幂等且不修改持久化元数据 | 通过 |
 | FUN-10 | `calculate-grid.test.ts`：普通/中/大网 `GridItemResult` 逐字段匹配 | 服务端通过；页面展示待前端 |
-| FUN-11 | `session.test.ts`、`grid-service.test.ts`：匿名 401、登录 owner UUID 隔离 | 服务端通过；登录后页面回跳待前端 |
-| FUN-12 | `json-response.test.ts`、`route-factory.test.ts`：统一错误信封和 requestId | 服务端通过；表单保留与提示待前端 |
+| FUN-11 | `session.test.ts`、`grid-service.test.ts`、`session-routing.test.ts`、`login-form.test.tsx`：匿名 401、owner UUID 隔离与安全登录回跳 | 服务端与前端路由/表单自动化通过；真实 Better Auth + 数据库浏览器登录受环境门控 |
+| FUN-12 | `json-response.test.ts`、`route-factory.test.ts`、`login-form.test.tsx`、`use-grid-trades.test.tsx`：统一错误信封、输入保留、requestId 与重试提示 | 服务端与前端错误状态自动化通过；真实数据库浏览器错误流程受环境门控 |
 
 ## 算法与数据兼容
 
