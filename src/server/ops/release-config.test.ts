@@ -50,6 +50,7 @@ describe("server image release workflow", () => {
     expect(serialized).toContain("pnpm typecheck");
     expect(serialized).toContain("pnpm lint");
     expect(serialized).toContain("--read-only");
+    expect(serialized).toContain("DATABASE_URL=file:/tmp/cli-check.db");
     expect(serialized).toContain("/app/node_modules/.bin/prisma");
     expect(serialized).toContain("/app/node_modules/.bin/tsx");
   });

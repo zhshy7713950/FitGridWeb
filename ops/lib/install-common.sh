@@ -162,12 +162,24 @@ assert_app_port_available() {
   if ! ss -ltnH 2>/dev/null | awk '{ print $4 }' | grep -Eq "(^|:)$port$"; then
     return 0
   fi
-  owner=$(docker ps --filter "publish=127.0.0.1:$port" --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null | head -n 1 || true)
+  owner=$(docker ps --filter "publish=$port" --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null \
+    | awk '$0 == "fitgridweb" { print; exit }' || true)
   if [ "$owner" = "fitgridweb" ]; then
     return 0
   fi
   fitgrid_error "本地端口 $port 已被非 FitGrid 服务占用"
   return 1
+}
+
+choose_app_port() {
+  candidate=$1
+  while :; do
+    if validate_port "$candidate" 1024 && assert_app_port_available "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+    candidate=$(prompt_value "请重新输入 FitGrid 本地回环端口" "$candidate")
+  done
 }
 
 ensure_checkout() {

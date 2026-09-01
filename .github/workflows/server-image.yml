@@ -60,6 +60,7 @@ jobs:
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
         run: |
           docker run --rm --read-only --tmpfs /tmp:size=64m \
+            -e DATABASE_URL=file:/tmp/cli-check.db \
             --entrypoint /app/node_modules/.bin/prisma "$IMAGE" --version
           docker run --rm --read-only --tmpfs /tmp:size=64m \
             --entrypoint /app/node_modules/.bin/tsx "$IMAGE" --version
