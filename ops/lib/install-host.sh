@@ -33,7 +33,7 @@ install_dependencies() {
   apt-get update
   apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   systemctl enable --now docker.service
-  systemctl enable nginx.service
+  systemctl enable --now nginx.service
 }
 
 ensure_swap() {
