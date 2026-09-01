@@ -21,6 +21,18 @@ export function safeReturnPath(value: string | null | undefined): AppRoute {
     return DEFAULT_ROUTE;
   }
 
+  const delimiter = value.search(/[?#]/);
+  const rawPathname = delimiter === -1 ? value : value.slice(0, delimiter);
+  if (/%2f|%5c/i.test(rawPathname)) return DEFAULT_ROUTE;
+
+  try {
+    if (decodeURIComponent(rawPathname).split("/").some((segment) => segment === "." || segment === "..")) {
+      return DEFAULT_ROUTE;
+    }
+  } catch {
+    return DEFAULT_ROUTE;
+  }
+
   const parsed = new URL(value, "https://fitgrid.invalid");
   if (parsed.origin !== "https://fitgrid.invalid") return DEFAULT_ROUTE;
   if (parsed.pathname !== "/grids" && !parsed.pathname.startsWith("/grids/")) return DEFAULT_ROUTE;

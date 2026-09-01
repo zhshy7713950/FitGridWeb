@@ -79,3 +79,59 @@ exit 0
 - Ran `git diff --check` with no whitespace errors.
 - The initial sandboxed pnpm attempt created `.pnpm-store/`; it was removed before committing. It is not part of the task changes.
 - Post-commit status evidence: `$ git status --short` produced no output. The working tree is clean.
+
+## Fix Round 1: encoded return-path traversal hardening
+
+### Files
+
+- `src/lib/app-paths.ts`
+- `src/lib/app-paths.test.ts`
+
+### RED evidence
+
+```text
+$ pnpm vitest run src/lib/app-paths.test.ts
+Test Files  1 failed (1)
+Tests  3 failed | 8 passed (11)
+
+Expected: "/grids"
+Received: "/grids/%2F..%2Fadmin"
+
+Expected: "/grids"
+Received: "/grids/%5C..%5Cadmin"
+
+Expected: "/grids"
+Received: "/grids/admin"
+```
+
+### GREEN evidence
+
+```text
+$ pnpm vitest run src/lib/app-paths.test.ts
+Test Files  1 passed (1)
+Tests  11 passed (11)
+```
+
+```text
+$ pnpm vitest run src/lib/app-paths.test.ts src/lib/api-client.test.ts
+Test Files  2 passed (2)
+Tests  16 passed (16)
+```
+
+```text
+$ pnpm test
+Test Files  31 passed | 1 skipped (32)
+Tests  165 passed | 1 skipped (166)
+```
+
+```text
+$ pnpm typecheck
+$ tsc --noEmit
+exit 0
+```
+
+### Self-review
+
+- Validation now extracts the raw pathname before query/hash handling, rejects encoded `/` and `\\` separators case-insensitively, safely decodes the remaining pathname, and rejects decoded `.` and `..` segments before URL parsing can normalize them.
+- The regression cases cover encoded forward slash, encoded backslash, and an encoded dot-segment traversal form.
+- `git diff --check` exited cleanly; the diff is limited to the requested path validator, its focused tests, and this report.
