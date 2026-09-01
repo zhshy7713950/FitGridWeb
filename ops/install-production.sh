@@ -28,7 +28,7 @@ app_port=3300
 public_port=443
 nginx_site=
 swap_choice=yes
-admin_choice=yes
+admin_choice=
 
 while [ "$#" -gt 0 ]; do
   case $1 in
@@ -44,6 +44,23 @@ while [ "$#" -gt 0 ]; do
     *) fitgrid_error "未知参数：$1"; exit 1 ;;
   esac
 done
+
+if [ -z "$admin_choice" ]; then
+  if [ "$upgrade" = true ]; then admin_choice=no; else admin_choice=yes; fi
+fi
+
+if [ "$from_installed" = false ] && [ -f "$ENVIRONMENT_FILE" ]; then
+  saved_domain=$(environment_value DOMAIN "$ENVIRONMENT_FILE")
+  saved_app_port=$(environment_value APP_PORT "$ENVIRONMENT_FILE")
+  saved_public_port=$(environment_value PUBLIC_HTTPS_PORT "$ENVIRONMENT_FILE")
+  saved_nginx_site=$(environment_value NGINX_SITE "$ENVIRONMENT_FILE")
+  saved_image=$(environment_value APP_IMAGE "$ENVIRONMENT_FILE")
+  [ -z "$saved_domain" ] || domain=$saved_domain
+  [ -z "$saved_app_port" ] || app_port=$saved_app_port
+  [ -z "$saved_public_port" ] || public_port=$saved_public_port
+  [ -z "$saved_nginx_site" ] || nginx_site=$saved_nginx_site
+  case $saved_image in *:sha-????????????????????????????????????????) git_ref=${saved_image##*:sha-} ;; esac
+fi
 
 prompt_value() {
   label=$1
@@ -80,6 +97,7 @@ if [ "$from_installed" = false ]; then
   validate_port "$public_port" 1
   validate_port "$app_port" 1024
   case $nginx_site in /*) : ;; *) fitgrid_error "nginx vhost 必须是绝对路径"; exit 1 ;; esac
+  case $nginx_site in *[[:space:]]*) fitgrid_error "nginx vhost 路径不能含空白字符"; exit 1 ;; esac
   [ -f "$nginx_site" ] || { fitgrid_error "nginx vhost 文件不存在：$nginx_site"; exit 1; }
   assert_app_port_available "$app_port"
   resolved_sha=$(resolve_ref "$REPOSITORY_URL" "$git_ref")

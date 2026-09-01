@@ -36,12 +36,15 @@ pnpm build
 
 ## VPS 部署与恢复
 
-生产环境先将 `.env.example` 复制为权限 `600` 的 `.env`，使用固定提交标签填写 `APP_IMAGE`，然后运行：
+面向 2 vCPU/2 GiB、已有 `sing-box + nginx` 的 Ubuntu 24.04 VPS，使用固定 `/fitgrid` 子路径的一键安装器。它自动安装 Docker 依赖、生成并保留秘密、配置低内存 PostgreSQL/Next.js、接入用户选择的现有 nginx HTTPS vhost，并安装 `fitgridweb.service` 实现重启自动恢复：
 
 ```bash
-./ops/deploy.sh
-./ops/backup.sh
-./ops/restore.sh --target 'postgresql://.../fitgridweb_restore' --backup '/path/to/file.dump.enc' --confirm
+curl -fsSLo /tmp/fitgridweb-install.sh \
+  https://raw.githubusercontent.com/zhshy7713950/FitGridWeb/main/ops/install-production.sh
+less /tmp/fitgridweb-install.sh
+sudo sh /tmp/fitgridweb-install.sh
 ```
 
-部署脚本在迁移失败时不会启动新应用；备份只有完成 dump、可读性检查、加密、校验及异地目录复制后才执行保留期清理；恢复脚本拒绝生产连接和 PostgreSQL 默认维护库。完整流程见 [部署与运维文档](docs/fit-replication/07-deployment-and-operations.md)。
+镜像必须是公开 GHCR 中的完整 commit SHA，应用只绑定 `127.0.0.1:<可配置端口>`，数据库不暴露端口，低内存部署不启动 Caddy。迁移失败时不会更新应用，新应用健康失败时恢复旧 SHA，但不会执行危险的数据库逆向迁移。
+
+逐步操作、升级、nginx 恢复、开机验收、内存观察、备份与隔离恢复见 [2 GiB VPS 一键部署与运维手册](docs/fit-replication/low-memory-vps-runbook.md)；完整架构约束见 [部署与运维文档](docs/fit-replication/07-deployment-and-operations.md)。

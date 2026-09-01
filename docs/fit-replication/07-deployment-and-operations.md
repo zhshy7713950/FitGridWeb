@@ -1,5 +1,7 @@
 # Ubuntu VPS 部署、备份与迁移
 
+> 当前小规模生产推荐方案是“现有 nginx + 固定 `/fitgrid` 子路径 + `docker-compose.low-memory.yml`”，完整实操以 [2 GiB VPS 一键部署与运维手册](low-memory-vps-runbook.md) 为准。仓库中的 Caddy 服务保留给独占域名/端口的独立部署，不会被低内存一键安装器启动。
+
 ## 1. 交付边界与命名
 
 - 独立 GitHub 仓库名：`FitGridWeb`。
@@ -12,32 +14,29 @@
 
 ```mermaid
 flowchart TB
-    U[手机与 PC 浏览器] -->|HTTPS 443| DNS[自有域名]
-    DNS --> C[Caddy]
-    C -->|内部 HTTP 3000| A[FitGridWeb / Next.js]
+    U[手机与 PC 浏览器] -->|现有 HTTPS 端口 /fitgrid| N[宿主机 nginx]
+    N -->|127.0.0.1:可配置端口| A[FitGridWeb / Next.js]
     A -->|内部 PostgreSQL 5432| D[(PostgreSQL)]
     H[Ubuntu 主机定时任务] -->|pg_dump -Fc| D
     H --> B[加密备份目录]
     B --> O[异机或对象存储副本]
 
-    subgraph Docker Compose
-      C
+    subgraph Docker Compose 低内存配置
       A
       D
     end
 ```
 
-公网只开放 SSH、TCP 80 和 443。应用端口 3000 与数据库端口 5432 只在 Compose 私有网络中可见；不得把 PostgreSQL 映射到公网。
+公网端口沿用现有 nginx 与 VPS 的实际配置，不由安装器写死或修改。Next.js 宿主映射只监听 `127.0.0.1`，PostgreSQL 只在 Compose 网络中可见；不得把 PostgreSQL 映射到公网。
 
 ## 3. 主机与 DNS 前置条件
 
 建议最低配置为 Ubuntu 24.04 LTS、2 vCPU、2 GiB RAM、20 GiB SSD；实际容量按备份增长和访问量调整。
 
 1. 创建仅使用 SSH 密钥的运维账号，禁用密码远程登录与 root 远程登录。
-2. 安装 Docker Engine 和 Docker Compose plugin，启用 Docker 开机启动。
-3. 防火墙仅允许 SSH、80、443；SSH 端口按实际配置。
-4. 域名 A 记录指向 VPS IPv4；存在可用 IPv6 时再配置 AAAA，避免错误 AAAA 阻断证书签发。
-5. 首次签发证书前确保 80/443 可从公网访问。
+2. 确保现有 nginx vhost 已能通过 HTTPS 访问；Docker Engine 和 Compose plugin 可由安装器从 Docker 官方 apt 源安装。
+3. 保持现有 SSH、防火墙、sing-box 和 nginx 监听策略；安装器不会更改这些配置。
+4. 域名 A/AAAA 记录与已有 TLS 证书必须有效；安装器不签发或替换证书。
 6. 将系统时区设为 UTC 或明确记录时区；应用与数据库时间统一存 UTC。
 
 ## 4. Compose 服务契约
@@ -45,8 +44,10 @@ flowchart TB
 | 服务 | 职责 | 必须配置 |
 |---|---|---|
 | `db` | PostgreSQL 权威存储 | 固定主版本、命名数据卷、`pg_isready` 健康检查、仅内部网络 |
-| `app` | Next.js standalone 应用 | 非 root 用户、只读生产镜像、`/api/v1/health` 健康检查、仅内部 3000 |
-| `caddy` | TLS 终止和反向代理 | 80/443、持久化 `data`/`config` 卷、代理到 `app:3000` |
+| `app` | Next.js standalone 应用 | 非 root 用户、只读生产镜像、`/fitgrid/api/v1/health` 健康检查、宿主只绑定 loopback |
+| 宿主 nginx | TLS 终止和反向代理 | 保留 `/fitgrid` 前缀并代理到 loopback；由用户选择现有单-server vhost |
+
+基础 Compose 中的 `caddy` 是可选独立部署服务。低内存生产命令始终显式指定 `db app`，因此不启动 Caddy，也不占用公网 80/443。
 
 应用镜像必须使用不可变版本标识，例如 Git 提交 SHA；禁止生产环境长期使用含义会变化的 `latest` 作为唯一回滚依据。数据库迁移角色与应用运行角色分离，运行角色不得拥有 `BYPASSRLS`。
 
@@ -56,8 +57,11 @@ flowchart TB
 
 | 变量 | 用途 | 要求 |
 |---|---|---|
-| `DOMAIN` | Caddy 站点域名 | 不带协议和路径 |
-| `APP_IMAGE` | 应用镜像及版本 | 固定 SHA/版本标签 |
+| `DOMAIN` | 现有 nginx HTTPS 域名 | 不带协议、端口和路径 |
+| `APP_BASE_PATH` | 生产子路径 | 固定 `/fitgrid` |
+| `APP_PORT` | nginx 代理的本地端口 | 1024–65535，只绑定 loopback |
+| `PUBLIC_HTTPS_PORT` | 现有 nginx HTTPS 端口 | 1–65535，不由安装器改写 |
+| `APP_IMAGE` | 应用镜像及版本 | 公开 GHCR 的完整 SHA 标签 |
 | `POSTGRES_DB` | 数据库名 | 生产专用 |
 | `POSTGRES_USER` | 应用/所有者配置入口 | 不使用超级用户运行应用 |
 | `POSTGRES_PASSWORD` | 数据库秘密 | 随机生成，不复用 |
@@ -72,25 +76,23 @@ flowchart TB
 
 ## 6. 首次部署
 
-目标仓库实现后，标准流程如下：
+标准流程如下：
 
 ```bash
-git clone git@github.com:<owner>/FitGridWeb.git
-cd FitGridWeb
-cp .env.example .env
-chmod 600 .env
-./ops/deploy.sh
-docker compose run --rm app pnpm admin:create
+curl -fsSLo /tmp/fitgridweb-install.sh \
+  https://raw.githubusercontent.com/zhshy7713950/FitGridWeb/main/ops/install-production.sh
+less /tmp/fitgridweb-install.sh
+sudo sh /tmp/fitgridweb-install.sh
 ```
 
-`ops/deploy.sh` 必须按顺序完成：
+`ops/install-production.sh` 按顺序完成：
 
 1. 校验必填变量、镜像版本和目录权限，拒绝默认密码或空秘密。
-2. 拉取/构建固定版本镜像。
+2. 匿名确认完整 SHA 镜像公开可拉取，在 VPS 上只拉取、不构建 Next.js。
 3. 启动 `db` 并等待健康。
 4. 使用迁移账号执行 `prisma migrate deploy`；失败时停止，不启动新应用。
-5. 启动 `app` 与 `caddy`。
-6. 在容器内部和公网分别检查 `/api/v1/health`。
+5. 启动 `app`，写入受管 nginx include 并用 `nginx -t` 验证。
+6. 在 loopback 和公网分别检查 `/fitgrid/api/v1/health`。
 7. 输出部署版本、迁移版本和检查结果，不回显秘密。
 
 `admin:create` 必须交互读取密码，禁止通过命令参数或 shell history 传递；只有数据库中不存在任何用户时才能创建无邀请的首个管理员。此后管理员只通过一次性邀请创建账号。
@@ -105,9 +107,11 @@ docker compose run --rm app pnpm admin:create
 就绪失败返回 503 和公开错误码，不返回数据库地址、版本细节或异常堆栈。首次上线至少执行：
 
 ```bash
-docker compose ps
-curl --fail --silent --show-error https://<domain>/api/v1/health
-docker compose logs --since=10m app caddy db
+systemctl status fitgridweb
+docker compose --project-name fitgridweb --env-file /etc/fitgridweb/fitgridweb.env \
+  -f docker-compose.yml -f docker-compose.low-memory.yml ps
+curl --fail --silent --show-error https://<domain>[:port]/fitgrid/api/v1/health
+journalctl -u fitgridweb --since=-10m
 ```
 
 随后用两个测试账号执行 [账号隔离验收](08-traceability-and-acceptance.md#5-安全与账号隔离矩阵)，再导入一份 Android JSON 并核对黄金算法结果。
@@ -120,7 +124,7 @@ docker compose logs --since=10m app caddy db
 2. 生成不可变应用镜像并记录旧/新 SHA。
 3. 执行升级前数据库备份并校验文件。
 4. 评审 Prisma migration：首选向后兼容的 expand/migrate/contract 方式。
-5. 更新 `APP_IMAGE`，运行 `./ops/deploy.sh`。
+5. 运行 `/opt/fitgridweb/ops/install-production.sh --upgrade`，选择目标公开 Git ref。
 6. 执行健康检查、登录、列表、计算、导入/导出冒烟测试。
 
 ### 回滚
@@ -192,7 +196,7 @@ sequenceDiagram
 3. 旧站进入维护模式，等待在途写请求结束后执行最终完整备份。
 4. 通过加密通道传输备份；环境变量和密钥单独安全传递，不打包进仓库。
 5. 在新站恢复并运行必要迁移，执行健康、账号隔离、算法、导入导出验收。
-6. 切换 DNS，确认 Caddy 已取得证书；Caddy 证书数据可重新签发，无需作为核心业务备份迁移。
+6. 切换 DNS，确认新主机现有 nginx vhost 与 TLS 证书正常，并验证 `/fitgrid/api/v1/health`。
 7. 观察至少一个业务高峰。旧站保持只读 72 小时，确认无回滚需求后再按供应商流程销毁磁盘。
 
 回滚时将 DNS 指回旧站并解除旧站维护模式；若新站已经接受写入，不能简单双向合并，必须先确定唯一权威时间线。

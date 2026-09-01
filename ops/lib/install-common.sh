@@ -168,6 +168,7 @@ ensure_environment() {
   app_port=$4
   public_port=$5
   sha=$6
+  nginx_site=${7:-}
 
   validate_domain "$domain"
   validate_port "$app_port" 1024
@@ -205,6 +206,7 @@ ensure_environment() {
     printf 'PUBLIC_HTTPS_PORT=%s\n' "$public_port"
     printf 'PUBLIC_PORT_SUFFIX=%s\n' "$public_suffix"
     printf 'BETTER_AUTH_URL=https://%s%s/fitgrid\n' "$domain" "$public_suffix"
+    [ -z "$nginx_site" ] || printf 'NGINX_SITE=%s\n' "$nginx_site"
     printf 'APP_IMAGE=%s\n' "$image"
     printf 'POSTGRES_DB=fitgridweb\n'
     printf 'POSTGRES_USER=fitgrid_migrate\n'

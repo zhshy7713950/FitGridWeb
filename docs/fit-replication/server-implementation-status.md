@@ -9,7 +9,8 @@
 - Better Auth 使用 `sessions` 表保存标准数据库会话；浏览器只接收 `HttpOnly`、`Secure`、`SameSite=Lax` Cookie，不向前端返回长期 token。
 - 产品查询、冲突检测、游标、导入与导出均绑定会话 owner；`grid_trades` 和 `import_previews` 同时启用 `FORCE ROW LEVEL SECURITY`。
 - OpenAPI 中 16 个路径的每个 operationId 都有 Route Handler；Android 与 Web 导出均通过发布的 JSON Schema。
-- 当前主机没有 Docker，也没有提供 `TEST_DATABASE_URL`，因此真实 PostgreSQL RLS、镜像构建、HTTPS 部署、备份和恢复演练仍是发布前环境门控。
+- 已实现 `/fitgrid` 固定生产子路径、Better Auth Cookie Path、GHCR 完整 SHA 流水线、2 GiB 低内存 Compose、现有 nginx 安全集成、迁移前置/应用回滚和 systemd 开机恢复。
+- 当前主机没有 Docker，也没有提供 `TEST_DATABASE_URL`，因此真实 PostgreSQL RLS、GHCR 镜像拉取、HTTPS 部署、VPS 重启、备份和恢复演练仍是发布前环境门控。
 
 ## 功能验收
 
@@ -73,14 +74,15 @@
 
 | ID | 代码/测试证据 | 发布前状态 |
 |---|---|---|
-| OPS-01 | `Dockerfile`、`docker-compose.yml`、`Caddyfile`、`deploy.sh`；migration-before-start 行为测试 | 需全新 Ubuntu、DNS 与 HTTPS 实跑 |
+| OPS-01 | `Dockerfile`、低内存 Compose、公开 GHCR workflow、一键安装器；固定 `/fitgrid` 且 migration-before-start | 代码/本机契约通过；需全新 Ubuntu、现有 nginx 与 HTTPS 实跑 |
 | OPS-02 | `create-admin.ts` 强制 TTY 隐藏输入、拒绝密码参数、仅空用户表 | 需空生产等价数据库演练 |
-| OPS-03 | 配置测试拒绝 `latest`；部署输出固定 `APP_IMAGE` | 需实际升级冒烟 |
-| OPS-04 | 固定镜像允许回切，健康检查阻止坏版本上线 | 需实际回滚演练 |
+| OPS-03 | 配置测试只接受完整 40 位 commit SHA/digest；升级保留秘密和数据库卷 | 需 GHCR 发布与实际升级冒烟 |
+| OPS-04 | 状态机测试验证迁移失败不更新 app、健康失败恢复旧 SHA；不逆向 migration | 需实际回滚演练 |
 | OPS-05 | `backup.sh` 执行 custom dump、list、AES-256、SHA-256、异地目录校验后才清理；失败路径有测试 | 需 PostgreSQL/异地存储实跑 |
 | OPS-06 | `restore.sh` 要求显式确认并拒绝生产/维护库 | 需完整空库恢复、RLS/算法验收与 RPO/RTO 记录 |
 | OPS-07 | 运维文档给出冻结、恢复、DNS 切换和 72 小时回滚窗 | 需双 VPS 演练 |
-| OPS-08 | `.env` 排除、600 权限、秘密独立性测试、公开错误无堆栈 | 需容器/Git/日志人工审计 |
+| OPS-08 | 环境文件 600、目录 700、五秘密独立且升级保留；nginx 备份/幂等/失败恢复有测试 | 需容器/Git/日志人工审计 |
+| OPS-09 | `fitgridweb.service` 仅启动/停止 `db app`，依赖 Docker/network-online；容器 `unless-stopped` | 需 `systemctl restart` 与整机 reboot 验收 |
 
 ## 可复现门禁
 
@@ -90,8 +92,8 @@
 pnpm test
 pnpm typecheck
 pnpm lint
-pnpm build
-sh -n ops/env.sh ops/deploy.sh ops/backup.sh ops/restore.sh docker/postgres/init-app-role.sh
+NEXT_BASE_PATH=/fitgrid pnpm build
+sh -n ops/*.sh ops/lib/*.sh docker/postgres/init-app-role.sh
 git diff --check
 ```
 
@@ -99,8 +101,9 @@ git diff --check
 
 ```bash
 TEST_DATABASE_URL='postgresql://受限运行角色@测试库/fitgridweb' pnpm test
-docker compose build app
-./ops/deploy.sh
+docker manifest inspect ghcr.io/zhshy7713950/fitgridweb:sha-<完整SHA>
+sudo /opt/fitgridweb/ops/install-production.sh --upgrade
+systemctl restart fitgridweb
 ./ops/backup.sh
 ./ops/restore.sh --target 'postgresql://.../fitgridweb_restore' --backup '/path/to/backup.dump.enc' --confirm
 ```

@@ -34,4 +34,23 @@ describe("server image release workflow", () => {
     expect(serialized).toContain("pnpm typecheck");
     expect(serialized).toContain("pnpm lint");
   });
+
+  it("keeps the low-memory VPS runbook operationally complete", () => {
+    const runbook = readFileSync(
+      path.join(process.cwd(), "docs/fit-replication/low-memory-vps-runbook.md"),
+      "utf8",
+    );
+
+    for (const required of [
+      "/fitgrid/api/v1/health",
+      "systemctl status fitgridweb",
+      "--upgrade",
+      "BACKUP_REMOTE_DIR",
+      "nginx -t",
+      "systemctl restart fitgridweb",
+      "/etc/fitgridweb/fitgridweb.env",
+    ]) {
+      expect(runbook).toContain(required);
+    }
+  });
 });

@@ -122,7 +122,7 @@ fitgrid_install_main() {
   fi
 
   ensure_environment "$environment_file" "$backup_key_file" \
-    "$domain" "$app_port" "$public_port" "$resolved_sha"
+    "$domain" "$app_port" "$public_port" "$resolved_sha" "$nginx_site"
   ensure_swap "$swap_choice" /swapfile-fitgridweb /etc/fstab /proc/swaps
   deploy_release "$project_directory" "$environment_file" "$old_environment" "$app_port"
 
