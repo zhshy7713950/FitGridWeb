@@ -1,10 +1,10 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { homeRoute } from "@/features/auth/session-routing";
 import { withBasePath } from "@/lib/app-paths";
 import { getOptionalSession } from "@/server/auth/session";
 
-export default async function HomePage() {
+export default async function LoginPage() {
   const user = await getOptionalSession(await headers());
-  redirect(withBasePath(homeRoute(user)));
+  if (user) redirect(withBasePath("/grids"));
+  return <main><h1>登录 FitGrid</h1></main>;
 }

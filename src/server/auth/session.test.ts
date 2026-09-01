@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { FitGridAuth } from "./auth";
-import { requireAdmin, requireSession } from "./session";
+import { getOptionalSession, requireAdmin, requireSession } from "./session";
 
 function authWith(user?: { id: string; name: string; role: string; status: string }): FitGridAuth {
   return {
@@ -12,6 +12,16 @@ function authWith(user?: { id: string; name: string; role: string; status: strin
 }
 
 describe("API authorization matrix", () => {
+  it("returns null instead of throwing for a missing page session", async () => {
+    const auth = authWith();
+    await expect(getOptionalSession(new Headers(), auth)).resolves.toBeNull();
+  });
+
+  it("returns null for a disabled page session", async () => {
+    const auth = authWith({ id: "u1", name: "admin", role: "admin", status: "disabled" });
+    await expect(getOptionalSession(new Headers(), auth)).resolves.toBeNull();
+  });
+
   it("returns 401 for anonymous and disabled sessions", async () => {
     await expect(requireSession(new Headers(), authWith())).rejects.toMatchObject({ status: 401 });
     await expect(
