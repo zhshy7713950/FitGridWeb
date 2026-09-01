@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { LoginBrand } from "@/features/auth/login-brand";
 import { LoginForm } from "@/features/auth/login-form";
-import { safeReturnPath, withBasePath } from "@/lib/app-paths";
+import { safeReturnPath } from "@/lib/app-paths";
 import { getOptionalSession } from "@/server/auth/session";
 import styles from "@/features/auth/login.module.css";
 
@@ -10,7 +10,7 @@ export default async function LoginPage({ searchParams }: {
   searchParams: Promise<{ returnTo?: string | string[] }>;
 }) {
   const user = await getOptionalSession(await headers());
-  if (user) redirect(withBasePath("/grids"));
+  if (user) redirect("/grids");
 
   const raw = (await searchParams).returnTo;
   const returnTo = safeReturnPath(Array.isArray(raw) ? raw[0] : raw);

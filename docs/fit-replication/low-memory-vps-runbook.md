@@ -111,7 +111,24 @@ ps aux --sort=-%mem | head -20
 先确认目标 commit 的 GitHub Actions 已成功且对应 GHCR SHA 镜像可公开读取，然后运行：
 
 ```bash
-sudo /opt/fitgridweb/ops/install-production.sh --upgrade
+/opt/fitgridweb/ops/install-production.sh --upgrade
+```
+
+请在 root shell 中运行；如果当前不是 root，可在命令前加 `sudo`。Git-ref 提示输入 `main`，或输入已经审核的不可变完整 commit SHA；域名、应用端口、Swap 和不创建管理员均接受现有默认值。前端与 API 仍由同一个 `ghcr.io/zhshy7713950/fitgridweb:sha-<40位SHA>` 镜像提供，不需要新增服务、端口、Compose 文件或前端专用部署步骤。
+
+升级完成后执行前端与健康检查：
+
+```bash
+curl -fsSIL --max-redirs 5 https://YOUR_DOMAIN/fitgrid/
+curl -fsS https://YOUR_DOMAIN/fitgrid/api/v1/health
+```
+
+浏览器打开 `/fitgrid/`，登录后搜索一个已知产品，清除搜索并确认仍显示同一账号的数据，最后退出登录。若站点使用非标准 HTTPS 端口，应在 `YOUR_DOMAIN` 后补上该端口。
+
+FitGrid 升级不修改 sing-box、订阅端口 `30127`、订阅路径 `/s` 或对应 nginx vhost。升级后仍须保留原订阅冒烟：
+
+```bash
+curl -fsS https://YOUR_DOMAIN:30127/s >/dev/null
 ```
 
 升级默认复用已保存的域名、端口、nginx 文件和当前 SHA，并默认不再创建管理员。输入新的 tag、分支或完整 SHA 即可升级。为了保证应用、nginx 和回滚端点保持原子一致，`--upgrade` 不允许同时更换域名、本地端口、公网端口或 vhost；这类变更应在单独维护窗口完成。脚本保留既有数据库卷、秘密和已验证的备份路径/保留期，先迁移再更新 app；迁移失败时不启动新 app；nginx、systemd 或最终健康检查失败时恢复旧 `APP_IMAGE` 并重新验证旧服务。

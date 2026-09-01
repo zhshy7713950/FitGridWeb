@@ -1,7 +1,7 @@
 # 服务端实现状态与验收追踪
 
 日期：2026-09-01  
-范围：Next.js `/api/v1`、Better Auth 标准数据库会话、领域算法、PostgreSQL/Prisma、导入导出与 VPS 运维资产。响应式页面行为不在本阶段范围内。
+范围：Next.js `/api/v1`、Better Auth 标准数据库会话、领域算法、PostgreSQL/Prisma、导入导出、前端基础与 VPS 运维资产。
 
 ## 状态摘要
 
@@ -11,6 +11,15 @@
 - OpenAPI 中 16 个路径的每个 operationId 都有 Route Handler；Android 与 Web 导出均通过发布的 JSON Schema。
 - 已实现 `/fitgrid` 固定生产子路径、Better Auth Cookie Path、GHCR 完整 SHA 流水线、2 GiB 低内存 Compose、现有 nginx 安全集成、迁移前置/应用回滚和 systemd 开机恢复。
 - 当前主机没有 Docker，也没有提供 `TEST_DATABASE_URL`，因此真实 PostgreSQL RLS、GHCR 镜像拉取、HTTPS 部署、VPS 重启、备份和恢复演练仍是发布前环境门控。
+
+## 前端基础
+
+- 登录、会话恢复和受保护布局使用现有 Better Auth 数据库会话；浏览器不读取 token。
+- `/grids` 已连接 owner-scoped `GET /api/v1/grid-trades`，覆盖搜索、清除、稳定游标分页和保留数据重试。
+- TradingView 风格桌面表格和手机卡片通过组件测试与 `/fitgrid` 生产构建。
+- 新增、详情、导入导出和管理页面仍属于后续前端阶段。
+
+证据边界：完整自动化门禁和 `/fitgrid` 生产构建已在本机执行；1440×900 与 390×844 浏览器检查覆盖匿名入口、受保护路由回跳、登录键盘顺序、装饰动画、响应式登录布局、静态资源和控制台。当前主机没有 Docker、Podman 或 PostgreSQL 工具，未设置 `DATABASE_URL`/`TEST_DATABASE_URL`，也没有项目环境文件或本地 PostgreSQL 监听，因此没有绕过 Better Auth 会话门禁；登录成功、用户数据隔离、搜索/清除/刷新/加载更多/失败重试/退出和登录后桌面表格/手机卡片仍等待可丢弃的本地 PostgreSQL 环境实跑。当前浏览器控制面也不提供 reduced-motion 模拟；代码中的 `prefers-reduced-motion` 规则和单次动画自动化证据不记作 reduced-motion 浏览器实跑。
 
 ## 功能验收
 
