@@ -118,7 +118,7 @@ erDiagram
     SESSION {
       uuid id PK
       uuid user_id FK
-      string token_hash UK
+      string token UK
       timestamp expires_at
     }
     INVITATION {
@@ -149,8 +149,10 @@ erDiagram
       string algorithm_version
       timestamp created_at
       timestamp updated_at
-    }
+}
 ```
+
+会话表采用 Better Auth 的标准数据库模型保存唯一 `token`。浏览器 Cookie 中的会话值仍由 `BETTER_AUTH_SECRET` 签名并使用 `HttpOnly`、`Secure` 与 `SameSite=Lax` 保护；日志和 API 响应不得输出 Cookie 或会话 token。邀请 token 与导入预检 token 不采用这一例外，数据库仍只保存其 SHA-256/HMAC 摘要。
 
 数据库约束：
 

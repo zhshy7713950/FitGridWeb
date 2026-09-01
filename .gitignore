@@ -9,5 +9,6 @@
 node_modules/
 .next/
 coverage/
+*.tsbuildinfo
 *.log
 .DS_Store
