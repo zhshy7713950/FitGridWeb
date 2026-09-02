@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -16,7 +16,7 @@ const product = {
   isShort: false,
   algorithmVersion: "android-v2.1.0" as const,
   createdAt: "2026-09-01T00:00:00Z",
-  updatedAt: "2026-09-01T00:00:00Z",
+  updatedAt: "2026-09-01T00:30:00Z",
 };
 
 function controller(
@@ -42,10 +42,12 @@ function controller(
 
 afterEach(() => {
   cleanup();
+  vi.clearAllTimers();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
-it("renders the four App fields in semantic desktop and mobile representations", () => {
+it("renders one responsive product table with richer desktop fields", () => {
   render(<GridWorkspaceView controller={controller()} />);
 
   expect(
@@ -54,23 +56,21 @@ it("renders the four App fields in semantic desktop and mobile representations",
 
   const table = screen.getByRole("table", { name: "网格产品" });
   expect(within(table).getByText("当前账号的网格产品")).toBeInTheDocument();
-  for (const heading of ["产品名称", "产品代码", "最高价", "每份金额"]) {
+  for (const heading of ["产品名称", "产品代码", "方向", "最高价", "每份金额", "更新时间"]) {
     expect(within(table).getByRole("columnheader", { name: heading })).toBeInTheDocument();
   }
-  for (const value of ["黄金ETF网格", "518880", "6.9200", "1,500"]) {
+  for (const value of ["黄金ETF网格", "518880", "做多", "6.9200", "1,500", "09-01 08:30"]) {
     expect(within(table).getByText(value)).toBeInTheDocument();
   }
-
-  const cards = screen.getByRole("list", { name: "网格产品卡片" });
-  for (const value of ["黄金ETF网格", "518880", "6.9200", "1,500"]) {
-    expect(within(cards).getByText(value)).toBeInTheDocument();
-  }
-  for (const label of ["产品代码", "最高价", "每份金额"]) {
-    expect(within(cards).getByText(label)).toBeInTheDocument();
-  }
+  expect(within(table).getByText("09-01 08:30").closest("time")).toHaveAttribute(
+    "datetime",
+    "2026-09-01T00:30:00Z",
+  );
+  expect(screen.queryByRole("list", { name: "网格产品卡片" })).not.toBeInTheDocument();
+  expect(within(table).queryByText("android-v2.1.0")).not.toBeInTheDocument();
 });
 
-it("keeps maximum-length mobile codes and decimal values intact", () => {
+it("keeps maximum-length codes and decimal values intact in the shared table", () => {
   const maximumProduct = {
     ...product,
     productCode: "A".repeat(64),
@@ -79,13 +79,13 @@ it("keeps maximum-length mobile codes and decimal values intact", () => {
   };
   render(<GridWorkspaceView controller={controller({ items: [maximumProduct] })} />);
 
-  const cards = screen.getByRole("list", { name: "网格产品卡片" });
+  const table = screen.getByRole("table", { name: "网格产品" });
   for (const exactValue of [
     "A".repeat(64),
     "12,345,678,901,234,567,890.1234567890",
     "99,999,999,999,999,999,999.9999999999",
   ]) {
-    expect(within(cards).getByText(exactValue, { exact: true })).toBeVisible();
+    expect(within(table).getByText(exactValue, { exact: true })).toBeVisible();
   }
 });
 
@@ -121,22 +121,72 @@ it("keeps existing rows visible when refresh fails and exposes a retry", async (
   expect(value.refresh).toHaveBeenCalledTimes(1);
 });
 
-it("keeps retained rows visible and exposes a focusable live refresh state", async () => {
+it("shows a centered live refresh status and disables duplicate refresh", async () => {
   const value = controller({ initialLoading: true, refreshing: true });
   render(<GridWorkspaceView controller={value} />);
 
-  expect(screen.getAllByText("黄金ETF网格")).toHaveLength(2);
-  const refresh = screen.getByRole("button", { name: "正在刷新…" });
-  expect(refresh).not.toBeDisabled();
+  expect(screen.getByText("黄金ETF网格")).toBeInTheDocument();
+  expect(screen.getByRole("status", { name: "正在刷新…" })).toBeInTheDocument();
+  const refresh = screen.getByRole("button", { name: "刷新" });
+  expect(refresh).toBeDisabled();
   expect(refresh).toHaveAttribute("aria-disabled", "true");
   expect(refresh).toHaveAttribute("aria-busy", "true");
-  expect(within(refresh).getByText("正在刷新…")).toHaveAttribute("aria-live", "polite");
-
-  refresh.focus();
-  expect(refresh).toHaveFocus();
-  await userEvent.keyboard("{Enter}");
   await userEvent.click(refresh);
   expect(value.refresh).not.toHaveBeenCalled();
+});
+
+it("keeps the refresh overlay visible briefly for an instant request then removes it", async () => {
+  vi.useFakeTimers();
+  const value = controller();
+  render(<GridWorkspaceView controller={value} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "刷新" }));
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  expect(value.refresh).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("status", { name: "正在刷新…" })).toBeInTheDocument();
+
+  await act(async () => {
+    await vi.runAllTimersAsync();
+  });
+
+  expect(screen.queryByRole("status", { name: "正在刷新…" })).not.toBeInTheDocument();
+});
+
+it("ignores a rapid duplicate refresh and removes feedback after a rejected request", async () => {
+  vi.useFakeTimers();
+  const refresh = vi.fn().mockRejectedValue(new Error("offline"));
+  render(<GridWorkspaceView controller={controller({ refresh })} />);
+
+  const button = screen.getByRole("button", { name: "刷新" });
+  fireEvent.click(button);
+  fireEvent.click(button);
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("status", { name: "正在刷新…" })).toBeInTheDocument();
+
+  await act(async () => {
+    await vi.runAllTimersAsync();
+  });
+
+  expect(screen.queryByRole("status", { name: "正在刷新…" })).not.toBeInTheDocument();
+});
+
+it("cancels its refresh feedback timer when the product view unmounts", () => {
+  vi.useFakeTimers();
+  const { unmount } = render(<GridWorkspaceView controller={controller()} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "刷新" }));
+  expect(vi.getTimerCount()).toBe(1);
+
+  unmount();
+
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 it("distinguishes an empty account from an empty search", () => {
@@ -228,8 +278,6 @@ it("falls back to the product code when the product name is blank", () => {
 
   const table = screen.getByRole("table", { name: "网格产品" });
   expect(within(table).getAllByText("510300")).toHaveLength(2);
-  const cards = screen.getByRole("list", { name: "网格产品卡片" });
-  expect(within(cards).getAllByText("510300")).toHaveLength(2);
 });
 
 it("does not start a real request when only the pure view is rendered", () => {

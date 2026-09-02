@@ -124,21 +124,38 @@ it("runs the complete database-free UI demo at desktop and mobile breakpoints", 
     expect(banner!.y + banner!.height).toBeLessThanOrEqual(navigation!.y + 1);
     expect(navigation!.y + navigation!.height).toBeLessThanOrEqual(main!.y + 1);
 
-    const cards = page.getByRole("list", { name: "网格产品卡片" }).locator(":scope > li");
-    await expect.poll(() => cards.count()).toBe(20);
+    const rows = page.locator("tbody tr");
+    await expect.poll(() => rows.count()).toBe(20);
+    expect(await page.locator("thead th:visible").allTextContents()).toEqual([
+      "产品名称",
+      "产品代码",
+      "最高价",
+      "每份金额",
+    ]);
     await page.getByRole("searchbox", { name: "搜索产品名称或代码" }).fill("518880");
-    await expect.poll(() => cards.count()).toBe(1);
-    await expect(page.getByRole("heading", { name: "黄金 ETF" }).count()).resolves.toBe(1);
+    await expect.poll(() => rows.count()).toBe(1);
+    await expect(page.getByRole("cell", { name: "黄金 ETF" }).count()).resolves.toBe(1);
     await page.getByRole("button", { name: "清除搜索" }).click();
-    await expect.poll(() => cards.count()).toBe(20);
+    await expect.poll(() => rows.count()).toBe(20);
     await page.getByRole("button", { name: "加载更多" }).click();
-    await expect.poll(() => cards.count()).toBe(24);
+    await expect.poll(() => rows.count()).toBe(24);
+
+    await page.getByRole("button", { name: "刷新" }).click();
+    await expect.poll(() => page.getByRole("status", { name: "正在刷新…" }).count()).toBe(1);
+    await expect.poll(() => page.getByRole("status", { name: "正在刷新…" }).count()).toBe(0);
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect.poll(() => page.locator("tbody tr").count()).toBe(20);
     expect(await page.getByRole("table", { name: "网格产品" }).isVisible()).toBe(true);
-    expect(await page.getByRole("list", { name: "网格产品卡片" }).isVisible()).toBe(false);
+    expect(await page.locator("thead th:visible").allTextContents()).toEqual([
+      "产品名称",
+      "产品代码",
+      "方向",
+      "最高价",
+      "每份金额",
+      "更新时间",
+    ]);
     expect(consoleErrors).toEqual([]);
   } finally {
     await browser?.close();

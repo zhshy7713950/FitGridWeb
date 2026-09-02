@@ -1,6 +1,6 @@
 "use client";
 
-import type { UIEvent } from "react";
+import { useEffect, useRef, useState, type UIEvent } from "react";
 
 import { formatDecimal } from "./decimal-display";
 import type { GridTradeSummary } from "./types";
@@ -9,6 +9,30 @@ import styles from "./grid-workspace.module.css";
 
 function displayName(item: GridTradeSummary): string {
   return item.productName || item.productCode;
+}
+
+const refreshFeedbackDurationMs = 500;
+
+const updatedAtFormatter = new Intl.DateTimeFormat("zh-CN", {
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: "Asia/Shanghai",
+});
+
+function displayUpdatedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  const parts = Object.fromEntries(
+    updatedAtFormatter
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
 export function GridWorkspace() {
@@ -21,6 +45,54 @@ export function GridWorkspaceView({
 }: {
   controller: GridTradeListController;
 }) {
+  const [showRefreshOverlay, setShowRefreshOverlay] = useState(false);
+  const refreshFeedback = useRef<Promise<void> | null>(null);
+  const refreshFeedbackTimer = useRef<number | null>(null);
+  const resolveRefreshDelay = useRef<(() => void) | null>(null);
+  const mounted = useRef(true);
+
+  const refreshBusy = controller.refreshing || showRefreshOverlay;
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (refreshFeedbackTimer.current !== null) {
+        window.clearTimeout(refreshFeedbackTimer.current);
+        refreshFeedbackTimer.current = null;
+      }
+      resolveRefreshDelay.current?.();
+      resolveRefreshDelay.current = null;
+      refreshFeedback.current = null;
+    };
+  }, []);
+
+  function refreshWithFeedback() {
+    if (refreshFeedback.current || controller.refreshing) return;
+
+    setShowRefreshOverlay(true);
+    const minimumDisplay = new Promise<void>((resolve) => {
+      resolveRefreshDelay.current = resolve;
+      refreshFeedbackTimer.current = window.setTimeout(() => {
+        refreshFeedbackTimer.current = null;
+        resolveRefreshDelay.current = null;
+        resolve();
+      }, refreshFeedbackDurationMs);
+    });
+    let refreshRequest: Promise<void>;
+    try {
+      refreshRequest = controller.refresh();
+    } catch (error) {
+      refreshRequest = Promise.reject(error);
+    }
+    const pending = Promise.allSettled([refreshRequest, minimumDisplay]).then(() => {
+      if (!mounted.current || refreshFeedback.current !== pending) return;
+      refreshFeedback.current = null;
+      setShowRefreshOverlay(false);
+    });
+    refreshFeedback.current = pending;
+  }
+
   function nearBottom(event: UIEvent<HTMLElement>) {
     const target = event.currentTarget;
     if (target.scrollHeight - target.scrollTop - target.clientHeight <= 240) {
@@ -42,17 +114,23 @@ export function GridWorkspaceView({
         </div>
         <button
           type="button"
-          aria-disabled={controller.refreshing}
-          aria-busy={controller.refreshing}
-          onClick={() => {
-            if (!controller.refreshing) void controller.refresh();
-          }}
+          disabled={refreshBusy}
+          aria-disabled={refreshBusy}
+          aria-busy={refreshBusy}
+          onClick={refreshWithFeedback}
         >
-          <span aria-live="polite">
-            {controller.refreshing ? "正在刷新…" : "刷新"}
-          </span>
+          刷新
         </button>
       </header>
+
+      {refreshBusy ? (
+        <div className={styles.refreshOverlay} role="status" aria-label="正在刷新…">
+          <div className={styles.refreshIndicator}>
+            <span className={styles.spinner} aria-hidden="true" />
+            <span>正在刷新…</span>
+          </div>
+        </div>
+      ) : null}
 
       <div className={styles.searchBar}>
         <label htmlFor="grid-search">搜索产品名称或代码</label>
@@ -72,7 +150,7 @@ export function GridWorkspaceView({
       {controller.initialError && !controller.items.length ? (
         <div className={styles.errorBanner} role="alert">
           <span>{controller.initialError}</span>
-          <button type="button" onClick={() => void controller.refresh()}>
+          <button type="button" disabled={refreshBusy} onClick={refreshWithFeedback}>
             重试
           </button>
         </div>
@@ -81,7 +159,7 @@ export function GridWorkspaceView({
       {controller.initialError && controller.items.length ? (
         <div className={styles.errorBanner} role="alert">
           <span>{controller.initialError}</span>
-          <button type="button" onClick={() => void controller.refresh()}>
+          <button type="button" disabled={refreshBusy} onClick={refreshWithFeedback}>
             重试刷新
           </button>
         </div>
@@ -106,49 +184,45 @@ export function GridWorkspaceView({
           aria-label="网格产品列表"
           onScroll={nearBottom}
         >
-          <table className={styles.desktopTable} aria-label="网格产品">
+          <table className={styles.productTable} aria-label="网格产品">
             <caption className={styles.srOnly}>当前账号的网格产品</caption>
+            <colgroup>
+              <col className={styles.productNameColumn} />
+              <col className={styles.productCodeColumn} />
+              <col className={styles.desktopOnly} />
+              <col className={styles.priceColumn} />
+              <col className={styles.shareColumn} />
+              <col className={styles.desktopOnly} />
+            </colgroup>
             <thead>
               <tr>
                 <th scope="col">产品名称</th>
                 <th scope="col">产品代码</th>
+                <th scope="col" className={styles.desktopOnly}>方向</th>
                 <th scope="col">最高价</th>
                 <th scope="col">每份金额</th>
+                <th scope="col" className={styles.desktopOnly}>更新时间</th>
               </tr>
             </thead>
             <tbody>
               {controller.items.map((item) => (
                 <tr key={item.id}>
-                  <td>{displayName(item)}</td>
+                  <td className={styles.productName}>{displayName(item)}</td>
                   <td className={styles.numeric}>{item.productCode}</td>
+                  <td className={styles.desktopOnly}>
+                    <span className={item.isShort ? styles.short : styles.long}>
+                      {item.isShort ? "做空" : "做多"}
+                    </span>
+                  </td>
                   <td className={styles.numeric}>{formatDecimal(item.maxPrice)}</td>
                   <td className={styles.numeric}>{formatDecimal(item.perShare)}</td>
+                  <td className={`${styles.numeric} ${styles.desktopOnly}`}>
+                    <time dateTime={item.updatedAt}>{displayUpdatedAt(item.updatedAt)}</time>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-
-          <ul className={styles.mobileCards} aria-label="网格产品卡片">
-            {controller.items.map((item) => (
-              <li key={item.id}>
-                <h2>{displayName(item)}</h2>
-                <dl>
-                  <div>
-                    <dt>产品代码</dt>
-                    <dd>{item.productCode}</dd>
-                  </div>
-                  <div>
-                    <dt>最高价</dt>
-                    <dd>{formatDecimal(item.maxPrice)}</dd>
-                  </div>
-                  <div>
-                    <dt>每份金额</dt>
-                    <dd>{formatDecimal(item.perShare)}</dd>
-                  </div>
-                </dl>
-              </li>
-            ))}
-          </ul>
         </div>
       ) : null}
 
