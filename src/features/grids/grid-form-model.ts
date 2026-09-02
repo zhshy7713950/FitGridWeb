@@ -72,7 +72,7 @@ function parseDecimal(
       addError(fieldErrors, field, `${label}必须是有效的十进制数字`);
       return undefined;
     }
-    return { text, number };
+    return { text: number.toFixed(), number };
   } catch {
     addError(fieldErrors, field, `${label}必须是有效的十进制数字`);
     return undefined;

@@ -66,18 +66,18 @@ describe("grid form model", () => {
     const result = validateGridForm({
       ...defaultGridFormValues,
       productCode: "518880",
-      maxPrice: "12",
-      minTradeQuantity: "12.5",
+      maxPrice: ".5",
+      minTradeQuantity: "00.5",
       gearAmplitude: "12.",
-      perShare: ".5",
+      perShare: "1",
     });
 
     expect(result.fieldErrors).toEqual({});
     expect(result.input).toMatchObject({
-      maxPrice: "12",
-      minTradeQuantity: "12.5",
-      gearAmplitude: "12.",
-      perShare: ".5",
+      maxPrice: "0.5",
+      minTradeQuantity: "0.5",
+      gearAmplitude: "12",
+      perShare: "1",
     });
   });
 
