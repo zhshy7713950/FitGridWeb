@@ -115,6 +115,10 @@ it("runs the complete database-free UI demo at desktop and mobile breakpoints", 
       page.getByRole("button", { name: "登录工作台" }).click(),
     ]);
     await expect.poll(() => page.getByText("已载入 20 项", { exact: false }).count()).toBe(1);
+    const expectedImportHref = `${appBasePath}/grids/import`;
+    expect(await page.getByRole("link", { name: "导入数据" }).getAttribute("href"))
+      .toBe(expectedImportHref);
+    expect(expectedImportHref).not.toContain("/fitgrid/fitgrid");
 
     const banner = await page.getByRole("banner").boundingBox();
     const navigation = await page.getByRole("navigation", { name: "主导航" }).boundingBox();
@@ -217,6 +221,33 @@ it("runs the complete database-free UI demo at desktop and mobile breakpoints", 
       page.getByRole("button", { name: "确认永久删除" }).click(),
     ]);
     await expect.poll(() => page.getByRole("link", { name: "黄金 ETF" }).count()).toBe(0);
+
+    const accountEmpty = page.getByRole("region", { name: "账号产品空状态" });
+    while (true) {
+      await expect.poll(async () => (
+        await page.locator("tbody tr").count() + await accountEmpty.count()
+      )).toBeGreaterThan(0);
+      if (await accountEmpty.count()) break;
+      const firstRow = page.locator("tbody tr").first();
+      const productCode = (await firstRow.locator("td").nth(1).textContent())?.trim();
+      if (!productCode) throw new Error("Demo product row is missing its product code");
+      await firstRow.getByRole("link").click();
+      await page.getByRole("button", { name: "删除产品" }).click();
+      await page.getByLabel("输入产品代码确认").fill(productCode);
+      await Promise.all([
+        page.waitForURL(`${baseUrl}/grids`),
+        page.getByRole("button", { name: "确认永久删除" }).click(),
+      ]);
+    }
+
+    expect(await accountEmpty.count()).toBe(1);
+    expect(await accountEmpty.getByRole("link", { name: "导入数据" }).getAttribute("href"))
+      .toBe(expectedImportHref);
+    const finalImportHrefs = await page.getByRole("link", { name: "导入数据" }).evaluateAll(
+      (links) => links.map((link) => link.getAttribute("href")),
+    );
+    expect(finalImportHrefs).toEqual([expectedImportHref, expectedImportHref]);
+    expect(finalImportHrefs.join(" ")).not.toContain("/fitgrid/fitgrid");
 
     await page.getByRole("button", { name: "退出登录" }).click();
     await page.waitForURL(`${baseUrl}/login`);

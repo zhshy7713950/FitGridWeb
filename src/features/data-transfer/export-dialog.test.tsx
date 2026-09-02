@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -44,8 +44,10 @@ describe("ExportDialog downloads", () => {
     expect(screen.getByText(/两种备份都只包含当前账号的数据/)).toBeInTheDocument();
 
     const webDownload = screen.getByRole("button", { name: "下载 Web 完整备份" });
-    fireEvent.click(webDownload);
-    fireEvent.click(webDownload);
+    act(() => {
+      webDownload.click();
+      webDownload.click();
+    });
 
     expect(download).toHaveBeenCalledTimes(1);
     expect(download).toHaveBeenCalledWith("web");

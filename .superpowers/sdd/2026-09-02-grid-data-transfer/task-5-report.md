@@ -49,3 +49,30 @@ GREEN coverage includes:
 - The full suite included the desktop/mobile database-free browser smoke and it passed.
 
 The initial sandboxed full-suite attempt could not bind `127.0.0.1` (`EPERM`); rerunning with local-server permission passed the complete suite.
+
+## Fix round 1/5
+
+- Removed manual `withBasePath("/grids/import")` calls from both `next/link` import actions. Next now receives the application-relative `/grids/import` route and applies its configured base path exactly once at runtime. The native API download link in `ImportWorkspace` continues to use `apiPath` and was not changed.
+- Replaced the previous jsdom base-path assertion, which only observed the prop passed to `Link`, with two complementary checks:
+  - a unit contract that both heading and account-empty `Link` instances receive `/grids/import`, even when the public base-path environment value is present;
+  - a real Next dev + Playwright smoke under `NEXT_BASE_PATH=/fitgrid` that observes the final browser href in the heading and after deleting all demo products to reach the account-empty state.
+- Hardened the repeat-download test so two native `click()` calls occur within one `act` batch. A mutation run with the synchronous ref guard removed failed with two download calls; restoring the guard returned the targeted test to green.
+
+RED evidence:
+
+- Corrected unit test received `/fitgrid/grids/import` instead of the required application-relative `/grids/import` for both `Link` instances.
+- Real `/fitgrid` smoke received `/fitgrid/fitgrid/grids/import` instead of `/fitgrid/grids/import`.
+- Lock mutation run received two download dispatches instead of one.
+
+Round verification:
+
+- Corrected unit/dialog tests: `25 passed`.
+- Synchronous-lock targeted test after restoring the ref guard: `1 passed` (`6 skipped` by name filter).
+- Real `NEXT_BASE_PATH=/fitgrid` browser smoke, including heading and account-empty final href checks: `1 passed`.
+- Focused transfer, modal, workspace, and base-path regressions: `110 passed`.
+- Full suite unchanged rerun: `376 passed`, `1 PostgreSQL-gated skipped`.
+- `pnpm typecheck` — exit 0.
+- `pnpm lint` — exit 0.
+- `NEXT_BASE_PATH=/fitgrid pnpm build` — exit 0; route output includes `/grids/import`.
+
+The first full-suite run had one browser smoke timeout while waiting for the initial demo login navigation; the other `375` tests passed and the new href assertions had not run yet. The same smoke passed independently under `/fitgrid`, and the complete suite passed unchanged on rerun, so no unrelated timing change was added to this scoped fix.

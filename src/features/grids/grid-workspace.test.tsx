@@ -91,18 +91,15 @@ it("links each product name to its stable detail route and offers all account ac
   expect(screen.getByRole("dialog", { name: "数据备份" })).toBeInTheDocument();
 });
 
-it("prefixes the import action exactly once for the deployed base path", () => {
+it("passes app-relative import hrefs to Next Link even when a base path is configured", () => {
   vi.stubEnv("NEXT_PUBLIC_APP_BASE_PATH", "/fitgrid");
-  render(<GridWorkspaceView controller={controller()} />);
+  render(<GridWorkspaceView controller={controller({ items: [] })} />);
 
-  expect(screen.getByRole("link", { name: "导入数据" })).toHaveAttribute(
-    "href",
-    "/fitgrid/grids/import",
-  );
-  expect(screen.getByRole("link", { name: "导入数据" })).not.toHaveAttribute(
-    "href",
-    "/fitgrid/fitgrid/grids/import",
-  );
+  const importLinks = screen.getAllByRole("link", { name: "导入数据" });
+  expect(importLinks).toHaveLength(2);
+  for (const link of importLinks) {
+    expect(link).toHaveAttribute("href", "/grids/import");
+  }
 });
 
 it("keeps maximum-length codes and decimal values intact in the shared table", () => {
