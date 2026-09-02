@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
 import { ClientApiError } from "@/lib/api-client";
 import { safeReturnPath, withBasePath } from "@/lib/app-paths";
 import { isUiDemoMode, UI_DEMO_PASSWORD, UI_DEMO_USERNAME } from "@/lib/ui-demo";
@@ -9,13 +9,45 @@ import styles from "./login.module.css";
 
 type LoginRequest = typeof login;
 type Navigate = (path: string) => void;
+const rememberedUsernameKey = "fitgrid:last-successful-username:v1";
+
+function readRememberedUsername(): string {
+  try {
+    return window.localStorage.getItem(rememberedUsernameKey) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberUsername(username: string): void {
+  try {
+    window.localStorage.setItem(rememberedUsernameKey, username);
+  } catch {
+    // Login must continue when browser storage is unavailable.
+  }
+}
+
+function subscribeRememberedUsername(onChange: () => void): () => void {
+  function handleStorage(event: StorageEvent) {
+    if (event.key === rememberedUsernameKey) onChange();
+  }
+
+  window.addEventListener("storage", handleStorage);
+  return () => window.removeEventListener("storage", handleStorage);
+}
 
 export function LoginForm({
   returnTo,
   request = login,
   navigate = (path) => window.location.replace(withBasePath(path as `/${string}`)),
 }: { returnTo: string; request?: LoginRequest; navigate?: Navigate }) {
-  const [username, setUsername] = useState("");
+  const rememberedUsername = useSyncExternalStore(
+    subscribeRememberedUsername,
+    readRememberedUsername,
+    () => "",
+  );
+  const [usernameInput, setUsernameInput] = useState<string | null>(null);
+  const username = usernameInput ?? rememberedUsername;
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -39,7 +71,8 @@ export function LoginForm({
     setError("");
     setFieldErrors({});
     try {
-      await request(username, password);
+      const session = await request(username, password);
+      rememberUsername(session.user.username);
       navigate(safeReturnPath(returnTo));
     } catch (caught) {
       setPassword("");
@@ -79,7 +112,7 @@ export function LoginForm({
           aria-invalid={!!fieldErrors.username}
           aria-describedby={fieldErrors.username ? "username-error" : undefined}
           value={username}
-          onChange={(event) => setUsername(event.target.value)}
+          onChange={(event) => setUsernameInput(event.target.value)}
         />
         {fieldErrors.username && <span id="username-error">{fieldErrors.username[0]}</span>}
       </div>

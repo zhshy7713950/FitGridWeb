@@ -156,6 +156,15 @@ it("runs the complete database-free UI demo at desktop and mobile breakpoints", 
       "每份金额",
       "更新时间",
     ]);
+    const directionFontSize = await page.getByText("做多", { exact: true }).first().evaluate(
+      (element) => Number.parseFloat(window.getComputedStyle(element).fontSize),
+    );
+    expect(directionFontSize).toBeGreaterThanOrEqual(14);
+
+    await page.getByRole("button", { name: "退出登录" }).click();
+    await page.waitForURL(`${baseUrl}/login`);
+    expect(await page.getByLabel("用户名").inputValue()).toBe("demo");
+    expect(await page.getByLabel("密码").inputValue()).toBe("");
     expect(consoleErrors).toEqual([]);
   } finally {
     await browser?.close();
