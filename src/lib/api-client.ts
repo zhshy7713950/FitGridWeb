@@ -45,10 +45,13 @@ export async function requestResponse(
   init: RequestInit = {},
   onUnauthorized: () => void = browserUnauthorizedRedirect,
 ): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (!headers.has("Accept")) headers.set("Accept", "application/json");
+
   const response = await fetch(apiPath(path), {
     ...init,
     credentials: "same-origin",
-    headers: { Accept: "application/json", ...init.headers },
+    headers,
   });
 
   if (response.ok) return response;
