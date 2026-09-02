@@ -1,0 +1,472 @@
+.detail {
+  min-width: 0;
+  color: var(--text);
+}
+
+.heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.titleBlock {
+  min-width: 0;
+}
+
+.backLink {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  color: var(--text);
+}
+
+.heading h1 {
+  margin: 6px 0;
+  overflow: hidden;
+  font-family: "Arial Narrow", "Roboto Condensed", "PingFang SC", sans-serif;
+  font-size: clamp(25px, 3vw, 34px);
+  font-stretch: condensed;
+  letter-spacing: -0.045em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identityLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.identityLine code,
+.identityLine .long,
+.identityLine .short {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-weight: 700;
+}
+
+.long {
+  color: var(--positive);
+}
+
+.short {
+  color: var(--negative);
+}
+
+.actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.actions button,
+.actions a,
+.loadError button,
+.inspector button {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--surface);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.actions button:first-child {
+  border-color: var(--action);
+  background: var(--action);
+  color: white;
+}
+
+.actions .deleteAction {
+  color: #ff8b94;
+}
+
+.actions button:disabled,
+.inspector button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+.instrumentStrip {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--action);
+  background: var(--surface);
+}
+
+.instrumentStrip div {
+  min-width: 0;
+  padding: 11px 14px;
+  border-right: 1px solid var(--line);
+}
+
+.instrumentStrip div:last-child {
+  border-right: 0;
+}
+
+.instrumentStrip dt {
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.instrumentStrip dd {
+  margin: 0;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.actionError,
+.loadError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--negative) 52%, var(--line));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--negative) 8%, var(--surface));
+}
+
+.actionError small,
+.loadError small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+
+.pageStatus,
+.loadError {
+  min-height: 120px;
+}
+
+.pageStatus {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  color: var(--text-muted);
+  background: var(--surface);
+}
+
+.tableRegion {
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.financialTable {
+  width: 100%;
+  min-width: 1300px;
+  border-collapse: collapse;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.financialTable th,
+.financialTable td {
+  height: 44px;
+  padding: 8px 11px;
+  border-right: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.financialTable th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  color: #aeb5c3;
+  background: var(--surface-raised);
+  font-family: Inter, "PingFang SC", system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+}
+
+.financialTable th:first-child,
+.financialTable td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 58px;
+  text-align: center;
+  background: var(--surface);
+}
+
+.financialTable thead th:first-child {
+  z-index: 3;
+  background: var(--surface-raised);
+}
+
+.financialTable th:nth-child(2),
+.financialTable td:nth-child(2) {
+  text-align: left;
+}
+
+.financialTable tbody tr:hover td {
+  background: color-mix(in srgb, var(--action) 5%, var(--surface));
+}
+
+.financialTable tbody tr.selectedRow td {
+  background: color-mix(in srgb, var(--action) 10%, var(--surface));
+}
+
+.financialTable tbody tr.selectedRow td:first-child {
+  box-shadow: inset 3px 0 0 var(--action);
+}
+
+.rowButton {
+  min-width: 34px;
+  min-height: 30px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: #9db4ff;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rowButton:hover,
+.rowButton[aria-pressed="true"] {
+  border-color: var(--action);
+  color: white;
+  background: color-mix(in srgb, var(--action) 24%, transparent);
+}
+
+.gridType {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: Inter, "PingFang SC", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.gridType::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.gridType1 {
+  color: #55b7ff;
+}
+
+.gridType2 {
+  color: #e0a6ff;
+}
+
+.gridType3 {
+  color: #f1bd65;
+}
+
+.financialTable tfoot th,
+.financialTable tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  border-bottom: 0;
+  background: #111b2e;
+  color: #c7d2f6;
+}
+
+.financialTable tfoot th {
+  left: 0;
+  text-align: left;
+  box-shadow: inset 3px 0 0 var(--action);
+}
+
+.financialTable tfoot strong {
+  margin-left: 6px;
+  color: white;
+}
+
+.inspectorLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.inspectorBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: rgb(2 5 9 / 66%);
+}
+
+.inspector {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: min(430px, 92vw);
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--action);
+  background: #0f151f;
+  box-shadow: -18px 0 45px rgb(0 0 0 / 35%);
+}
+
+.inspectorHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.eyebrow {
+  color: #8ea9ff;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.inspectorHeader h2 {
+  margin: 5px 0 0;
+  font-family: "Arial Narrow", "Roboto Condensed", "PingFang SC", sans-serif;
+  font-size: 24px;
+  letter-spacing: -0.035em;
+}
+
+.inspectorIndex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.inspectorIndex strong {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 13px;
+}
+
+.inspectorValues {
+  flex: 1;
+  margin: 0;
+  padding: 8px 22px;
+  overflow: auto;
+}
+
+.inspectorValues div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 17px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.inspectorValues dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.inspectorValues dd {
+  margin: 0;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inspectorControls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 16px 22px 22px;
+  border-top: 1px solid var(--line);
+}
+
+.inspectorControls button:last-child:not(:disabled) {
+  border-color: var(--action);
+  background: var(--action);
+  color: white;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .heading {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .actions button,
+  .actions a {
+    min-height: 44px;
+    padding-inline: 7px;
+  }
+
+  .instrumentStrip {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .instrumentStrip div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .instrumentStrip div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .financialTable {
+    min-width: 1240px;
+  }
+
+  .inspector {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    border-left: 0;
+    box-shadow: none;
+  }
+
+  .inspectorHeader,
+  .inspectorIndex,
+  .inspectorValues,
+  .inspectorControls {
+    padding-inline: 16px;
+  }
+}
