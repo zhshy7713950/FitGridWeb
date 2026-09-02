@@ -1,8 +1,50 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ClientApiError, requestJson } from "./api-client";
+import { ClientApiError, requestJson, requestResponse } from "./api-client";
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("requestResponse", () => {
+  it("returns an authenticated successful response without consuming its body", async () => {
+    const response = new Response("download", { status: 200 });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+    await expect(requestResponse("/grid-trades/export?format=android")).resolves.toBe(response);
+    await expect(response.text()).resolves.toBe("download");
+  });
+
+  it("maps a failed raw response to ClientApiError", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(
+      {
+        code: "REQUEST_FAILED",
+        message: "失败",
+        requestId: "01EXPORT",
+        fieldErrors: { format: ["不支持的格式"] },
+      },
+      { status: 500, headers: { "Retry-After": "17" } },
+    )));
+
+    await expect(requestResponse("/grid-trades/export?format=web")).rejects.toMatchObject({
+      status: 500,
+      code: "REQUEST_FAILED",
+      message: "失败",
+      requestId: "01EXPORT",
+      fieldErrors: { format: ["不支持的格式"] },
+      retryAfterSeconds: 17,
+    });
+  });
+
+  it("does not invoke the session-expiry boundary for login 401 responses", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(
+      { code: "UNAUTHORIZED", message: "用户名或密码错误" },
+      { status: 401 },
+    )));
+    const onUnauthorized = vi.fn();
+
+    await expect(requestResponse("/auth/login", {}, onUnauthorized)).rejects.toMatchObject({ status: 401 });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+});
 
 describe("requestJson", () => {
   it("returns JSON from a same-origin API request", async () => {
