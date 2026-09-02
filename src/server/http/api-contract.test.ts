@@ -63,4 +63,25 @@ describe("OpenAPI route coverage", () => {
       }
     }
   });
+
+  it("documents unusable import previews and commit rate limits", async () => {
+    const source = await readFile(
+      path.join(process.cwd(), "docs/fit-replication/contracts/openapi.yaml"),
+      "utf8",
+    );
+    const document = parse(source) as {
+      paths: Record<string, Record<string, {
+        responses?: Record<string, { $ref?: string; description?: string }>;
+      }>>;
+    };
+    const responses = document.paths["/grid-trades/import/commit"]?.post?.responses;
+
+    expect(responses?.["404"]).toMatchObject({
+      $ref: "#/components/responses/NotFound",
+      description: expect.stringContaining("IMPORT_PREVIEW_NOT_FOUND"),
+    });
+    expect(responses?.["429"]).toEqual({
+      $ref: "#/components/responses/RateLimited",
+    });
+  });
 });

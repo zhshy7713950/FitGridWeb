@@ -421,10 +421,15 @@ paths:
                 $ref: '#/components/schemas/ImportCommitResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: IMPORT_PREVIEW_NOT_FOUND：导入预检不存在、已过期或已使用
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /grid-trades/export:
     get:
