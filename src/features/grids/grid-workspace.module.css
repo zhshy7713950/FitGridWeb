@@ -58,6 +58,10 @@
   gap: 8px;
 }
 
+.headingActions > :not(.primaryAction) {
+  background: transparent;
+}
+
 .heading .primaryAction,
 .emptyActions .primaryAction {
   border-color: var(--action);
@@ -304,6 +308,10 @@
   .headingActions {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .headingActions > * {
+    min-width: 0;
   }
 
   .listViewport {

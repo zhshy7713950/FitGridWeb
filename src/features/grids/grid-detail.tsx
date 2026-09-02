@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { ClientApiError } from "@/lib/api-client";
+import { lockDocumentForModal } from "@/lib/modal-isolation";
 
 import { formatDecimal } from "./decimal-display";
 import { deleteGridTrade, getGridTrade, recalculateGridTrade } from "./grid-api";
 import { GridRowInspector } from "./grid-row-inspector";
-import { lockDocumentForModal } from "./modal-isolation";
 import type { GridItem, GridTradeDetail } from "./types";
 import styles from "./grid-detail.module.css";
 

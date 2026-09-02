@@ -44,7 +44,9 @@ afterEach(() => {
   cleanup();
   vi.clearAllTimers();
   vi.useRealTimers();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  document.body.style.removeProperty("overflow");
 });
 
 it("renders one responsive product table with richer desktop fields", () => {
@@ -70,7 +72,7 @@ it("renders one responsive product table with richer desktop fields", () => {
   expect(within(table).queryByText("android-v2.1.0")).not.toBeInTheDocument();
 });
 
-it("links each product name to its stable detail route and offers creation from the heading", () => {
+it("links each product name to its stable detail route and offers all account actions from the heading", async () => {
   render(<GridWorkspaceView controller={controller()} />);
 
   expect(screen.getByRole("link", { name: "黄金ETF网格" })).toHaveAttribute(
@@ -80,6 +82,26 @@ it("links each product name to its stable detail route and offers creation from 
   expect(screen.getByRole("link", { name: "新建产品" })).toHaveAttribute(
     "href",
     "/grids/new",
+  );
+  expect(screen.getByRole("link", { name: "导入数据" })).toHaveAttribute(
+    "href",
+    "/grids/import",
+  );
+  await userEvent.click(screen.getByRole("button", { name: "数据备份" }));
+  expect(screen.getByRole("dialog", { name: "数据备份" })).toBeInTheDocument();
+});
+
+it("prefixes the import action exactly once for the deployed base path", () => {
+  vi.stubEnv("NEXT_PUBLIC_APP_BASE_PATH", "/fitgrid");
+  render(<GridWorkspaceView controller={controller()} />);
+
+  expect(screen.getByRole("link", { name: "导入数据" })).toHaveAttribute(
+    "href",
+    "/fitgrid/grids/import",
+  );
+  expect(screen.getByRole("link", { name: "导入数据" })).not.toHaveAttribute(
+    "href",
+    "/fitgrid/fitgrid/grids/import",
   );
 });
 
@@ -206,17 +228,21 @@ it("cancels its refresh feedback timer when the product view unmounts", () => {
   expect(clearTimeoutSpy).toHaveBeenCalledWith(refreshTimer);
 });
 
-it("offers creation and import for an empty account but only clearing for an empty search", async () => {
+it("offers create, import and backup for an empty account but only clearing for an empty search", async () => {
   const emptyAccount = controller({ items: [] });
   const { rerender } = render(
     <GridWorkspaceView controller={emptyAccount} />,
   );
   expect(screen.getByText("还没有网格产品")).toBeInTheDocument();
   expect(screen.getAllByRole("link", { name: "新建产品" })).toHaveLength(2);
-  expect(screen.getByRole("link", { name: "导入产品" })).toHaveAttribute(
+  const accountEmpty = screen.getByRole("region", { name: "账号产品空状态" });
+  expect(within(accountEmpty).getByRole("link", { name: "导入数据" })).toHaveAttribute(
     "href",
     "/grids/import",
   );
+  await userEvent.click(within(accountEmpty).getByRole("button", { name: "数据备份" }));
+  expect(screen.getByRole("dialog", { name: "数据备份" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "关闭数据备份" }));
 
   const emptySearch = controller({ items: [], query: "gold" });
   rerender(

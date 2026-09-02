@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { apiPath } from "@/lib/app-paths";
+import { lockDocumentForModal } from "@/lib/modal-isolation";
 
-import { lockDocumentForModal } from "../grids/modal-isolation";
 import styles from "./data-transfer.module.css";
 import type { ImportConflictPolicy, ImportPreview, ImportPreviewItem, ImportReport } from "./types";
 import { type GridImportController, useGridImport } from "./use-grid-import";

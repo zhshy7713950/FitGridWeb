@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type UIEvent } from "react";
 
+import { ExportDialog } from "@/features/data-transfer/export-dialog";
+import { withBasePath } from "@/lib/app-paths";
+
 import { formatDecimal } from "./decimal-display";
 import type { GridTradeSummary } from "./types";
 import { useGridTrades, type GridTradeListController } from "./use-grid-trades";
@@ -47,6 +50,7 @@ export function GridWorkspaceView({
   controller: GridTradeListController;
 }) {
   const [showRefreshOverlay, setShowRefreshOverlay] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const refreshFeedback = useRef<Promise<void> | null>(null);
   const refreshFeedbackTimer = useRef<number | null>(null);
   const resolveRefreshDelay = useRef<(() => void) | null>(null);
@@ -123,6 +127,8 @@ export function GridWorkspaceView({
           >
             刷新
           </button>
+          <Link href={withBasePath("/grids/import")}>导入数据</Link>
+          <button type="button" onClick={() => setExportOpen(true)}>数据备份</button>
           <Link className={styles.primaryAction} href="/grids/new">新建产品</Link>
         </div>
       </header>
@@ -190,7 +196,8 @@ export function GridWorkspaceView({
             <p>{emptyText}</p>
             <div className={styles.emptyActions}>
               <Link className={styles.primaryAction} href="/grids/new">新建产品</Link>
-              <Link href="/grids/import">导入产品</Link>
+              <Link href={withBasePath("/grids/import")}>导入数据</Link>
+              <button type="button" onClick={() => setExportOpen(true)}>数据备份</button>
             </div>
           </div>
         )
@@ -268,6 +275,8 @@ export function GridWorkspaceView({
           </button>
         ) : null}
       </div>
+
+      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
     </section>
   );
 }

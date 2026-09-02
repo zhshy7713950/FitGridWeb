@@ -2,8 +2,9 @@
 
 import { useEffect, useRef } from "react";
 
+import { lockDocumentForModal } from "@/lib/modal-isolation";
+
 import { formatDecimal } from "./decimal-display";
-import { lockDocumentForModal } from "./modal-isolation";
 import type { GridItem } from "./types";
 import styles from "./grid-detail.module.css";
 
