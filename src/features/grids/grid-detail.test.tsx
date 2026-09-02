@@ -380,6 +380,42 @@ describe("GridDetailView", () => {
     expect(within(dialog).getByRole("button", { name: "确认永久删除" })).toBeEnabled();
   });
 
+  it("routes both Tab directions from the dialog anchor after deletion failure", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <nav aria-label="主导航"><Link href="/grids">网格产品</Link></nav>
+        <GridDetailView
+          detail={detail}
+          onRecalculate={vi.fn()}
+          onDelete={() => Promise.reject(
+            new ClientApiError(503, "UPSTREAM", "删除服务暂不可用", "req-delete-focus"),
+          )}
+        />
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "删除产品" }));
+    const dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    const input = within(dialog).getByRole("textbox", { name: "输入产品代码确认" });
+    await user.type(input, detail.productCode);
+    await user.click(within(dialog).getByRole("button", { name: "确认永久删除" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("删除服务暂不可用");
+    expect(input).toHaveValue(detail.productCode);
+    expect(dialog).toHaveFocus();
+
+    const close = within(dialog).getByRole("button", { name: "关闭" });
+    await user.tab();
+    expect(close).toHaveFocus();
+
+    dialog.focus();
+    const confirm = within(dialog).getByRole("button", { name: "确认永久删除" });
+    await user.tab({ shift: true });
+    expect(confirm).toHaveFocus();
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+  });
+
   it("traps delete focus, isolates the background, and supports close, Escape, and backdrop", async () => {
     const user = userEvent.setup();
     render(
