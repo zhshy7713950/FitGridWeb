@@ -76,6 +76,42 @@ function displayName(detail: GridTradeDetail): string {
   return detail.productName || detail.productCode;
 }
 
+function isolateOutsideModal(layer: HTMLElement): () => void {
+  const isolated: Array<{
+    element: HTMLElement;
+    ariaHidden: string | null;
+    hadInert: boolean;
+  }> = [];
+  let branch: HTMLElement = layer;
+
+  while (branch !== document.body && branch.parentElement) {
+    const parent = branch.parentElement;
+    for (const sibling of Array.from(parent.children)) {
+      if (!(sibling instanceof HTMLElement) || sibling === branch) continue;
+      if (sibling.hasAttribute("inert") && sibling.getAttribute("aria-hidden") === "true") {
+        continue;
+      }
+      isolated.push({
+        element: sibling,
+        ariaHidden: sibling.getAttribute("aria-hidden"),
+        hadInert: sibling.hasAttribute("inert"),
+      });
+      sibling.setAttribute("inert", "");
+      sibling.setAttribute("aria-hidden", "true");
+    }
+    branch = parent;
+  }
+
+  return () => {
+    for (const { element, ariaHidden, hadInert } of isolated) {
+      if (hadInert) element.setAttribute("inert", "");
+      else element.removeAttribute("inert");
+      if (ariaHidden === null) element.removeAttribute("aria-hidden");
+      else element.setAttribute("aria-hidden", ariaHidden);
+    }
+  };
+}
+
 function DeleteConfirmation({
   detail,
   onConfirm,
@@ -89,6 +125,7 @@ function DeleteConfirmation({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<VisibleError | null>(null);
   const deletingRef = useRef(false);
+  const layerRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const titleId = useId();
@@ -102,6 +139,9 @@ function DeleteConfirmation({
   useEffect(() => {
     inputRef.current?.focus();
     const previousOverflow = document.body.style.overflow;
+    const restoreIsolation = layerRef.current
+      ? isolateOutsideModal(layerRef.current)
+      : () => undefined;
     document.body.style.overflow = "hidden";
 
     function onKeyDown(event: KeyboardEvent) {
@@ -117,11 +157,18 @@ function DeleteConfirmation({
           'button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
         ),
       );
-      if (!focusable.length) return;
+      if (!focusable.length) {
+        event.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
 
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      if (!dialogRef.current.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
       } else if (!event.shiftKey && document.activeElement === last) {
@@ -134,8 +181,13 @@ function DeleteConfirmation({
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previousOverflow;
+      restoreIsolation();
     };
   }, [close]);
+
+  useEffect(() => {
+    if (deleting) dialogRef.current?.focus();
+  }, [deleting]);
 
   async function handleConfirm() {
     if (confirmation !== detail.productCode || deletingRef.current) return;
@@ -152,7 +204,7 @@ function DeleteConfirmation({
   }
 
   return (
-    <div className={styles.deleteLayer}>
+    <div ref={layerRef} className={styles.deleteLayer}>
       <button
         type="button"
         className={styles.deleteBackdrop}
@@ -167,6 +219,7 @@ function DeleteConfirmation({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={`${descriptionId}${deleteError ? ` ${errorId}` : ""}`}
+        tabIndex={-1}
       >
         <header className={styles.deleteHeader}>
           <div>

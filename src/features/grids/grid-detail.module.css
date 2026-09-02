@@ -501,6 +501,11 @@
   box-shadow: 0 22px 58px color-mix(in srgb, var(--detail-ink) 54%, transparent);
 }
 
+.deleteDialog:focus-visible {
+  outline: 2px solid var(--detail-action);
+  outline-offset: 2px;
+}
+
 .deleteHeader {
   display: flex;
   align-items: start;

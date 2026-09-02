@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import Link from "next/link";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ClientApiError } from "@/lib/api-client";
@@ -279,6 +280,86 @@ describe("GridDetailView", () => {
     });
   });
 
+  it("keeps unresolved deletion focus inside the dialog and isolates outer navigation", async () => {
+    const user = userEvent.setup();
+    const request = deferred<void>();
+    const navigate = vi.fn();
+    render(
+      <>
+        <nav aria-label="主导航">
+          <Link href="/grids" onClick={navigate}>网格产品</Link>
+        </nav>
+        <GridDetailView
+          detail={detail}
+          onRecalculate={vi.fn()}
+          onDelete={() => request.promise}
+        />
+      </>,
+    );
+    const navigation = screen.getByRole("navigation", { name: "主导航" });
+
+    await user.click(screen.getByRole("button", { name: "删除产品" }));
+    const dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    const input = within(dialog).getByRole("textbox", { name: "输入产品代码确认" });
+    await user.type(input, detail.productCode);
+    await user.click(within(dialog).getByRole("button", { name: "确认永久删除" }));
+
+    await waitFor(() => expect(dialog).toHaveFocus());
+    expect(navigation).toHaveAttribute("inert");
+    expect(navigation).toHaveAttribute("aria-hidden", "true");
+    expect(input).toBeDisabled();
+    for (const button of within(dialog).getAllByRole("button")) {
+      expect(button).toBeDisabled();
+    }
+
+    await user.tab();
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    await user.tab({ shift: true });
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    await user.keyboard("{Enter}");
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("keeps successful deletion focus locked until route departure", async () => {
+    const user = userEvent.setup();
+    let deletionResolved = false;
+    render(
+      <>
+        <nav aria-label="主导航"><Link href="/grids">网格产品</Link></nav>
+        <GridDetailView
+          detail={detail}
+          onRecalculate={vi.fn()}
+          onDelete={async () => {
+            deletionResolved = true;
+          }}
+        />
+      </>,
+    );
+    const navigation = screen.getByRole("navigation", { name: "主导航" });
+
+    await user.click(screen.getByRole("button", { name: "删除产品" }));
+    const dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "输入产品代码确认" }),
+      detail.productCode,
+    );
+    await user.click(within(dialog).getByRole("button", { name: "确认永久删除" }));
+
+    await waitFor(() => expect(deletionResolved).toBe(true));
+    expect(within(dialog).getByRole("button", { name: "正在删除…" })).toBeDisabled();
+    expect(within(dialog).getByRole("textbox", { name: "输入产品代码确认" })).toBeDisabled();
+    for (const button of within(dialog).getAllByRole("button")) {
+      expect(button).toBeDisabled();
+    }
+    expect(navigation).toHaveAttribute("inert");
+    await waitFor(() => expect(dialog).toHaveFocus());
+
+    await user.tab();
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    await user.tab({ shift: true });
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+  });
+
   it("retains the delete dialog and typed code while showing the public failure details", async () => {
     const user = userEvent.setup();
     const onDelete = vi.fn().mockRejectedValue(
@@ -301,8 +382,14 @@ describe("GridDetailView", () => {
 
   it("traps delete focus, isolates the background, and supports close, Escape, and backdrop", async () => {
     const user = userEvent.setup();
-    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
+    render(
+      <>
+        <nav aria-label="主导航"><Link href="/grids">网格产品</Link></nav>
+        <GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />
+      </>,
+    );
 
+    const navigation = screen.getByRole("navigation", { name: "主导航" });
     const trigger = screen.getByRole("button", { name: "删除产品" });
     const background = screen.getByRole("group", { name: "产品详情内容" });
     await user.click(trigger);
@@ -312,6 +399,8 @@ describe("GridDetailView", () => {
     expect(input).toHaveFocus();
     expect(background).toHaveAttribute("aria-hidden", "true");
     expect(background).toHaveAttribute("inert");
+    expect(navigation).toHaveAttribute("aria-hidden", "true");
+    expect(navigation).toHaveAttribute("inert");
 
     await user.tab({ shift: true });
     expect(close).toHaveFocus();
@@ -321,6 +410,8 @@ describe("GridDetailView", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "永久删除产品" })).not.toBeInTheDocument();
     await waitFor(() => expect(trigger).toHaveFocus());
+    expect(navigation).not.toHaveAttribute("aria-hidden");
+    expect(navigation).not.toHaveAttribute("inert");
 
     await user.click(trigger);
     dialog = screen.getByRole("dialog", { name: "永久删除产品" });
