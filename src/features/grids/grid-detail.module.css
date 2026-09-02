@@ -1,6 +1,19 @@
 .detail {
+  --detail-ink: #080D12;
+  --detail-surface: #111722;
+  --detail-line: #2B3444;
+  --detail-text: #E6EAF2;
+  --detail-action: #2962FF;
+  --detail-long: #22AB94;
+  --detail-short: #F23645;
+  --detail-muted: color-mix(in srgb, var(--detail-text) 56%, transparent);
+
   min-width: 0;
-  color: var(--text);
+  color: var(--detail-text);
+}
+
+.detailContent {
+  min-width: 0;
 }
 
 .heading {
@@ -16,14 +29,14 @@
 }
 
 .backLink {
-  color: var(--text-muted);
+  color: var(--detail-muted);
   font-size: 11px;
   letter-spacing: 0.04em;
   text-decoration: none;
 }
 
 .backLink:hover {
-  color: var(--text);
+  color: var(--detail-text);
 }
 
 .heading h1 {
@@ -42,7 +55,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 14px;
-  color: var(--text-muted);
+  color: var(--detail-muted);
   font-size: 11px;
 }
 
@@ -54,11 +67,11 @@
 }
 
 .long {
-  color: var(--positive);
+  color: var(--detail-long);
 }
 
 .short {
-  color: var(--negative);
+  color: var(--detail-short);
 }
 
 .actions {
@@ -76,28 +89,32 @@
   align-items: center;
   justify-content: center;
   padding: 0 13px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--detail-line);
   border-radius: 4px;
-  color: var(--text);
-  background: var(--surface);
+  color: var(--detail-text);
+  background: var(--detail-surface);
   font-weight: 650;
   text-decoration: none;
 }
 
 .actions button:first-child {
-  border-color: var(--action);
-  background: var(--action);
-  color: white;
+  border-color: var(--detail-action);
+  background: var(--detail-action);
+  color: var(--detail-text);
 }
 
 .actions .deleteAction {
-  color: #ff8b94;
+  color: var(--detail-short);
 }
 
 .actions button:disabled,
 .inspector button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.5;
+}
+
+.actions button[aria-busy="true"] {
+  cursor: wait;
 }
 
 .instrumentStrip {
@@ -105,15 +122,15 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(120px, 1fr));
   margin: 0 0 14px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--action);
-  background: var(--surface);
+  border: 1px solid var(--detail-line);
+  border-left: 3px solid var(--detail-action);
+  background: var(--detail-surface);
 }
 
 .instrumentStrip div {
   min-width: 0;
   padding: 11px 14px;
-  border-right: 1px solid var(--line);
+  border-right: 1px solid var(--detail-line);
 }
 
 .instrumentStrip div:last-child {
@@ -122,7 +139,7 @@
 
 .instrumentStrip dt {
   margin-bottom: 5px;
-  color: var(--text-muted);
+  color: var(--detail-muted);
   font-size: 10px;
   letter-spacing: 0.08em;
 }
@@ -142,16 +159,57 @@
   gap: 16px;
   margin-bottom: 12px;
   padding: 11px 13px;
-  border: 1px solid color-mix(in srgb, var(--negative) 52%, var(--line));
+  border: 1px solid var(--detail-short);
   border-radius: 4px;
-  background: color-mix(in srgb, var(--negative) 8%, var(--surface));
+  background: color-mix(in srgb, var(--detail-short) 8%, transparent);
 }
 
 .actionError small,
 .loadError small {
   display: block;
   margin-top: 4px;
-  color: var(--text-muted);
+  color: var(--detail-muted);
+}
+
+.recalculateOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--detail-ink) 38%, transparent);
+}
+
+.recalculateIndicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 156px;
+  min-height: 52px;
+  padding: 0 18px;
+  border: 1px solid var(--detail-line);
+  border-radius: 4px;
+  color: var(--detail-text);
+  background: var(--detail-surface);
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--detail-ink) 32%, transparent);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.spinner {
+  width: 17px;
+  height: 17px;
+  border: 2px solid color-mix(in srgb, var(--detail-action) 25%, transparent);
+  border-top-color: var(--detail-action);
+  border-radius: 50%;
+  animation: recalculate-spin 0.7s linear infinite;
+}
+
+@keyframes recalculate-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .pageStatus,
@@ -162,17 +220,17 @@
 .pageStatus {
   display: grid;
   place-items: center;
-  border: 1px solid var(--line);
-  color: var(--text-muted);
-  background: var(--surface);
+  border: 1px solid var(--detail-line);
+  color: var(--detail-muted);
+  background: var(--detail-surface);
 }
 
 .tableRegion {
   max-width: 100%;
   overflow: auto;
-  border: 1px solid var(--line);
+  border: 1px solid var(--detail-line);
   border-radius: 4px;
-  background: var(--surface);
+  background: var(--detail-surface);
 }
 
 .financialTable {
@@ -188,8 +246,8 @@
 .financialTable td {
   height: 44px;
   padding: 8px 11px;
-  border-right: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
-  border-bottom: 1px solid var(--line);
+  border-right: 1px solid color-mix(in srgb, var(--detail-line) 72%, transparent);
+  border-bottom: 1px solid var(--detail-line);
   text-align: right;
   white-space: nowrap;
 }
@@ -198,8 +256,8 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  color: #aeb5c3;
-  background: var(--surface-raised);
+  color: var(--detail-muted);
+  background: var(--detail-surface);
   font-family: Inter, "PingFang SC", system-ui, sans-serif;
   font-size: 10px;
   font-weight: 650;
@@ -213,12 +271,12 @@
   z-index: 1;
   min-width: 58px;
   text-align: center;
-  background: var(--surface);
+  background: var(--detail-surface);
 }
 
 .financialTable thead th:first-child {
   z-index: 3;
-  background: var(--surface-raised);
+  background: var(--detail-surface);
 }
 
 .financialTable th:nth-child(2),
@@ -227,15 +285,15 @@
 }
 
 .financialTable tbody tr:hover td {
-  background: color-mix(in srgb, var(--action) 5%, var(--surface));
+  background: color-mix(in srgb, var(--detail-action) 5%, transparent);
 }
 
 .financialTable tbody tr.selectedRow td {
-  background: color-mix(in srgb, var(--action) 10%, var(--surface));
+  background: color-mix(in srgb, var(--detail-action) 10%, transparent);
 }
 
 .financialTable tbody tr.selectedRow td:first-child {
-  box-shadow: inset 3px 0 0 var(--action);
+  box-shadow: inset 3px 0 0 var(--detail-action);
 }
 
 .rowButton {
@@ -243,7 +301,7 @@
   min-height: 30px;
   border: 1px solid transparent;
   border-radius: 3px;
-  color: #9db4ff;
+  color: var(--detail-action);
   background: transparent;
   font: inherit;
   cursor: pointer;
@@ -251,9 +309,9 @@
 
 .rowButton:hover,
 .rowButton[aria-pressed="true"] {
-  border-color: var(--action);
-  color: white;
-  background: color-mix(in srgb, var(--action) 24%, transparent);
+  border-color: var(--detail-action);
+  color: var(--detail-text);
+  background: color-mix(in srgb, var(--detail-action) 24%, transparent);
 }
 
 .gridType {
@@ -274,15 +332,15 @@
 }
 
 .gridType1 {
-  color: #55b7ff;
+  color: var(--detail-action);
 }
 
 .gridType2 {
-  color: #e0a6ff;
+  color: var(--detail-long);
 }
 
 .gridType3 {
-  color: #f1bd65;
+  color: var(--detail-short);
 }
 
 .financialTable tfoot th,
@@ -291,19 +349,19 @@
   bottom: 0;
   z-index: 2;
   border-bottom: 0;
-  background: #111b2e;
-  color: #c7d2f6;
+  background: color-mix(in srgb, var(--detail-action) 10%, transparent);
+  color: var(--detail-text);
 }
 
 .financialTable tfoot th {
   left: 0;
   text-align: left;
-  box-shadow: inset 3px 0 0 var(--action);
+  box-shadow: inset 3px 0 0 var(--detail-action);
 }
 
 .financialTable tfoot strong {
   margin-left: 6px;
-  color: white;
+  color: var(--detail-text);
 }
 
 .inspectorLayer {
@@ -319,7 +377,7 @@
   height: 100%;
   padding: 0;
   border: 0;
-  background: rgb(2 5 9 / 66%);
+  background: color-mix(in srgb, var(--detail-ink) 66%, transparent);
 }
 
 .inspector {
@@ -328,9 +386,9 @@
   width: min(430px, 92vw);
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--action);
-  background: #0f151f;
-  box-shadow: -18px 0 45px rgb(0 0 0 / 35%);
+  border-left: 1px solid var(--detail-action);
+  background: var(--detail-surface);
+  box-shadow: -18px 0 45px color-mix(in srgb, var(--detail-ink) 35%, transparent);
 }
 
 .inspectorHeader {
@@ -339,11 +397,11 @@
   justify-content: space-between;
   gap: 16px;
   padding: 22px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--detail-line);
 }
 
 .eyebrow {
-  color: #8ea9ff;
+  color: var(--detail-action);
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   font-size: 10px;
   letter-spacing: 0.1em;
@@ -362,7 +420,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 22px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--detail-line);
 }
 
 .inspectorIndex strong {
@@ -383,11 +441,11 @@
   justify-content: space-between;
   gap: 24px;
   padding: 17px 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--detail-line);
 }
 
 .inspectorValues dt {
-  color: var(--text-muted);
+  color: var(--detail-muted);
   font-size: 12px;
 }
 
@@ -403,13 +461,13 @@
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   padding: 16px 22px 22px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--detail-line);
 }
 
 .inspectorControls button:last-child:not(:disabled) {
-  border-color: var(--action);
-  background: var(--action);
-  color: white;
+  border-color: var(--detail-action);
+  background: var(--detail-action);
+  color: var(--detail-text);
 }
 
 .srOnly {
@@ -448,7 +506,7 @@
   }
 
   .instrumentStrip div:nth-child(-n + 2) {
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--detail-line);
   }
 
   .financialTable {

@@ -28,13 +28,36 @@ export function GridRowInspector({
   onClose,
 }: GridRowInspectorProps) {
   const closeButton = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLElement>(null);
   const item = items[selectedIndex];
 
   useEffect(() => {
     closeButton.current?.focus();
 
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = Array.from(dialog.current?.querySelectorAll<HTMLElement>(
+        "button:not(:disabled):not([aria-hidden='true']), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
+      ) ?? []);
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (!dialog.current?.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+      }
     }
 
     window.addEventListener("keydown", closeOnEscape);
@@ -58,15 +81,16 @@ export function GridRowInspector({
       <button
         className={styles.inspectorBackdrop}
         type="button"
-        aria-label="关闭网格行明细"
+        tabIndex={-1}
+        aria-hidden="true"
         onClick={onClose}
       />
       <aside
+        ref={dialog}
         className={styles.inspector}
         role="dialog"
         aria-modal="true"
         aria-labelledby="grid-row-inspector-title"
-        aria-label="网格行明细"
       >
         <header className={styles.inspectorHeader}>
           <div>

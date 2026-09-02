@@ -17,6 +17,16 @@ vi.mock("./grid-api", () => api);
 
 import { GridDetail, GridDetailView } from "./grid-detail";
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 const items: GridItem[] = [
   {
     sequence: 1,
@@ -108,6 +118,12 @@ beforeEach(() => {
 });
 
 describe("GridDetailView", () => {
+  it("keeps the internal algorithm version out of the product interface", () => {
+    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
+
+    expect(screen.queryByText(/android-v2\.1\.0/i)).not.toBeInTheDocument();
+  });
+
   it("renders every financial column, semantic grid labels, and calculation totals", () => {
     render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
 
@@ -148,7 +164,7 @@ describe("GridDetailView", () => {
     await user.click(within(dialog).getByRole("button", { name: "下一笔" }));
     dialog = screen.getByRole("dialog", { name: "网格行明细" });
     expect(dialog).toHaveTextContent("2 / 3");
-    expect(screen.getByRole("button", { name: "查看第 2 笔明细" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "查看第 2 笔明细", hidden: true })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -169,25 +185,59 @@ describe("GridDetailView", () => {
     );
 
     const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
-    expect(headers.indexOf("卖出价格")).toBeLessThan(headers.indexOf("买入价格"));
+    expect(headers).toEqual([
+      "序号",
+      "种类",
+      "档位",
+      "卖出价格",
+      "卖出数量",
+      "卖出金额",
+      "买入价格",
+      "买入数量",
+      "买入金额",
+      "盈利金额",
+      "盈利比例",
+      "本期留存利润",
+      "本期留存数量",
+    ]);
 
     await user.click(screen.getByRole("button", { name: "查看第 1 笔明细" }));
     const dialog = screen.getByRole("dialog", { name: "网格行明细" });
-    const labels = within(dialog).getAllByText(/价格|数量/).map((node) => node.textContent);
-    expect(labels.indexOf("卖出价格")).toBeLessThan(labels.indexOf("买入价格"));
+    expect(within(dialog).getAllByRole("term").map((node) => node.textContent)).toEqual([
+      "卖出价格",
+      "卖出数量",
+      "买入价格",
+      "买入数量",
+    ]);
     expect(dialog).toHaveTextContent("7.266");
     expect(dialog).toHaveTextContent("6.920");
   });
 
-  it("moves focus into the inspector and closes it with Escape", async () => {
+  it("traps modal focus, isolates the background, and restores the row trigger", async () => {
     const user = userEvent.setup();
     render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
 
-    await user.click(screen.getByRole("button", { name: "查看第 1 笔明细" }));
-    expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
+    const trigger = screen.getByRole("button", { name: "查看第 1 笔明细" });
+    const background = screen.getByRole("group", { name: "产品详情内容" });
+    await user.click(trigger);
+
+    const dialog = screen.getByRole("dialog", { name: "网格行明细" });
+    const close = within(dialog).getByRole("button", { name: "关闭" });
+    const next = within(dialog).getByRole("button", { name: "下一笔" });
+    expect(background).toHaveAttribute("aria-hidden", "true");
+    expect(background).toHaveAttribute("inert");
+    expect(close).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(next).toHaveFocus();
+    await user.tab();
+    expect(close).toHaveFocus();
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "网格行明细" })).not.toBeInTheDocument();
+    expect(background).not.toHaveAttribute("aria-hidden");
+    expect(background).not.toHaveAttribute("inert");
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 });
 
@@ -221,10 +271,33 @@ describe("GridDetail controller", () => {
     await waitFor(() => expect(screen.getByRole("row", { name: /计算汇总/ })).toHaveTextContent("2,000.000"));
   });
 
+  it("keeps the current table under a temporary recalculation status until success", async () => {
+    const request = deferred<GridTradeDetail>();
+    const recalculated = {
+      ...detail,
+      calculation: { ...detail.calculation, totalProfitAmount: "2000.000" },
+    };
+    api.getGridTrade.mockResolvedValue(detail);
+    api.recalculateGridTrade.mockReturnValue(request.promise);
+    render(<GridDetail id={detail.id} />);
+
+    await screen.findByRole("heading", { name: "黄金 ETF" });
+    await userEvent.click(screen.getByRole("button", { name: "重新计算" }));
+
+    expect(screen.getByRole("status", { name: "正在计算…" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /计算汇总/ })).toHaveTextContent("1,542.468");
+
+    request.resolve(recalculated);
+    await waitFor(() => {
+      expect(screen.queryByRole("status", { name: "正在计算…" })).not.toBeInTheDocument();
+    });
+  });
+
   it("preserves the current calculation after failure and allows retry", async () => {
+    const request = deferred<GridTradeDetail>();
     api.getGridTrade.mockResolvedValue(detail);
     api.recalculateGridTrade
-      .mockRejectedValueOnce(new ClientApiError(503, "UPSTREAM", "计算服务暂不可用", "req-4"))
+      .mockReturnValueOnce(request.promise)
       .mockResolvedValueOnce({
         ...detail,
         calculation: { ...detail.calculation, totalProfitAmount: "1800.000" },
@@ -234,9 +307,12 @@ describe("GridDetail controller", () => {
     await screen.findByRole("heading", { name: "黄金 ETF" });
     await userEvent.click(screen.getByRole("button", { name: "重新计算" }));
 
+    expect(screen.getByRole("status", { name: "正在计算…" })).toBeInTheDocument();
+    request.reject(new ClientApiError(503, "UPSTREAM", "计算服务暂不可用", "req-4"));
     expect(await screen.findByRole("alert")).toHaveTextContent("计算服务暂不可用");
     expect(screen.getByRole("alert")).toHaveTextContent("请求 ID：req-4");
     expect(screen.getByRole("row", { name: /计算汇总/ })).toHaveTextContent("1,542.468");
+    expect(screen.queryByRole("status", { name: "正在计算…" })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "重新计算" }));
     await waitFor(() => expect(screen.getByRole("row", { name: /计算汇总/ })).toHaveTextContent("1,800.000"));

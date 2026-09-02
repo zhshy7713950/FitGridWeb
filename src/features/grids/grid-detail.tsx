@@ -149,19 +149,43 @@ export function GridDetailView({
   actionError = null,
 }: GridDetailViewProps) {
   const [selectedSequence, setSelectedSequence] = useState<number | null>(null);
+  const rowTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const restoreFocusRef = useRef(false);
   const items = detail.calculation.items;
   const selectedIndex = selectedSequence === null
     ? null
     : items.findIndex((item) => item.sequence === selectedSequence);
+  const inspectorOpen = selectedIndex !== null && selectedIndex >= 0;
   const transactionColumns = detail.isShort
     ? [...sellColumns, ...buyColumns]
     : [...buyColumns, ...sellColumns];
   const columns = [...transactionColumns, ...resultColumns];
-  const closeInspector = useCallback(() => setSelectedSequence(null), []);
+  const closeInspector = useCallback(() => {
+    restoreFocusRef.current = true;
+    setSelectedSequence(null);
+  }, []);
+
+  useEffect(() => {
+    if (!inspectorOpen && restoreFocusRef.current) {
+      restoreFocusRef.current = false;
+      rowTriggerRef.current?.focus();
+    }
+  }, [inspectorOpen]);
 
   return (
-    <section className={styles.detail} aria-labelledby="grid-detail-title">
-      <header className={styles.heading}>
+    <section
+      className={styles.detail}
+      aria-labelledby="grid-detail-title"
+      aria-busy={recalculating}
+    >
+      <div
+        className={styles.detailContent}
+        role="group"
+        aria-label="产品详情内容"
+        aria-hidden={inspectorOpen ? true : undefined}
+        inert={inspectorOpen ? true : undefined}
+      >
+        <header className={styles.heading}>
         <div className={styles.titleBlock}>
           <Link href="/grids" className={styles.backLink}>网格产品 / {detail.productCode}</Link>
           <h1 id="grid-detail-title">{displayName(detail)}</h1>
@@ -170,11 +194,15 @@ export function GridDetailView({
             <span className={detail.isShort ? styles.short : styles.long}>
               {detail.isShort ? "做空" : "做多"}
             </span>
-            <span>算法 {detail.algorithmVersion}</span>
           </div>
         </div>
         <div className={styles.actions}>
-          <button type="button" disabled={recalculating} onClick={() => void onRecalculate()}>
+          <button
+            type="button"
+            disabled={recalculating}
+            aria-busy={recalculating}
+            onClick={() => void onRecalculate()}
+          >
             {recalculating ? "正在计算…" : "重新计算"}
           </button>
           <Link href={`/grids/${detail.id}/edit`}>编辑产品</Link>
@@ -182,9 +210,9 @@ export function GridDetailView({
             删除产品
           </button>
         </div>
-      </header>
+        </header>
 
-      <dl className={styles.instrumentStrip} aria-label="产品参数摘要">
+        <dl className={styles.instrumentStrip} aria-label="产品参数摘要">
         <div>
           <dt>最高价格</dt>
           <dd>{formatDecimal(detail.maxPrice)}</dd>
@@ -201,17 +229,26 @@ export function GridDetailView({
           <dt>最大振幅</dt>
           <dd>{detail.input.maxAmplitude}%</dd>
         </div>
-      </dl>
+        </dl>
 
-      {actionError ? (
-        <div className={styles.actionError} role="alert">
-          <span>{actionError.message}</span>
-          {actionError.requestId ? <small>请求 ID：{actionError.requestId}</small> : null}
-        </div>
-      ) : null}
+        {actionError ? (
+          <div className={styles.actionError} role="alert">
+            <span>{actionError.message}</span>
+            {actionError.requestId ? <small>请求 ID：{actionError.requestId}</small> : null}
+          </div>
+        ) : null}
 
-      <div className={styles.tableRegion} role="region" aria-label="网格计算结果" tabIndex={0}>
-        <table className={styles.financialTable}>
+        {recalculating ? (
+          <div className={styles.recalculateOverlay} role="status" aria-label="正在计算…">
+            <div className={styles.recalculateIndicator}>
+              <span className={styles.spinner} aria-hidden="true" />
+              <span>正在计算…</span>
+            </div>
+          </div>
+        ) : null}
+
+        <div className={styles.tableRegion} role="region" aria-label="网格计算结果" tabIndex={0}>
+          <table className={styles.financialTable}>
           <caption className={styles.srOnly}>产品 {displayName(detail)} 的网格计算结果</caption>
           <thead>
             <tr>
@@ -232,7 +269,10 @@ export function GridDetailView({
                       className={styles.rowButton}
                       aria-label={`查看第 ${item.sequence} 笔明细`}
                       aria-pressed={selected}
-                      onClick={() => setSelectedSequence(item.sequence)}
+                      onClick={(event) => {
+                        rowTriggerRef.current = event.currentTarget;
+                        setSelectedSequence(item.sequence);
+                      }}
                     >
                       {item.sequence}
                     </button>
@@ -260,10 +300,11 @@ export function GridDetailView({
               <td colSpan={4}>总盈利率 <strong>{formatDecimal(detail.calculation.totalProfitRate)}%</strong></td>
             </tr>
           </tfoot>
-        </table>
+          </table>
+        </div>
       </div>
 
-      {selectedIndex !== null && selectedIndex >= 0 ? (
+      {inspectorOpen ? (
         <GridRowInspector
           items={items}
           selectedIndex={selectedIndex}
