@@ -1,7 +1,14 @@
 import { requestJson } from "@/lib/api-client";
 import { isUiDemoMode } from "@/lib/ui-demo";
 
-import { listDemoGridTrades } from "./demo-grid-data";
+import {
+  createDemoGridTrade,
+  deleteDemoGridTrade,
+  getDemoGridTrade,
+  listDemoGridTrades,
+  recalculateDemoGridTrade,
+  updateDemoGridTrade,
+} from "./demo-grid-data";
 import type { GridTradeDetail, GridTradeMutationInput, GridTradePage } from "./types";
 
 export function listGridTrades(
@@ -20,10 +27,18 @@ export function listGridTrades(
 }
 
 export function getGridTrade(id: string, signal?: AbortSignal) {
+  if (isUiDemoMode()) {
+    return Promise.resolve().then(() => getDemoGridTrade(id));
+  }
+
   return requestJson<GridTradeDetail>(`/grid-trades/${id}`, { signal });
 }
 
 export function createGridTrade(input: GridTradeMutationInput) {
+  if (isUiDemoMode()) {
+    return Promise.resolve().then(() => createDemoGridTrade(input));
+  }
+
   return requestJson<GridTradeDetail>("/grid-trades", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -35,6 +50,10 @@ export function updateGridTrade(
   id: string,
   input: GridTradeMutationInput & { expectedUpdatedAt: string },
 ) {
+  if (isUiDemoMode()) {
+    return Promise.resolve().then(() => updateDemoGridTrade(id, input));
+  }
+
   return requestJson<GridTradeDetail>(`/grid-trades/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -43,9 +62,17 @@ export function updateGridTrade(
 }
 
 export function deleteGridTrade(id: string) {
+  if (isUiDemoMode()) {
+    return Promise.resolve().then(() => deleteDemoGridTrade(id));
+  }
+
   return requestJson<void>(`/grid-trades/${id}`, { method: "DELETE" });
 }
 
 export function recalculateGridTrade(id: string) {
+  if (isUiDemoMode()) {
+    return Promise.resolve().then(() => recalculateDemoGridTrade(id));
+  }
+
   return requestJson<GridTradeDetail>(`/grid-trades/${id}/recalculate`, { method: "POST" });
 }

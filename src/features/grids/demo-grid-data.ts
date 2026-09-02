@@ -1,4 +1,12 @@
-import type { GridTradePage, GridTradeSummary } from "./types";
+import { ClientApiError } from "@/lib/api-client";
+
+import type {
+  GridItem,
+  GridTradeDetail,
+  GridTradeMutationInput,
+  GridTradePage,
+  GridTradeSummary,
+} from "./types";
 
 const products = [
   ["黄金 ETF", "518880", "6.9200", "1500"],
@@ -28,20 +36,193 @@ const products = [
 ] as const;
 
 const createdAt = "2026-09-01T00:00:00.000Z";
+const mutationEpoch = Date.parse("2026-09-02T00:00:00.000Z");
 
-const demoProducts: GridTradeSummary[] = products.map(
-  ([productName, productCode, maxPrice, perShare], index) => ({
-    id: `demo-grid-${String(index + 1).padStart(2, "0")}`,
+// Frozen demo output: browser code never imports or executes the server algorithm.
+const calculationItems: GridItem[] = [
+  {
+    sequence: 1,
+    gridType: 1,
+    gear: "5",
+    buyPrice: "6.574",
+    buyCount: "300",
+    buyAmount: "1972.2",
+    sellPrice: "6.92",
+    sellCount: "300",
+    sellAmount: "2076",
+    profitAmount: "103.8",
+    profitRate: "5.2632",
+    keepProfit: "34.6",
+    keepCount: "5",
+  },
+  {
+    sequence: 2,
+    gridType: 2,
+    gear: "10",
+    buyPrice: "6.228",
+    buyCount: "300",
+    buyAmount: "1868.4",
+    sellPrice: "6.574",
+    sellCount: "300",
+    sellAmount: "1972.2",
+    profitAmount: "103.8",
+    profitRate: "5.5556",
+    keepProfit: "34.6",
+    keepCount: "5",
+  },
+  {
+    sequence: 3,
+    gridType: 3,
+    gear: "15",
+    buyPrice: "5.882",
+    buyCount: "300",
+    buyAmount: "1764.6",
+    sellPrice: "6.228",
+    sellCount: "300",
+    sellAmount: "1868.4",
+    profitAmount: "103.8",
+    profitRate: "5.8824",
+    keepProfit: "34.6",
+    keepCount: "5",
+  },
+];
+
+const calculationFixture: GridTradeDetail["calculation"] = {
+  items: calculationItems,
+  totalBuyAmount: "5605.2",
+  totalProfitAmount: "311.4",
+  totalProfitRate: "5.5556",
+};
+
+let demoRepository = new Map<string, GridTradeDetail>();
+let createdSequence = 0;
+let mutationSequence = 0;
+
+function inputForSeed(
+  productName: string,
+  productCode: string,
+  maxPrice: string,
+  perShare: string,
+  isShort: boolean,
+  sortOrder: number,
+): GridTradeMutationInput {
+  return {
     productName,
     productCode,
     maxPrice,
+    minTradeQuantity: "100",
+    gearAmplitude: "5",
     perShare,
-    isShort: index % 7 === 6,
+    keepShare: isShort ? 0 : 2,
+    increaseAmplitude: 5,
+    mediumAmplitude: isShort ? null : 15,
+    bigAmplitude: isShort ? null : 30,
+    maxAmplitude: 60,
+    isShort,
+    category: productName.endsWith("LOF") ? "LOF" : "ETF",
+    sortOrder,
+  };
+}
+
+function detailFromInput(
+  id: string,
+  input: GridTradeMutationInput,
+  timestamps: { createdAt: string; updatedAt: string },
+): GridTradeDetail {
+  return {
+    id,
+    productName: input.productName,
+    productCode: input.productCode,
+    maxPrice: input.maxPrice,
+    perShare: input.perShare,
+    isShort: input.isShort,
     algorithmVersion: "android-v2.1.0",
-    createdAt,
-    updatedAt: createdAt,
-  }),
-);
+    ...timestamps,
+    input: { ...input, algorithmVersion: "android-v2.1.0" },
+    calculation: {
+      ...calculationFixture,
+      items: calculationFixture.items.map((item) => ({ ...item })),
+    },
+  };
+}
+
+function cloneDetail(detail: GridTradeDetail): GridTradeDetail {
+  return {
+    ...detail,
+    input: { ...detail.input },
+    calculation: {
+      ...detail.calculation,
+      items: detail.calculation.items.map((item) => ({ ...item })),
+    },
+  };
+}
+
+function summary(detail: GridTradeDetail): GridTradeSummary {
+  return {
+    id: detail.id,
+    productName: detail.productName,
+    productCode: detail.productCode,
+    maxPrice: detail.maxPrice,
+    perShare: detail.perShare,
+    isShort: detail.isShort,
+    algorithmVersion: detail.algorithmVersion,
+    createdAt: detail.createdAt,
+    updatedAt: detail.updatedAt,
+  };
+}
+
+function nextMutationTimestamp(): string {
+  mutationSequence += 1;
+  return new Date(mutationEpoch + mutationSequence).toISOString();
+}
+
+function missingGrid(): ClientApiError {
+  return new ClientApiError(
+    404,
+    "GRID_TRADE_NOT_FOUND",
+    "网格产品不存在",
+    "demo-grid-not-found",
+  );
+}
+
+function productCodeConflict(): ClientApiError {
+  return new ClientApiError(
+    409,
+    "PRODUCT_CODE_CONFLICT",
+    "产品代码已存在",
+    "demo-product-code-conflict",
+    { productCode: ["当前账号已存在相同产品代码"] },
+  );
+}
+
+function findByProductCode(productCode: string): GridTradeDetail | undefined {
+  return Array.from(demoRepository.values()).find((detail) => detail.productCode === productCode);
+}
+
+function resetDemoGridTrades(): void {
+  demoRepository = new Map(
+    products.map(([productName, productCode, maxPrice, perShare], index) => {
+      const id = `demo-grid-${String(index + 1).padStart(2, "0")}`;
+      const input = inputForSeed(
+        productName,
+        productCode,
+        maxPrice,
+        perShare,
+        index % 7 === 6,
+        index,
+      );
+      return [id, detailFromInput(id, input, { createdAt, updatedAt: createdAt })];
+    }),
+  );
+  createdSequence = 0;
+  mutationSequence = 0;
+}
+
+export function resetDemoGridTradesForTests(): void {
+  resetDemoGridTrades();
+}
+
+resetDemoGridTrades();
 
 export function listDemoGridTrades({
   q,
@@ -51,20 +232,78 @@ export function listDemoGridTrades({
   cursor?: string;
 } = {}): GridTradePage {
   const normalized = q?.trim().toLocaleLowerCase("zh-CN") ?? "";
+  const allProducts = Array.from(demoRepository.values());
   const filtered = normalized
-    ? demoProducts.filter((item) =>
-        `${item.productName} ${item.productCode}`.toLocaleLowerCase("zh-CN").includes(normalized),
+    ? allProducts.filter((item) =>
+        `${item.productName ?? ""} ${item.productCode}`
+          .toLocaleLowerCase("zh-CN")
+          .includes(normalized),
       )
-    : demoProducts;
+    : allProducts;
   const start = cursor?.startsWith("demo:")
     ? Number.parseInt(cursor.slice("demo:".length), 10)
     : 0;
   const safeStart = Number.isSafeInteger(start) && start >= 0 ? start : 0;
-  const items = filtered.slice(safeStart, safeStart + 20);
+  const items = filtered.slice(safeStart, safeStart + 20).map(summary);
   const nextOffset = safeStart + items.length;
 
   return {
     items,
     nextCursor: nextOffset < filtered.length ? `demo:${nextOffset}` : null,
   };
+}
+
+export function getDemoGridTrade(id: string): GridTradeDetail {
+  const detail = demoRepository.get(id);
+  if (!detail) throw missingGrid();
+  return cloneDetail(detail);
+}
+
+export function createDemoGridTrade(input: GridTradeMutationInput): GridTradeDetail {
+  if (findByProductCode(input.productCode)) throw productCodeConflict();
+
+  createdSequence += 1;
+  const id = `demo-grid-created-${String(createdSequence).padStart(2, "0")}`;
+  const timestamp = nextMutationTimestamp();
+  const detail = detailFromInput(id, input, {
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+  demoRepository.set(id, detail);
+  return cloneDetail(detail);
+}
+
+export function updateDemoGridTrade(
+  id: string,
+  input: GridTradeMutationInput & { expectedUpdatedAt: string },
+): GridTradeDetail {
+  const existing = demoRepository.get(id);
+  if (!existing) throw missingGrid();
+  if (input.expectedUpdatedAt !== existing.updatedAt) {
+    throw new ClientApiError(
+      409,
+      "EDIT_CONFLICT",
+      "产品已被其他请求更新",
+      "demo-edit-conflict",
+    );
+  }
+  const sameCode = findByProductCode(input.productCode);
+  if (sameCode && sameCode.id !== id) throw productCodeConflict();
+
+  const nextInput = { ...input } as GridTradeMutationInput & { expectedUpdatedAt?: string };
+  delete nextInput.expectedUpdatedAt;
+  const updated = detailFromInput(id, nextInput, {
+    createdAt: existing.createdAt,
+    updatedAt: nextMutationTimestamp(),
+  });
+  demoRepository.set(id, updated);
+  return cloneDetail(updated);
+}
+
+export function deleteDemoGridTrade(id: string): void {
+  if (!demoRepository.delete(id)) throw missingGrid();
+}
+
+export function recalculateDemoGridTrade(id: string): GridTradeDetail {
+  return getDemoGridTrade(id);
 }

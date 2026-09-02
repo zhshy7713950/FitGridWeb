@@ -67,7 +67,8 @@ async function stop(child: ChildProcess): Promise<void> {
 
 it("runs the complete database-free UI demo at desktop and mobile breakpoints", async () => {
   const port = await availablePort();
-  const baseUrl = `http://127.0.0.1:${port}`;
+  const appBasePath = process.env.NEXT_BASE_PATH === "/fitgrid" ? "/fitgrid" : "";
+  const baseUrl = `http://127.0.0.1:${port}${appBasePath}`;
   const originalNextEnv = await readFile(nextEnvPath, "utf8");
   let output = "";
   let browser: Browser | undefined;
@@ -123,6 +124,9 @@ it("runs the complete database-free UI demo at desktop and mobile breakpoints", 
     expect(main).not.toBeNull();
     expect(banner!.y + banner!.height).toBeLessThanOrEqual(navigation!.y + 1);
     expect(navigation!.y + navigation!.height).toBeLessThanOrEqual(main!.y + 1);
+    expect(await page.getByRole("navigation", { name: "主导航" }).evaluate(
+      (element) => window.getComputedStyle(element).position,
+    )).not.toBe("fixed");
 
     const rows = page.locator("tbody tr");
     await expect.poll(() => rows.count()).toBe(20);
@@ -144,6 +148,17 @@ it("runs the complete database-free UI demo at desktop and mobile breakpoints", 
     await expect.poll(() => page.getByRole("status", { name: "正在刷新…" }).count()).toBe(1);
     await expect.poll(() => page.getByRole("status", { name: "正在刷新…" }).count()).toBe(0);
 
+    await page.getByRole("link", { name: "黄金 ETF" }).click();
+    await page.waitForURL(`${baseUrl}/grids/demo-grid-01`);
+    await page.getByRole("button", { name: "查看第 1 笔明细" }).click();
+    const mobileInspector = page.getByRole("dialog", { name: "网格行明细" });
+    expect(await mobileInspector.isVisible()).toBe(true);
+    expect(await mobileInspector.textContent()).toContain("1 / 3");
+    await page.getByRole("button", { name: "关闭" }).click();
+    await expect.poll(() => mobileInspector.count()).toBe(0);
+    await page.getByRole("link", { name: /网格产品 \/ 518880/ }).click();
+    await page.waitForURL(`${baseUrl}/grids`);
+
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect.poll(() => page.locator("tbody tr").count()).toBe(20);
@@ -160,6 +175,21 @@ it("runs the complete database-free UI demo at desktop and mobile breakpoints", 
       (element) => Number.parseFloat(window.getComputedStyle(element).fontSize),
     );
     expect(directionFontSize).toBeGreaterThanOrEqual(14);
+
+    await page.getByRole("link", { name: "黄金 ETF" }).click();
+    await page.waitForURL(`${baseUrl}/grids/demo-grid-01`);
+    await page.getByRole("button", { name: "查看第 1 笔明细" }).click();
+    expect(await page.getByRole("dialog", { name: "网格行明细" }).isVisible()).toBe(true);
+    await page.getByRole("button", { name: "关闭" }).click();
+    await page.getByRole("button", { name: "重新计算" }).click();
+    await expect.poll(() => page.getByRole("status", { name: "正在计算…" }).count()).toBe(0);
+    await page.getByRole("button", { name: "删除产品" }).click();
+    await page.getByLabel("输入产品代码确认").fill("518880");
+    await Promise.all([
+      page.waitForURL(`${baseUrl}/grids`),
+      page.getByRole("button", { name: "确认永久删除" }).click(),
+    ]);
+    await expect.poll(() => page.getByRole("link", { name: "黄金 ETF" }).count()).toBe(0);
 
     await page.getByRole("button", { name: "退出登录" }).click();
     await page.waitForURL(`${baseUrl}/login`);
