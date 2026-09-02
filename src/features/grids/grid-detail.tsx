@@ -114,13 +114,17 @@ export function GridDetail({ id }: { id: string }) {
   }
 
   if (loading) {
-    return <div className={styles.pageStatus} role="status">正在加载产品…</div>;
+    return (
+      <div className={`${styles.detail} ${styles.pageStatus}`} role="status">
+        正在加载产品…
+      </div>
+    );
   }
 
   if (loadError || !detail) {
     const error = loadError ?? { message: "加载产品失败，请重试", retryable: true };
     return (
-      <div className={styles.loadError} role="alert">
+      <div className={`${styles.detail} ${styles.loadError}`} role="alert">
         <div>
           <strong>{error.message}</strong>
           {error.requestId ? <small>请求 ID：{error.requestId}</small> : null}

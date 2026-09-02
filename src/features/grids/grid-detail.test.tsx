@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
 vi.mock("./grid-api", () => api);
 
 import { GridDetail, GridDetailView } from "./grid-detail";
+import styles from "./grid-detail.module.css";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -242,6 +243,19 @@ describe("GridDetailView", () => {
 });
 
 describe("GridDetail controller", () => {
+  it("keeps loading and load-error states inside the detail palette scope", async () => {
+    api.getGridTrade.mockReturnValue(new Promise(() => undefined));
+    const loadingRender = render(<GridDetail id={detail.id} />);
+
+    expect(screen.getByRole("status")).toHaveClass(styles.detail, styles.pageStatus);
+
+    loadingRender.unmount();
+    api.getGridTrade.mockRejectedValue(new Error("offline"));
+    render(<GridDetail id={detail.id} />);
+
+    expect(await screen.findByRole("alert")).toHaveClass(styles.detail, styles.loadError);
+  });
+
   it("loads the authoritative detail once on mount", async () => {
     api.getGridTrade.mockResolvedValue(detail);
 
