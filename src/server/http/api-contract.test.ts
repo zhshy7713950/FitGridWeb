@@ -120,6 +120,25 @@ describe("OpenAPI route coverage", () => {
     });
   });
 
+  it("documents password mutation throttling and malformed invitation tokens", async () => {
+    const source = await readFile(
+      path.join(process.cwd(), "docs/fit-replication/contracts/openapi.yaml"),
+      "utf8",
+    );
+    const document = parse(source) as {
+      paths: Record<string, Record<string, {
+        responses?: Record<string, { $ref?: string }>;
+      }>>;
+    };
+
+    expect(document.paths["/auth/change-password"]?.post?.responses?.["429"]).toEqual({
+      $ref: "#/components/responses/RateLimited",
+    });
+    expect(document.paths["/invitations/{token}"]?.get?.responses?.["422"]).toEqual({
+      $ref: "#/components/responses/ValidationError",
+    });
+  });
+
   it("requires both fields in the invitation status response contract", async () => {
     const source = await readFile(
       path.join(process.cwd(), "docs/fit-replication/contracts/openapi.yaml"),

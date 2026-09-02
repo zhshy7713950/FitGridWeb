@@ -146,10 +146,13 @@ describe("InvitationPageView", () => {
     expect(screen.getByLabelText("密码")).toHaveValue("strong-password-1");
   });
 
-  it("turns a 404 during acceptance into a field-free invalid state", async () => {
+  it.each([
+    [404, "INVITATION_NOT_FOUND"],
+    [422, "INVITATION_INVALID"],
+  ])("turns a %i during acceptance into one complete field-free invalid page", async (status, code) => {
     const accept = vi.fn().mockRejectedValue(new ClientApiError(
-      404,
-      "INVITATION_NOT_FOUND",
+      status,
+      code,
       "邀请不存在或已失效",
       "01GONE",
     ));
@@ -158,7 +161,13 @@ describe("InvitationPageView", () => {
     await userEvent.click(screen.getByRole("button", { name: "创建账号" }));
 
     expect(await screen.findByRole("heading", { name: "邀请无效或已失效" })).toBeInTheDocument();
+    expect(screen.queryByText("邀请有效")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "创建你的账户" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "前往登录" })).toHaveAttribute("href", "/login");
+    expect(screen.queryByLabelText("用户名")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("密码")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("确认密码")).not.toBeInTheDocument();
   });
 
   it("prevents synchronous repeated acceptance while the request is pending", async () => {

@@ -152,19 +152,29 @@ describe.sequential("database-free UI demo", () => {
   async function newPage({
     width = 390,
     height = 844,
-    clipboardUnavailable = false,
+    clipboardWriteRejects = false,
   }: {
     width?: number;
     height?: number;
-    clipboardUnavailable?: boolean;
+    clipboardWriteRejects?: boolean;
   } = {}): Promise<{ page: Page; consoleErrors: string[] }> {
     if (!browser) throw new Error("UI demo browser did not start");
     activeContext = await browser.newContext({ viewport: { width, height } });
-    if (clipboardUnavailable) {
+    if (clipboardWriteRejects) {
       await activeContext.addInitScript(() => {
+        let clipboardWriteAttempts = 0;
         Object.defineProperty(navigator, "clipboard", {
           configurable: true,
-          value: undefined,
+          value: {
+            writeText: () => {
+              clipboardWriteAttempts += 1;
+              return Promise.reject(new DOMException("Clipboard permission denied", "NotAllowedError"));
+            },
+          },
+        });
+        Object.defineProperty(window, "__fitgridClipboardWriteAttempts", {
+          configurable: true,
+          get: () => clipboardWriteAttempts,
         });
       });
     }
@@ -258,7 +268,7 @@ describe.sequential("database-free UI demo", () => {
     const { page, consoleErrors } = await newPage({
       width: 1440,
       height: 900,
-      clipboardUnavailable: true,
+      clipboardWriteRejects: true,
     });
     await page.goto(`${baseUrl}/admin`, { waitUntil: "domcontentloaded" });
     await expect.poll(() => page.getByRole("heading", { name: "账号管理" }).isVisible())
@@ -275,10 +285,14 @@ describe.sequential("database-free UI demo", () => {
     const invitationPath = new URL(invitationUrl).pathname;
     expect(invitationPath).toMatch(new RegExp(`^${appBasePath}/invite/demo-admin-invitation-\\d+$`));
     expectExactlyOneBasePrefix(invitationPath);
+    expect(await page.evaluate(() => typeof navigator.clipboard?.writeText)).toBe("function");
 
     await page.getByRole("button", { name: "复制邀请链接" }).click();
     const manualCopyAlert = page.getByText("无法自动复制，请选中上方链接并手动复制。");
     await expect.poll(() => manualCopyAlert.isVisible()).toBe(true);
+    expect(await page.evaluate(() => (
+      window as Window & { __fitgridClipboardWriteAttempts?: number }
+    ).__fitgridClipboardWriteAttempts)).toBe(1);
     expect(await invitationInput.evaluate((input) => ({
       active: document.activeElement === input,
       end: (input as HTMLInputElement).selectionEnd,

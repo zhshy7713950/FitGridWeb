@@ -56,6 +56,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   document.body.style.removeProperty("overflow");
 });
 
@@ -433,13 +434,17 @@ describe("administrator invitation creation", () => {
     await flushPromises();
     expect(screen.getByRole("alert")).toHaveTextContent("请求过于频繁");
     expect(screen.getByRole("alert")).toHaveTextContent("请求 ID：01RATE");
+    expect(screen.getByRole("alert")).toHaveTextContent("2 秒后可重试");
     expect(screen.getByRole("button", { name: "2 秒后重试" })).toBeDisabled();
     fireEvent.submit(screen.getByRole("button", { name: "2 秒后重试" }).closest("form")!);
     expect(createInvitation).toHaveBeenCalledTimes(1);
 
-    act(() => vi.advanceTimersByTime(2_000));
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(screen.getByRole("alert")).toHaveTextContent("1 秒后可重试");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("2 秒后可重试");
+    act(() => vi.advanceTimersByTime(1_000));
     expect(screen.getByRole("button", { name: "创建邀请" })).toBeEnabled();
-    vi.useRealTimers();
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/\d+ 秒后可重试/);
   });
 });
 
@@ -523,6 +528,91 @@ describe("administrator status safety", () => {
     expect(screen.getByRole("button", { name: "禁用 backup.admin", hidden: true })).toBeEnabled();
     expect(within(screen.getByRole("row", { name: /backup.admin/, hidden: true })).getByText("启用"))
       .toBeInTheDocument();
+  });
+
+  it("uses an absolute Retry-After gate for status confirmation and still allows cancellation", async () => {
+    vi.useFakeTimers();
+    const updateStatus = vi.fn<AdminUserListController["updateStatus"]>()
+      .mockRejectedValueOnce(new ClientApiError(
+        429,
+        "RATE_LIMITED",
+        "状态更新过于频繁",
+        "01STATUSRATE",
+        undefined,
+        2,
+      ))
+      .mockResolvedValueOnce({ ...member, status: "disabled" });
+    render(
+      <AdminWorkspaceView
+        currentUserId="admin-1"
+        controller={controller({ updateStatus })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "禁用 member.one" }));
+    fireEvent.submit(screen.getByRole("button", { name: "确认禁用" }).closest("form")!);
+    await flushPromises();
+
+    const dialog = screen.getByRole("dialog", { name: "确认禁用账号" });
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("请求 ID：01STATUSRATE");
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("2 秒后可重试");
+    const blocked = within(dialog).getByRole("button", { name: "2 秒后重试" });
+    expect(blocked).toBeDisabled();
+    act(() => {
+      blocked.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      blocked.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(updateStatus).toHaveBeenCalledTimes(1);
+
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(within(dialog).getByRole("button", { name: "1 秒后重试" })).toBeDisabled();
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("1 秒后可重试");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("dialog", { name: "确认禁用账号" })).not.toBeInTheDocument();
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "禁用 member.one" }));
+    const reopened = screen.getByRole("dialog", { name: "确认禁用账号" });
+    const stillBlocked = within(reopened).getByRole("button", { name: "1 秒后重试" });
+    expect(stillBlocked).toBeDisabled();
+    fireEvent.submit(stillBlocked.closest("form")!);
+    expect(updateStatus).toHaveBeenCalledTimes(1);
+
+    act(() => vi.advanceTimersByTime(1_000));
+    const available = within(reopened).getByRole("button", { name: "确认禁用" });
+    expect(available).toBeEnabled();
+    fireEvent.submit(available.closest("form")!);
+    await flushPromises();
+    expect(updateStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears a status retry timer when the workspace unmounts", async () => {
+    vi.useFakeTimers();
+    const baselineTimers = vi.getTimerCount();
+    const updateStatus = vi.fn().mockRejectedValue(new ClientApiError(
+      429,
+      "RATE_LIMITED",
+      "状态更新过于频繁",
+      "01UNMOUNT",
+      undefined,
+      5,
+    ));
+    const view = render(
+      <AdminWorkspaceView
+        currentUserId="admin-1"
+        controller={controller({ updateStatus })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "禁用 member.one" }));
+    fireEvent.submit(screen.getByRole("button", { name: "确认禁用" }).closest("form")!);
+    await flushPromises();
+    expect(vi.getTimerCount()).toBeGreaterThan(baselineTimers);
+    const timersBeforeUnmount = vi.getTimerCount();
+
+    view.unmount();
+    expect(vi.getTimerCount()).toBeLessThan(timersBeforeUnmount);
   });
 
   it("traps focus, isolates the document, locks scroll, and restores everything on Escape", async () => {

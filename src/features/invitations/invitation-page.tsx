@@ -145,18 +145,30 @@ export function InvitationPageView({
   }
 
   if (state.kind !== "valid") {
-    const copy = statusCopy(state.kind);
-    return (
-      <InvitationFrame step="verify">
-        <section className={styles.statusPanel}>
-          <span className={`${styles.statusMark} ${styles.errorMark}`} aria-hidden="true">!</span>
-          <h1>{copy.title}</h1>
-          <p>{copy.detail}</p>
-          <Link className={styles.secondaryAction} href="/login">前往登录</Link>
-        </section>
-      </InvitationFrame>
-    );
+    return <TerminalInvitationState kind={state.kind} />;
   }
+
+  return (
+    <ValidInvitationState
+      state={{ kind: "valid", expiresAt: state.expiresAt }}
+      accept={accept}
+      onAccepted={onAccepted}
+    />
+  );
+}
+
+function ValidInvitationState({
+  state,
+  accept,
+  onAccepted,
+}: {
+  state: { kind: "valid"; expiresAt: string | null };
+  accept: FormAcceptRequest;
+  onAccepted: () => void;
+}) {
+  const [acceptanceInvalid, setAcceptanceInvalid] = useState(false);
+
+  if (acceptanceInvalid) return <TerminalInvitationState kind="invalid" />;
 
   return (
     <InvitationFrame step="account">
@@ -169,7 +181,25 @@ export function InvitationPageView({
             <p className={styles.expiry}>有效期至 <time dateTime={state.expiresAt}>{readableTime(state.expiresAt)}</time></p>
           ) : null}
         </div>
-        <RegistrationForm accept={accept} onAccepted={onAccepted} />
+        <RegistrationForm
+          accept={accept}
+          onAccepted={onAccepted}
+          onInvalid={() => setAcceptanceInvalid(true)}
+        />
+      </section>
+    </InvitationFrame>
+  );
+}
+
+function TerminalInvitationState({ kind }: { kind: "used" | "expired" | "invalid" }) {
+  const copy = statusCopy(kind);
+  return (
+    <InvitationFrame step="verify">
+      <section className={styles.statusPanel}>
+        <span className={`${styles.statusMark} ${styles.errorMark}`} aria-hidden="true">!</span>
+        <h1>{copy.title}</h1>
+        <p>{copy.detail}</p>
+        <Link className={styles.secondaryAction} href="/login">前往登录</Link>
       </section>
     </InvitationFrame>
   );
@@ -225,16 +255,17 @@ function RetryableStatusPanel({
 function RegistrationForm({
   accept,
   onAccepted,
+  onInvalid,
 }: {
   accept: FormAcceptRequest;
   onAccepted: () => void;
+  onInvalid: () => void;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [pending, setPending] = useState(false);
   const [accepted, setAccepted] = useState(false);
-  const [unavailable, setUnavailable] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState("");
   const [retryAfter, setRetryAfter] = useState(0);
@@ -297,10 +328,14 @@ function RegistrationForm({
       await accept(username.trim(), password, controller.signal);
     } catch (caught) {
       if (!isCurrent()) return;
-      if (caught instanceof ClientApiError && caught.status === 404) {
+      const hasCredentialFieldErrors = caught instanceof ClientApiError
+        && ["username", "password", "confirmation"]
+          .some((field) => caught.fieldErrors?.[field]?.length);
+      if (caught instanceof ClientApiError
+        && (caught.status === 404 || (caught.status === 422 && !hasCredentialFieldErrors))) {
         setPassword("");
         setConfirmation("");
-        setUnavailable(true);
+        onInvalid();
       } else if (caught instanceof ClientApiError) {
         setFieldErrors(caught.fieldErrors ?? {});
         setRetryAfter(caught.status === 429 ? caught.retryAfterSeconds ?? 1 : 0);
@@ -320,17 +355,6 @@ function RegistrationForm({
     setConfirmation("");
     setAccepted(true);
     onAccepted();
-  }
-
-  if (unavailable) {
-    const copy = statusCopy("invalid");
-    return (
-      <section className={styles.inlineStatus}>
-        <span className={`${styles.statusMark} ${styles.errorMark}`} aria-hidden="true">!</span>
-        <h1>{copy.title}</h1>
-        <p>{copy.detail}</p>
-      </section>
-    );
   }
 
   if (accepted) {

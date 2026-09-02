@@ -116,6 +116,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /invitations/{token}:
     parameters:
@@ -134,6 +136,8 @@ paths:
                 $ref: '#/components/schemas/InvitationStatusResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
         '429':
           $ref: '#/components/responses/RateLimited'
 

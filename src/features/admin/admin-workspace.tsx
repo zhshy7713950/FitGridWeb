@@ -100,6 +100,7 @@ export function AdminWorkspaceView({
   const [confirmation, setConfirmation] = useState<StatusConfirmation | null>(null);
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<VisibleError | null>(null);
+  const [statusRetryAfter, setStatusRetryAfter] = useState(0);
   const invitationLock = useRef(false);
   const statusLock = useRef(false);
   const invitationController = useRef<AbortController | null>(null);
@@ -107,6 +108,7 @@ export function AdminWorkspaceView({
   const invitationGeneration = useRef(0);
   const invitationVersion = useRef(0);
   const statusGeneration = useRef(0);
+  const statusRetryDeadline = useRef(0);
   const mounted = useRef(false);
   const inviteInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -126,6 +128,7 @@ export function AdminWorkspaceView({
       statusController.current = null;
       invitationLock.current = false;
       statusLock.current = false;
+      statusRetryDeadline.current = 0;
     };
   }, []);
 
@@ -136,6 +139,18 @@ export function AdminWorkspaceView({
     }, 1_000);
     return () => window.clearInterval(timer);
   }, [invitationRetryAfter]);
+
+  useEffect(() => {
+    if (statusRetryAfter <= 0) return;
+    const remainingMilliseconds = Math.max(1, statusRetryDeadline.current - Date.now());
+    const timer = window.setTimeout(() => {
+      setStatusRetryAfter(Math.max(
+        0,
+        Math.ceil((statusRetryDeadline.current - Date.now()) / 1_000),
+      ));
+    }, Math.min(1_000, remainingMilliseconds));
+    return () => window.clearTimeout(timer);
+  }, [statusRetryAfter]);
 
   async function submitInvitation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -197,13 +212,14 @@ export function AdminWorkspaceView({
 
   const closeConfirmation = useCallback(() => {
     if (statusLock.current) return;
-    setStatusError(null);
     setConfirmation(null);
   }, []);
 
   async function confirmStatusChange(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!confirmation || statusLock.current) return;
+    if (!confirmation || statusLock.current || Date.now() < statusRetryDeadline.current) return;
+    statusRetryDeadline.current = 0;
+    setStatusRetryAfter(0);
     statusLock.current = true;
     setPendingUserId(confirmation.user.id);
     setStatusError(null);
@@ -222,7 +238,16 @@ export function AdminWorkspaceView({
     } catch (error) {
       if (!mounted.current || requestGeneration !== statusGeneration.current) return;
       if (error instanceof Error && error.name === "AbortError") return;
-      setStatusError(visibleError(error, "账号状态更新失败，请重试"));
+      const publicError = visibleError(error, "账号状态更新失败，请重试");
+      setStatusError(publicError);
+      if (error instanceof ClientApiError && error.status === 429) {
+        const retryAfter = publicError.retryAfterSeconds ?? 1;
+        statusRetryDeadline.current = Date.now() + retryAfter * 1_000;
+        setStatusRetryAfter(retryAfter);
+      } else {
+        statusRetryDeadline.current = 0;
+        setStatusRetryAfter(0);
+      }
     } finally {
       if (statusController.current === requestController) statusController.current = null;
       if (mounted.current && requestGeneration === statusGeneration.current) {
@@ -283,7 +308,12 @@ export function AdminWorkspaceView({
           </div>
           {ttlError ? <span id="admin-invitation-ttl-error" className={styles.fieldError}>{ttlError}</span> : null}
           {!ttlError ? <small id="admin-invitation-ttl-hint">允许 1–168 小时，默认 24 小时</small> : null}
-          {invitationError ? <ErrorMessage error={invitationError} /> : null}
+          {invitationError ? (
+            <ErrorMessage error={{
+              ...invitationError,
+              retryAfterSeconds: invitationRetryAfter || undefined,
+            }} />
+          ) : null}
         </form>
       </section>
 
@@ -390,7 +420,11 @@ export function AdminWorkspaceView({
                             ? `不能禁用 ${user.username}（当前账号）`
                             : `${targetStatus === "disabled" ? "禁用" : "启用"} ${user.username}`}
                           onClick={() => {
-                            setStatusError(null);
+                            if (Date.now() >= statusRetryDeadline.current) {
+                              statusRetryDeadline.current = 0;
+                              setStatusRetryAfter(0);
+                              setStatusError(null);
+                            }
                             setConfirmation({ user, status: targetStatus });
                           }}
                         >
@@ -441,7 +475,10 @@ export function AdminWorkspaceView({
         <StatusConfirmationDialog
           confirmation={confirmation}
           pending={pendingUserId === confirmation.user.id}
-          error={statusError}
+          retryAfter={statusRetryAfter}
+          error={statusError
+            ? { ...statusError, retryAfterSeconds: statusRetryAfter || undefined }
+            : null}
           onClose={closeConfirmation}
           onConfirm={confirmStatusChange}
         />
@@ -453,12 +490,14 @@ export function AdminWorkspaceView({
 function StatusConfirmationDialog({
   confirmation,
   pending,
+  retryAfter,
   error,
   onClose,
   onConfirm,
 }: {
   confirmation: StatusConfirmation;
   pending: boolean;
+  retryAfter: number;
   error: VisibleError | null;
   onClose: () => void;
   onConfirm: (event: FormEvent<HTMLFormElement>) => void;
@@ -558,8 +597,12 @@ function StatusConfirmationDialog({
           {error ? <ErrorMessage error={error} /> : null}
           <div className={styles.dialogActions}>
             <button ref={cancelRef} type="button" disabled={pending} onClick={onClose}>取消</button>
-            <button type="submit" disabled={pending} className={confirmation.status === "disabled" ? styles.danger : styles.enable}>
-              {pending ? `正在${action}…` : `确认${action}`}
+            <button type="submit" disabled={pending || retryAfter > 0} className={confirmation.status === "disabled" ? styles.danger : styles.enable}>
+              {pending
+                ? `正在${action}…`
+                : retryAfter > 0
+                  ? `${retryAfter} 秒后重试`
+                  : `确认${action}`}
             </button>
           </div>
         </form>
