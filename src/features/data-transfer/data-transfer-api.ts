@@ -14,20 +14,28 @@ const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
 
 function exportFilename(contentDisposition: string | null, format: ExportFormat): string {
   const fallback = `fitgridweb-${format}.json`;
-  if (!contentDisposition || CONTROL_CHARACTER.test(contentDisposition)) return fallback;
+  if (
+    !contentDisposition ||
+    CONTROL_CHARACTER.test(contentDisposition) ||
+    contentDisposition.includes(",")
+  ) return fallback;
 
   const parts = contentDisposition.split(";");
   if (parts.shift()?.trim().toLowerCase() !== "attachment") return fallback;
-  if (parts.some((part) => /^\s*filename\s*\*/i.test(part))) return fallback;
+  const filenameParts = parts.filter((part) => /^\s*filename\b/i.test(part));
+  if (
+    filenameParts.length !== 1 ||
+    /^\s*filename\s*\*/i.test(filenameParts[0])
+  ) return fallback;
 
-  const filenames = parts.flatMap((part) => {
-    const match = part.match(/^\s*filename\s*=\s*(?:"([^"]*)"|([^"\s;]+))\s*$/i);
-    return match ? [match[1] ?? match[2]] : [];
-  });
-  if (filenames.length !== 1) return fallback;
+  const parsedFilename = filenameParts[0].match(
+    /^\s*filename\s*=\s*(?:"([^"]*)"|([^"\s;]+))\s*$/i,
+  );
+  if (!parsedFilename) return fallback;
 
-  const match = filenames[0].match(EXPORT_FILENAME);
-  return match?.[1] === format ? filenames[0] : fallback;
+  const filename = parsedFilename[1] ?? parsedFilename[2];
+  const match = filename.match(EXPORT_FILENAME);
+  return match?.[1] === format ? filename : fallback;
 }
 
 export async function previewImport(file: File): Promise<ImportPreview> {

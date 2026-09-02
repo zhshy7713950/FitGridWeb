@@ -139,6 +139,18 @@ describe("downloadExport", () => {
       "an RFC5987 override beside a safe filename",
       "attachment; filename=\"fitgridweb-web-2026-09-02.json\"; filename*=UTF-8''surprise.json",
     ],
+    [
+      "an empty duplicate filename parameter",
+      "attachment; filename=\"fitgridweb-web-2026-09-02.json\"; filename=",
+    ],
+    [
+      "an unterminated duplicate filename parameter",
+      "attachment; filename=\"fitgridweb-web-2026-09-02.json\"; filename=\"unterminated",
+    ],
+    [
+      "comma-combined dispositions",
+      "attachment; foo=a, attachment; filename=\"fitgridweb-web-2026-09-02.json\"",
+    ],
     ["a filename for the other format", "attachment; filename=\"fitgridweb-android-2026-09-02.json\""],
   ])("uses the requested-format fallback for %s", async (_case, contentDisposition) => {
     const headers = contentDisposition ? { "content-disposition": contentDisposition } : undefined;
