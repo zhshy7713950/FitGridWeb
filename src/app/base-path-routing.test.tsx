@@ -13,8 +13,12 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("@/server/auth/session", () => ({ getOptionalSession }));
+vi.mock("@/features/invitations/invitation-page", () => ({
+  InvitationPage: ({ token }: { token: string }) => <p>invite:{token}</p>,
+}));
 
 import ProtectedLayout from "./(protected)/layout";
+import InvitePage from "./invite/[token]/page";
 import LoginPage from "./login/page";
 import HomePage from "./page";
 
@@ -70,5 +74,14 @@ describe("server redirects with a configured Next.js base path", () => {
 
     expect(getOptionalSession).not.toHaveBeenCalled();
     expect(result.props.user).toMatchObject({ username: "demo", role: "admin" });
+  });
+
+  it("awaits public invitation params without entering the protected layout", async () => {
+    const result = await InvitePage({ params: Promise.resolve({ token: "public-token" }) });
+    const markup = renderToStaticMarkup(result);
+
+    expect(markup).toContain("invite:public-token");
+    expect(getOptionalSession).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
   });
 });

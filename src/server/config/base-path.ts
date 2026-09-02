@@ -15,3 +15,8 @@ export function normalizeBasePath(value?: string): "" | typeof PRODUCTION_BASE_P
 export function cookiePath(value?: string): "/" | typeof PRODUCTION_BASE_PATH {
   return normalizeBasePath(value) || "/";
 }
+
+export function invitationUrl(requestUrl: string, token: string, value?: string): string {
+  const basePath = normalizeBasePath(value);
+  return new URL(`${basePath}/invite/${encodeURIComponent(token)}`, requestUrl).toString();
+}

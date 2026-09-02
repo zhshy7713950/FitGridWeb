@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { requireAdmin } from "@/server/auth/session";
+import { invitationUrl } from "@/server/config/base-path";
 import { apiHandler, json, parseJsonBody } from "@/server/http/route-factory";
 import { getRuntimeServices } from "@/server/runtime/services";
 import { ownerMutationRequests } from "@/server/security/request-protection";
@@ -14,7 +15,7 @@ export async function POST(request: Request): Promise<Response> {
     ownerMutationRequests.consume(admin.id);
     const body = bodySchema.parse(await parseJsonBody(request));
     const invitation = await services.invitations.create(admin.id, body.expiresInHours);
-    const inviteUrl = new URL(`/accept-invitation/${invitation.token}`, request.url).toString();
+    const inviteUrl = invitationUrl(request.url, invitation.token, process.env.APP_BASE_PATH);
     return json(
       { id: invitation.id, inviteUrl, expiresAt: invitation.expiresAt },
       201,

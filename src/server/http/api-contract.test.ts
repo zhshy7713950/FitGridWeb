@@ -2,7 +2,15 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { parse } from "yaml";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { getRuntimeServices, requireAdmin } = vi.hoisted(() => ({
+  getRuntimeServices: vi.fn(),
+  requireAdmin: vi.fn(),
+}));
+
+vi.mock("@/server/runtime/services", () => ({ getRuntimeServices }));
+vi.mock("@/server/auth/session", () => ({ requireAdmin }));
 
 import * as adminInvitations from "@/app/api/v1/admin/invitations/route";
 import * as adminUserStatus from "@/app/api/v1/admin/users/[userId]/status/route";
@@ -43,6 +51,12 @@ const routes: Record<string, RouteModule> = {
 };
 
 describe("OpenAPI route coverage", () => {
+  afterEach(() => {
+    delete process.env.APP_BASE_PATH;
+    getRuntimeServices.mockReset();
+    requireAdmin.mockReset();
+  });
+
   it("has a callable Route Handler for every documented operation", async () => {
     const source = await readFile(
       path.join(process.cwd(), "docs/fit-replication/contracts/openapi.yaml"),
@@ -83,5 +97,38 @@ describe("OpenAPI route coverage", () => {
     expect(responses?.["429"]).toEqual({
       $ref: "#/components/responses/RateLimited",
     });
+  });
+
+  it.each([
+    [undefined, "https://fitgrid.example/invite/route-contract-token-000000000001"],
+    ["/fitgrid", "https://fitgrid.example/fitgrid/invite/route-contract-token-000000000001"],
+  ])("creates a public invitation URL beneath APP_BASE_PATH=%s", async (basePath, expected) => {
+    if (basePath) process.env.APP_BASE_PATH = basePath;
+    requireAdmin.mockResolvedValue({ id: "admin-1" });
+    getRuntimeServices.mockReturnValue({
+      invitations: {
+        create: vi.fn().mockResolvedValue({
+          id: "00000000-0000-4000-8000-000000000001",
+          token: "route-contract-token-000000000001",
+          expiresAt: "2026-09-03T00:00:00.000Z",
+        }),
+      },
+    });
+
+    const response = await adminInvitations.POST(new Request(
+      "https://fitgrid.example/api/v1/admin/invitations?untrusted=/elsewhere",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Host: "fitgrid.example",
+          Origin: "https://fitgrid.example",
+        },
+        body: JSON.stringify({ expiresInHours: 24 }),
+      },
+    ));
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({ inviteUrl: expected });
   });
 });

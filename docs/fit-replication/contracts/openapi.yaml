@@ -609,7 +609,10 @@ components:
       required: [id, inviteUrl, expiresAt]
       properties:
         id: {type: string, format: uuid}
-        inviteUrl: {type: string, format: uri}
+        inviteUrl:
+          type: string
+          format: uri
+          description: 与请求同源的公开注册链接，路径为 /invite/{token}，部署在子路径时包含 /fitgrid 前缀。
         expiresAt: {type: string, format: date-time}
 
     UserResponse:
