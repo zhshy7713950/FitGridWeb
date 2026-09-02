@@ -49,4 +49,27 @@ describe("AppShell", () => {
     expect(screen.getByText("普通用户")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "退出登录" })).toBeInTheDocument();
   });
+
+  it("shows account navigation to members and admin navigation only to administrators", () => {
+    const { rerender } = render(
+      <AppShell user={{ id: "u1", username: "member", role: "member", status: "active" }}>
+        <h1>网格产品</h1>
+      </AppShell>,
+    );
+
+    expect(screen.getByRole("link", { name: "网格产品" })).toHaveAttribute("href", "/grids");
+    expect(screen.getByRole("link", { name: "安全设置" })).toHaveAttribute(
+      "href",
+      "/settings/security",
+    );
+    expect(screen.queryByRole("link", { name: "账号管理" })).not.toBeInTheDocument();
+
+    rerender(
+      <AppShell user={{ id: "u2", username: "admin", role: "admin", status: "active" }}>
+        <h1>网格产品</h1>
+      </AppShell>,
+    );
+
+    expect(screen.getByRole("link", { name: "账号管理" })).toHaveAttribute("href", "/admin");
+  });
 });
