@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { getOptionalSession, redirect } = vi.hoisted(() => ({
   getOptionalSession: vi.fn(),
@@ -25,10 +25,13 @@ const user = {
 };
 
 describe("server redirects with a configured Next.js base path", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   beforeEach(() => {
     redirect.mockClear();
     getOptionalSession.mockReset();
     process.env.NEXT_PUBLIC_APP_BASE_PATH = "/fitgrid";
+    delete process.env.NEXT_PUBLIC_UI_DEMO_MODE;
   });
 
   it("lets Next.js prefix the anonymous home redirect exactly once", async () => {
@@ -54,5 +57,15 @@ describe("server redirects with a configured Next.js base path", () => {
       "redirect:/login?returnTo=%2Fgrids",
     );
     expect(redirect).toHaveBeenCalledWith("/login?returnTo=%2Fgrids");
+  });
+
+  it("opens protected UI routes without a database only in local demo mode", async () => {
+    vi.stubEnv("NEXT_PUBLIC_UI_DEMO_MODE", "1");
+    vi.stubEnv("NODE_ENV", "development");
+
+    const result = await ProtectedLayout({ children: null });
+
+    expect(getOptionalSession).not.toHaveBeenCalled();
+    expect(result.props.user).toMatchObject({ username: "demo", role: "admin" });
   });
 });

@@ -18,6 +18,16 @@ interface Workflow {
 }
 
 describe("server image release workflow", () => {
+  it("provides a database-free local UI demo command", () => {
+    const result = spawnSync("pnpm", ["run", "dev:ui", "--help"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("next dev");
+  });
+
   it("starts the same standalone runtime that the production image uses", async () => {
     const packageJson = JSON.parse(
       readFileSync(path.join(process.cwd(), "package.json"), "utf8"),

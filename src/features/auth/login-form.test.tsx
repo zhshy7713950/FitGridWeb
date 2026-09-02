@@ -10,9 +10,22 @@ const session = {
   expiresAt: "2026-09-08T00:00:00.000Z",
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
 
 describe("LoginForm", () => {
+  it("shows the local credentials when UI demo mode is enabled", () => {
+    vi.stubEnv("NEXT_PUBLIC_UI_DEMO_MODE", "1");
+    vi.stubEnv("NODE_ENV", "development");
+    render(<LoginForm returnTo="/grids" request={vi.fn()} navigate={vi.fn()} />);
+
+    expect(screen.getByRole("note")).toHaveTextContent("demo");
+    expect(screen.getByRole("note")).toHaveTextContent("fitgrid-demo");
+
+  });
+
   it("logs in and replaces the page with the safe return route", async () => {
     const request = vi.fn().mockResolvedValue(session);
     const navigate = vi.fn();
@@ -30,7 +43,9 @@ describe("LoginForm", () => {
     await userEvent.type(screen.getByLabelText("用户名"), "admin");
     await userEvent.type(screen.getByLabelText("密码"), "wrong-password");
     await userEvent.click(screen.getByRole("button", { name: "登录工作台" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("用户名或密码错误");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("登录失败");
+    expect(alert).toHaveTextContent("用户名或密码错误");
     expect(screen.getByLabelText("用户名")).toHaveValue("admin");
     expect(screen.getByLabelText("密码")).toHaveValue("");
   });

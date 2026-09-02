@@ -21,6 +21,21 @@ describe("AppShell", () => {
     expect(screen.queryByText("导入")).not.toBeInTheDocument();
   });
 
+  it("keeps the account bar and primary navigation before page content", () => {
+    render(
+      <AppShell user={{ id: "u1", username: "admin", role: "admin", status: "active" }}>
+        <h1>网格产品</h1>
+      </AppShell>,
+    );
+
+    const header = screen.getByRole("banner");
+    const navigation = screen.getByRole("navigation", { name: "主导航" });
+    const main = screen.getByRole("main");
+
+    expect(header.compareDocumentPosition(navigation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(navigation.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("keeps a long username accessible with its role and logout control", () => {
     const username = "a".repeat(64);
 

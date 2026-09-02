@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ClientApiError } from "@/lib/api-client";
 import { safeReturnPath, withBasePath } from "@/lib/app-paths";
+import { isUiDemoMode, UI_DEMO_PASSWORD, UI_DEMO_USERNAME } from "@/lib/ui-demo";
 import { login } from "./login-api";
 import styles from "./login.module.css";
 
@@ -63,6 +64,12 @@ export function LoginForm({
 
   return (
     <form className={styles.form} onSubmit={submit} noValidate>
+      {isUiDemoMode() ? (
+        <div className={styles.demoNotice} role="note">
+          <strong>本地演示模式</strong>
+          <span>用户名 <code>{UI_DEMO_USERNAME}</code> · 密码 <code>{UI_DEMO_PASSWORD}</code></span>
+        </div>
+      ) : null}
       <div className={styles.field}>
         <label htmlFor="username">用户名</label>
         <input
@@ -91,9 +98,15 @@ export function LoginForm({
         {fieldErrors.password && <span id="password-error">{fieldErrors.password[0]}</span>}
       </div>
       {error && (
-        <p className={styles.error} role="alert">
-          {retryAfter > 0 ? `${error}，${retryAfter} 秒后重试` : error}
-        </p>
+        <div className={styles.error} role="alert" aria-live="assertive">
+          <span className={styles.errorMark} aria-hidden="true">!</span>
+          <span>
+            <strong>登录失败</strong>
+            <span className={styles.errorMessage}>
+              {retryAfter > 0 ? `${error}，${retryAfter} 秒后重试` : error}
+            </span>
+          </span>
+        </div>
       )}
       <button className={styles.submit} disabled={pending || retryAfter > 0}>
         {pending ? "正在登录…" : "登录工作台"}

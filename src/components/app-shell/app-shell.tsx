@@ -8,15 +8,6 @@ import styles from "./app-shell.module.css";
 export function AppShell({ user, children }: { user: SessionUser; children: ReactNode }) {
   return (
     <div className={styles.shell}>
-      <nav aria-label="主导航" className={styles.rail}>
-        <div className={styles.logo} aria-label="FitGrid">
-          FG
-        </div>
-        <Link href="/grids" aria-current="page">
-          <GridIcon />
-          <span>网格产品</span>
-        </Link>
-      </nav>
       <header className={styles.accountBar}>
         <span className={styles.mobileBrand}>FitGrid</span>
         <span className={styles.connection}>安全连接</span>
@@ -26,6 +17,15 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
         <span className={styles.role}>{user.role === "admin" ? "管理员" : "普通用户"}</span>
         <LogoutButton />
       </header>
+      <nav aria-label="主导航" className={styles.rail}>
+        <div className={styles.logo} aria-label="FitGrid">
+          FG
+        </div>
+        <Link href="/grids" aria-current="page">
+          <GridIcon />
+          <span>网格产品</span>
+        </Link>
+      </nav>
       <main className={styles.content}>{children}</main>
     </div>
   );
