@@ -37,6 +37,11 @@
   border-radius: 5px;
   color: var(--text);
   text-decoration: none;
+  background: transparent;
+}
+
+.rail a:hover,
+.rail a[aria-current="page"] {
   background: var(--surface-raised);
 }
 

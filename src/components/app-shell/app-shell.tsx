@@ -1,7 +1,11 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { ReactNode, SVGProps } from "react";
 import { GridIcon } from "@/components/icons";
 import type { SessionUser } from "@/features/auth/types";
+import { browserBasePath } from "@/lib/app-paths";
 import { LogoutButton } from "./logout-button";
 import styles from "./app-shell.module.css";
 
@@ -23,7 +27,16 @@ function AccountsIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+function appPathname(pathname: string): string {
+  const basePath = browserBasePath();
+  if (basePath && pathname.startsWith(`${basePath}/`)) return pathname.slice(basePath.length);
+  return pathname;
+}
+
 export function AppShell({ user, children }: { user: SessionUser; children: ReactNode }) {
+  const pathname = appPathname(usePathname());
+  const gridsCurrent = pathname === "/grids" || pathname.startsWith("/grids/");
+
   return (
     <div className={styles.shell}>
       <header className={styles.accountBar}>
@@ -39,16 +52,16 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
         <div className={styles.logo} aria-label="FitGrid">
           FG
         </div>
-        <Link href="/grids" aria-current="page">
+        <Link href="/grids" aria-current={gridsCurrent ? "page" : undefined}>
           <GridIcon />
           <span>网格产品</span>
         </Link>
-        <Link href="/settings/security">
+        <Link href="/settings/security" aria-current={pathname === "/settings/security" ? "page" : undefined}>
           <SecurityIcon />
           <span>安全设置</span>
         </Link>
         {user.role === "admin" ? (
-          <Link href="/admin">
+          <Link href="/admin" aria-current={pathname === "/admin" ? "page" : undefined}>
             <AccountsIcon />
             <span>账号管理</span>
           </Link>
