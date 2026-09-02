@@ -431,7 +431,9 @@ describe.sequential("database-free UI demo", () => {
       page.waitForURL(`${baseUrl}/grids/demo-grid-created-01`),
       page.getByRole("button", { name: "创建产品" }).click(),
     ]);
-    expect(await page.getByRole("heading", { name: "Smoke 新建产品" }).isVisible()).toBe(true);
+    await expect.poll(() => (
+      page.getByRole("heading", { name: "Smoke 新建产品" }).isVisible()
+    )).toBe(true);
 
     await page.getByRole("link", { name: "编辑产品" }).click();
     await page.waitForURL(`${baseUrl}/grids/demo-grid-created-01/edit`);
@@ -440,7 +442,9 @@ describe.sequential("database-free UI demo", () => {
       page.waitForURL(`${baseUrl}/grids/demo-grid-created-01`),
       page.getByRole("button", { name: "保存修改" }).click(),
     ]);
-    expect(await page.getByRole("heading", { name: "Smoke 编辑产品" }).isVisible()).toBe(true);
+    await expect.poll(() => (
+      page.getByRole("heading", { name: "Smoke 编辑产品" }).isVisible()
+    )).toBe(true);
 
     await page.getByRole("button", { name: "删除产品" }).click();
     await page.getByLabel("输入产品代码确认").fill("SMOKE-NEW-01");
