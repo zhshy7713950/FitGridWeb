@@ -61,7 +61,9 @@ curl --fail --silent --show-error \
 - 用户同意且现有 Swap 不足时：`/swapfile-fitgridweb` 和 `/etc/fstab` 中的一条受管记录；
 - Docker 官方 apt source 和 Docker Engine/Compose plugin。
 
-它不会执行 `docker system prune`，不会删除 PostgreSQL 卷，也不会修改 SSH、防火墙、sing-box、其他 nginx server 或其他 Docker Compose project。若同域名存在多组不同证书、证书文件不存在或专用 vhost 已被其他服务占用，安装器会停止而不是猜测或覆盖。
+全部部署步骤和健康检查成功后，安装器会从当前 `APP_IMAGE` 动态识别镜像仓库，只删除该仓库中不再使用的旧 `sha-<40位SHA>` 镜像，并保留当前运行镜像。镜像仍被容器占用或 Docker 清理失败时只输出警告，不会使用强制删除，也不会回滚已经成功的部署。
+
+它不会执行 `docker system prune`，不会清理其他镜像仓库，不会删除 PostgreSQL 卷，也不会修改 SSH、防火墙、sing-box、其他 nginx server 或其他 Docker Compose project。若同域名存在多组不同证书、证书文件不存在或专用 vhost 已被其他服务占用，安装器会停止而不是猜测或覆盖。
 
 ## 日常检查与重启
 
