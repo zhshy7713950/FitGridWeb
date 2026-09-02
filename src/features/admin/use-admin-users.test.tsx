@@ -110,7 +110,13 @@ it("retains the ledger and retries the same cursor with a public request ID", as
 
   await act(async () => result.current.loadMore());
   expect(result.current.items.map((user) => user.id)).toEqual(["member-1"]);
-  expect(result.current.pageError).toBe("加载更多账号失败，请求 ID：01PAGE");
+  expect(result.current.pageError).toEqual({
+    status: 503,
+    code: "UNAVAILABLE",
+    message: "暂不可用",
+    requestId: "01PAGE",
+    retryAfterSeconds: undefined,
+  });
 
   await act(async () => result.current.retryPage());
   expect(list.mock.calls[2][0]).toMatchObject({ cursor: "c2", limit: 20 });
@@ -122,13 +128,96 @@ it("shows an explicit initial error and retries without polling", async () => {
     .mockRejectedValueOnce(new TypeError("private network details"))
     .mockResolvedValueOnce({ items: [], nextCursor: null });
   const { result } = renderHook(() => useAdminUsers({ list }));
-  await waitFor(() => expect(result.current.initialError).toBe("网络连接失败，请重试"));
+  await waitFor(() => expect(result.current.initialError).toEqual({
+    message: "网络连接失败，请重试",
+  }));
 
   await act(async () => result.current.retryInitial());
 
   expect(list).toHaveBeenCalledTimes(2);
-  expect(result.current.initialError).toBe("");
+  expect(result.current.initialError).toBeNull();
   expect(result.current.initialLoading).toBe(false);
+});
+
+it("preserves a structured 403 response for the authority UI", async () => {
+  const list = vi.fn().mockRejectedValue(new ClientApiError(
+    403,
+    "ADMIN_REQUIRED",
+    "需要管理员权限",
+    "01DENIED",
+  ));
+  const { result } = renderHook(() => useAdminUsers({ list }));
+
+  await waitFor(() => expect(result.current.initialError).toEqual({
+    status: 403,
+    code: "ADMIN_REQUIRED",
+    message: "需要管理员权限",
+    requestId: "01DENIED",
+    retryAfterSeconds: undefined,
+  }));
+});
+
+it("preserves Retry-After, counts down, and blocks initial retries until it expires", async () => {
+  vi.useFakeTimers();
+  const list = vi.fn()
+    .mockRejectedValueOnce(new ClientApiError(
+      429,
+      "RATE_LIMITED",
+      "请求过于频繁",
+      "01RATE",
+      undefined,
+      2,
+    ))
+    .mockResolvedValueOnce({ items: [], nextCursor: null });
+  const { result } = renderHook(() => useAdminUsers({ list }));
+  await act(async () => {});
+
+  expect(result.current.initialError).toMatchObject({
+    status: 429,
+    message: "请求过于频繁",
+    requestId: "01RATE",
+    retryAfterSeconds: 2,
+  });
+  await act(async () => result.current.retryInitial());
+  expect(list).toHaveBeenCalledTimes(1);
+
+  act(() => vi.advanceTimersByTime(1_000));
+  expect(result.current.initialError?.retryAfterSeconds).toBe(1);
+  await act(async () => result.current.retryInitial());
+  expect(list).toHaveBeenCalledTimes(1);
+
+  act(() => vi.advanceTimersByTime(1_000));
+  await act(async () => result.current.retryInitial());
+  expect(list).toHaveBeenCalledTimes(2);
+  expect(result.current.initialError).toBeNull();
+});
+
+it("blocks retrying a rate-limited cursor while keeping loaded rows", async () => {
+  vi.useFakeTimers();
+  const list = vi.fn()
+    .mockResolvedValueOnce({ items: [managedUser("member-1")], nextCursor: "c2" })
+    .mockRejectedValueOnce(new ClientApiError(
+      429,
+      "RATE_LIMITED",
+      "翻页过于频繁",
+      "01PAGE429",
+      undefined,
+      2,
+    ))
+    .mockResolvedValueOnce({ items: [managedUser("member-2")], nextCursor: null });
+  const { result } = renderHook(() => useAdminUsers({ list }));
+  await act(async () => {});
+
+  await act(async () => result.current.loadMore());
+  expect(result.current.items.map((user) => user.id)).toEqual(["member-1"]);
+  expect(result.current.pageError?.retryAfterSeconds).toBe(2);
+  await act(async () => result.current.retryPage());
+  expect(list).toHaveBeenCalledTimes(2);
+
+  act(() => vi.advanceTimersByTime(2_000));
+  await act(async () => result.current.retryPage());
+  expect(list).toHaveBeenCalledTimes(3);
+  expect(result.current.items.map((user) => user.id)).toEqual(["member-1", "member-2"]);
 });
 
 it("updates only the server-returned target row and does not mutate on failure", async () => {

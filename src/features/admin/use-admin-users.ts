@@ -17,13 +17,21 @@ export type UpdateManagedUserStatus = (
   signal?: AbortSignal,
 ) => Promise<ManagedUser>;
 
+export interface AdminListError {
+  message: string;
+  status?: number;
+  code?: string;
+  requestId?: string;
+  retryAfterSeconds?: number;
+}
+
 export interface AdminUserListController {
   items: ManagedUser[];
   nextCursor: string | null;
   initialLoading: boolean;
   pageLoading: boolean;
-  initialError: string;
-  pageError: string;
+  initialError: AdminListError | null;
+  pageError: AdminListError | null;
   retryInitial(): Promise<void>;
   loadMore(): Promise<void>;
   retryPage(): Promise<void>;
@@ -34,13 +42,19 @@ export interface AdminUserListController {
   ): Promise<ManagedUser>;
 }
 
-function publicListError(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.name === "AbortError") return "";
-  if (error instanceof TypeError) return "网络连接失败，请重试";
-  if (error instanceof ClientApiError && error.requestId) {
-    return `${fallback}，请求 ID：${error.requestId}`;
+function publicListError(error: unknown, fallback: string): AdminListError | null {
+  if (error instanceof Error && error.name === "AbortError") return null;
+  if (error instanceof ClientApiError) {
+    return {
+      status: error.status,
+      code: error.code,
+      message: error.message,
+      requestId: error.requestId,
+      retryAfterSeconds: error.retryAfterSeconds,
+    };
   }
-  return fallback;
+  if (error instanceof TypeError) return { message: "网络连接失败，请重试" };
+  return { message: fallback };
 }
 
 export function useAdminUsers({
@@ -54,14 +68,16 @@ export function useAdminUsers({
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [pageLoading, setPageLoading] = useState(false);
-  const [initialError, setInitialError] = useState("");
-  const [pageError, setPageError] = useState("");
+  const [initialError, setInitialError] = useState<AdminListError | null>(null);
+  const [pageError, setPageError] = useState<AdminListError | null>(null);
   const mounted = useRef(false);
   const generation = useRef(0);
   const initialController = useRef<AbortController | null>(null);
   const cursorRequests = useRef(new Map<string, Promise<void>>());
   const cursorControllers = useRef(new Map<string, AbortController>());
   const failedCursor = useRef<string | null>(null);
+  const initialRetryUntil = useRef(0);
+  const pageRetryUntil = useRef(0);
   const listRef = useRef(list);
   const updateRef = useRef(update);
 
@@ -74,6 +90,7 @@ export function useAdminUsers({
   }, [update]);
 
   const loadInitial = useCallback(async () => {
+    if (Date.now() < initialRetryUntil.current) return;
     const requestGeneration = ++generation.current;
     initialController.current?.abort();
     for (const controller of cursorControllers.current.values()) controller.abort();
@@ -83,8 +100,10 @@ export function useAdminUsers({
     const controller = new AbortController();
     initialController.current = controller;
     setInitialLoading(true);
-    setInitialError("");
-    setPageError("");
+    initialRetryUntil.current = 0;
+    pageRetryUntil.current = 0;
+    setInitialError(null);
+    setPageError(null);
     setNextCursor(null);
 
     try {
@@ -94,7 +113,11 @@ export function useAdminUsers({
       setNextCursor(page.nextCursor);
     } catch (error) {
       if (!mounted.current || requestGeneration !== generation.current) return;
-      setInitialError(publicListError(error, "加载账号失败"));
+      const publicError = publicListError(error, "加载账号失败");
+      if (publicError?.retryAfterSeconds) {
+        initialRetryUntil.current = Date.now() + publicError.retryAfterSeconds * 1_000;
+      }
+      setInitialError(publicError);
     } finally {
       if (initialController.current === controller) initialController.current = null;
       if (mounted.current && requestGeneration === generation.current) setInitialLoading(false);
@@ -119,7 +142,11 @@ export function useAdminUsers({
         },
         (error: unknown) => {
           if (!mounted.current || requestGeneration !== generation.current) return;
-          setInitialError(publicListError(error, "加载账号失败"));
+          const publicError = publicListError(error, "加载账号失败");
+          if (publicError?.retryAfterSeconds) {
+            initialRetryUntil.current = Date.now() + publicError.retryAfterSeconds * 1_000;
+          }
+          setInitialError(publicError);
         },
       )
       .finally(() => {
@@ -136,10 +163,38 @@ export function useAdminUsers({
       ownedCursorControllers.clear();
       ownedCursorRequests.clear();
       failedCursor.current = null;
+      initialRetryUntil.current = 0;
+      pageRetryUntil.current = 0;
     };
   }, [loadInitial]);
 
+  const hasRetryCountdown =
+    (initialError?.retryAfterSeconds ?? 0) > 0 || (pageError?.retryAfterSeconds ?? 0) > 0;
+
+  useEffect(() => {
+    if (!hasRetryCountdown) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setInitialError((current) => {
+        if (!current?.retryAfterSeconds) return current;
+        const remaining = Math.max(0, Math.ceil((initialRetryUntil.current - now) / 1_000));
+        return remaining === current.retryAfterSeconds
+          ? current
+          : { ...current, retryAfterSeconds: remaining || undefined };
+      });
+      setPageError((current) => {
+        if (!current?.retryAfterSeconds) return current;
+        const remaining = Math.max(0, Math.ceil((pageRetryUntil.current - now) / 1_000));
+        return remaining === current.retryAfterSeconds
+          ? current
+          : { ...current, retryAfterSeconds: remaining || undefined };
+      });
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [hasRetryCountdown]);
+
   const loadCursor = useCallback((cursor: string): Promise<void> => {
+    if (Date.now() < pageRetryUntil.current) return Promise.resolve();
     const existing = cursorRequests.current.get(cursor);
     if (existing) return existing;
     if (!mounted.current) return Promise.resolve();
@@ -147,8 +202,9 @@ export function useAdminUsers({
     const requestGeneration = generation.current;
     const controller = new AbortController();
     cursorControllers.current.set(cursor, controller);
+    pageRetryUntil.current = 0;
     setPageLoading(true);
-    setPageError("");
+    setPageError(null);
 
     const pending = listRef.current({ cursor, limit: pageLimit, signal: controller.signal })
       .then((page) => {
@@ -160,11 +216,16 @@ export function useAdminUsers({
         });
         setNextCursor(page.nextCursor);
         failedCursor.current = null;
+        pageRetryUntil.current = 0;
       })
       .catch((error: unknown) => {
         if (!mounted.current || requestGeneration !== generation.current) return;
         failedCursor.current = cursor;
-        setPageError(publicListError(error, "加载更多账号失败"));
+        const publicError = publicListError(error, "加载更多账号失败");
+        if (publicError?.retryAfterSeconds) {
+          pageRetryUntil.current = Date.now() + publicError.retryAfterSeconds * 1_000;
+        }
+        setPageError(publicError);
       })
       .finally(() => {
         if (cursorControllers.current.get(cursor) === controller) {

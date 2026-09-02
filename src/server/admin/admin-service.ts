@@ -11,12 +11,34 @@ export interface ManagedUser {
   createdAt: Date;
 }
 
+export type StatusTransitionResult =
+  | { kind: "updated"; user: ManagedUser }
+  | { kind: "not_found" }
+  | { kind: "last_active_admin" };
+
 export interface AdminRepository {
   list(): Promise<ManagedUser[]>;
-  find(id: string): Promise<ManagedUser | null>;
-  countActiveAdmins(): Promise<number>;
-  setStatus(id: string, status: "active" | "disabled"): Promise<ManagedUser>;
-  revokeSessions(userId: string): Promise<void>;
+  updateStatusAtomically(
+    id: string,
+    status: "active" | "disabled",
+  ): Promise<StatusTransitionResult>;
+}
+
+function managedUser(user: {
+  id: string;
+  name: string;
+  username: string | null;
+  role: "member" | "admin";
+  status: "active" | "disabled";
+  createdAt: Date;
+}): ManagedUser {
+  return {
+    id: user.id,
+    username: user.username ?? user.name,
+    role: user.role,
+    status: user.status,
+    createdAt: user.createdAt,
+  };
 }
 
 function response(user: ManagedUser) {
@@ -75,16 +97,14 @@ export class AdminService {
   }
 
   async updateStatus(userId: string, status: "active" | "disabled") {
-    const user = await this.repository.find(userId);
-    if (!user) throw new ApiError(404, "USER_NOT_FOUND", "账号不存在");
-    if (status === "disabled" && user.role === "admin" && user.status === "active") {
-      if ((await this.repository.countActiveAdmins()) <= 1) {
-        throw new ApiError(409, "LAST_ACTIVE_ADMIN", "不能禁用最后一个有效管理员");
-      }
+    const result = await this.repository.updateStatusAtomically(userId, status);
+    if (result.kind === "not_found") {
+      throw new ApiError(404, "USER_NOT_FOUND", "账号不存在");
     }
-    const updated = await this.repository.setStatus(userId, status);
-    if (status === "disabled") await this.repository.revokeSessions(userId);
-    return response(updated);
+    if (result.kind === "last_active_admin") {
+      throw new ApiError(409, "LAST_ACTIVE_ADMIN", "不能禁用最后一个有效管理员");
+    }
+    return response(result.user);
   }
 }
 
@@ -93,47 +113,45 @@ export class PrismaAdminRepository implements AdminRepository {
 
   async list(): Promise<ManagedUser[]> {
     const users = await this.prisma.user.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
-    return users.map((user) => ({
-      id: user.id,
-      username: user.username ?? user.name,
-      role: user.role,
-      status: user.status,
-      createdAt: user.createdAt,
-    }));
+    return users.map(managedUser);
   }
 
-  async find(id: string): Promise<ManagedUser | null> {
-    const user = await this.prisma.user.findUnique({ where: { id } });
-    return user
-      ? {
-          id: user.id,
-          username: user.username ?? user.name,
-          role: user.role,
-          status: user.status,
-          createdAt: user.createdAt,
-        }
-      : null;
-  }
+  async updateStatusAtomically(
+    id: string,
+    status: "active" | "disabled",
+  ): Promise<StatusTransitionResult> {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(
+          async (transaction) => {
+            const user = await transaction.user.findUnique({ where: { id } });
+            if (!user) return { kind: "not_found" } as const;
 
-  countActiveAdmins(): Promise<number> {
-    return this.prisma.user.count({ where: { role: "admin", status: "active" } });
-  }
+            if (status === "disabled" && user.role === "admin" && user.status === "active") {
+              const activeAdmins = await transaction.user.count({
+                where: { role: "admin", status: "active" },
+              });
+              if (activeAdmins <= 1) return { kind: "last_active_admin" } as const;
+            }
 
-  async setStatus(id: string, status: "active" | "disabled"): Promise<ManagedUser> {
-    const user = await this.prisma.user.update({
-      where: { id },
-      data: { status: status === "active" ? UserStatus.active : UserStatus.disabled },
-    });
-    return {
-      id: user.id,
-      username: user.username ?? user.name,
-      role: user.role,
-      status: user.status,
-      createdAt: user.createdAt,
-    };
-  }
-
-  async revokeSessions(userId: string): Promise<void> {
-    await this.prisma.session.deleteMany({ where: { userId } });
+            const updated = await transaction.user.update({
+              where: { id },
+              data: { status: status === "active" ? UserStatus.active : UserStatus.disabled },
+            });
+            if (status === "disabled") {
+              await transaction.session.deleteMany({ where: { userId: id } });
+            }
+            return { kind: "updated", user: managedUser(updated) } as const;
+          },
+          { isolationLevel: "Serializable" },
+        );
+      } catch (error) {
+        const isSerializableConflict =
+          typeof error === "object" && error !== null && "code" in error && error.code === "P2034";
+        if (!isSerializableConflict || attempt === maxAttempts) throw error;
+      }
+    }
+    throw new Error("unreachable serializable transaction retry state");
   }
 }

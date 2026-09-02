@@ -14,7 +14,11 @@ import { lockDocumentForModal } from "@/lib/modal-isolation";
 
 import { createInvitation as createInvitationRequest } from "./admin-api";
 import type { CreatedInvitation, ManagedUser } from "./types";
-import { useAdminUsers, type AdminUserListController } from "./use-admin-users";
+import {
+  useAdminUsers,
+  type AdminListError,
+  type AdminUserListController,
+} from "./use-admin-users";
 import styles from "./admin.module.css";
 
 type CreateInvitation = (
@@ -22,11 +26,7 @@ type CreateInvitation = (
   signal?: AbortSignal,
 ) => Promise<CreatedInvitation>;
 
-type VisibleError = {
-  message: string;
-  requestId?: string;
-  retryAfterSeconds?: number;
-};
+type VisibleError = AdminListError;
 
 type StatusConfirmation = {
   user: ManagedUser;
@@ -105,17 +105,20 @@ export function AdminWorkspaceView({
   const invitationController = useRef<AbortController | null>(null);
   const statusController = useRef<AbortController | null>(null);
   const invitationGeneration = useRef(0);
+  const invitationVersion = useRef(0);
   const statusGeneration = useRef(0);
   const mounted = useRef(false);
   const inviteInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const lifetimeInvitationGeneration = invitationGeneration;
+    const lifetimeInvitationVersion = invitationVersion;
     const lifetimeStatusGeneration = statusGeneration;
     mounted.current = true;
     return () => {
       mounted.current = false;
       ++lifetimeInvitationGeneration.current;
+      ++lifetimeInvitationVersion.current;
       ++lifetimeStatusGeneration.current;
       invitationController.current?.abort();
       statusController.current?.abort();
@@ -149,6 +152,7 @@ export function AdminWorkspaceView({
     setInvitationError(null);
     setCopyFeedback("");
     setInvitation(null);
+    ++invitationVersion.current;
     const requestGeneration = ++invitationGeneration.current;
     const requestController = new AbortController();
     invitationController.current = requestController;
@@ -176,14 +180,18 @@ export function AdminWorkspaceView({
     if (!invitation) return;
     setCopyFeedback("");
     const input = inviteInputRef.current;
+    const copyVersion = invitationVersion.current;
+    const inviteUrl = invitation.inviteUrl;
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
-      await navigator.clipboard.writeText(invitation.inviteUrl);
-      if (mounted.current) setCopyFeedback("copied");
+      await navigator.clipboard.writeText(inviteUrl);
+      if (!mounted.current || copyVersion !== invitationVersion.current) return;
+      setCopyFeedback("copied");
     } catch {
+      if (!mounted.current || copyVersion !== invitationVersion.current) return;
       input?.focus();
       input?.select();
-      if (mounted.current) setCopyFeedback("manual");
+      setCopyFeedback("manual");
     }
   }
 
@@ -231,7 +239,11 @@ export function AdminWorkspaceView({
           <p>Access ledger · 已载入 {controller.items.length} 个账号</p>
           <h1 id="admin-title">账号管理</h1>
         </div>
-        <span className={styles.authority}>管理员权限已验证</span>
+        {controller.initialError?.status === 403 || controller.pageError?.status === 403 ? (
+          <span className={styles.authority}>管理员权限未通过</span>
+        ) : (
+          <span className={styles.authority}>管理员权限已验证</span>
+        )}
       </header>
 
       <section className={styles.invitationStrip} aria-labelledby="invitation-title">
@@ -310,9 +322,17 @@ export function AdminWorkspaceView({
         </header>
 
         {controller.initialError && !controller.items.length ? (
-          <div className={styles.listError} role="alert">
-            <span>{controller.initialError}</span>
-            <button type="button" onClick={() => void controller.retryInitial()}>重试加载</button>
+          <div className={styles.listError}>
+            <ErrorMessage error={controller.initialError} />
+            <button
+              type="button"
+              disabled={(controller.initialError.retryAfterSeconds ?? 0) > 0}
+              onClick={() => void controller.retryInitial()}
+            >
+              {controller.initialError.retryAfterSeconds
+                ? `${controller.initialError.retryAfterSeconds} 秒后重试`
+                : "重试加载"}
+            </button>
           </div>
         ) : null}
 
@@ -391,9 +411,17 @@ export function AdminWorkspaceView({
 
         <div className={styles.pagination} aria-live="polite">
           {controller.pageError ? (
-            <div role="alert">
-              <span>{controller.pageError}</span>
-              <button type="button" onClick={() => void controller.retryPage()}>重试加载更多</button>
+            <div>
+              <ErrorMessage error={controller.pageError} />
+              <button
+                type="button"
+                disabled={(controller.pageError.retryAfterSeconds ?? 0) > 0}
+                onClick={() => void controller.retryPage()}
+              >
+                {controller.pageError.retryAfterSeconds
+                  ? `${controller.pageError.retryAfterSeconds} 秒后重试加载更多`
+                  : "重试加载更多"}
+              </button>
             </div>
           ) : controller.nextCursor ? (
             <button

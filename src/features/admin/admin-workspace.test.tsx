@@ -31,8 +31,8 @@ function controller(patch: Partial<AdminUserListController> = {}): AdminUserList
     nextCursor: null,
     initialLoading: false,
     pageLoading: false,
-    initialError: "",
-    pageError: "",
+    initialError: null,
+    pageError: null,
     retryInitial: vi.fn().mockResolvedValue(undefined),
     loadMore: vi.fn().mockResolvedValue(undefined),
     retryPage: vi.fn().mockResolvedValue(undefined),
@@ -88,7 +88,11 @@ describe("administrator ledger", () => {
     rerender(
       <AdminWorkspaceView
         currentUserId="admin-1"
-        controller={controller({ items: [], initialError: "加载账号失败，请求 ID：01LIST", retryInitial })}
+        controller={controller({
+          items: [],
+          initialError: { message: "加载账号失败", requestId: "01LIST" },
+          retryInitial,
+        })}
       />,
     );
     expect(screen.getByRole("alert")).toHaveTextContent("请求 ID：01LIST");
@@ -120,7 +124,7 @@ describe("administrator ledger", () => {
         currentUserId="admin-1"
         controller={controller({
           nextCursor: "c2",
-          pageError: "加载更多账号失败，请求 ID：01PAGE",
+          pageError: { message: "加载更多账号失败", requestId: "01PAGE" },
           retryPage,
         })}
       />,
@@ -130,6 +134,66 @@ describe("administrator ledger", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("请求 ID：01PAGE");
     await userEvent.click(screen.getByRole("button", { name: "重试加载更多" }));
     expect(retryPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not claim verified authority when the list endpoint returns 403", () => {
+    render(
+      <AdminWorkspaceView
+        currentUserId="admin-1"
+        controller={controller({
+          items: [],
+          initialError: {
+            status: 403,
+            code: "ADMIN_REQUIRED",
+            message: "需要管理员权限",
+            requestId: "01DENIED",
+          },
+        })}
+      />,
+    );
+
+    expect(screen.queryByText("管理员权限已验证")).not.toBeInTheDocument();
+    expect(screen.getByText("管理员权限未通过")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("需要管理员权限");
+    expect(screen.getByRole("alert")).toHaveTextContent("请求 ID：01DENIED");
+  });
+
+  it("withdraws the verified-authority claim when a paginated list request returns 403", () => {
+    render(
+      <AdminWorkspaceView
+        currentUserId="admin-1"
+        controller={controller({
+          pageError: {
+            status: 403,
+            code: "ADMIN_REQUIRED",
+            message: "需要管理员权限",
+          },
+        })}
+      />,
+    );
+
+    expect(screen.queryByText("管理员权限已验证")).not.toBeInTheDocument();
+    expect(screen.getByText("管理员权限未通过")).toBeInTheDocument();
+  });
+
+  it("shows list Retry-After and disables retry actions during the countdown", () => {
+    render(
+      <AdminWorkspaceView
+        currentUserId="admin-1"
+        controller={controller({
+          items: [],
+          initialError: {
+            status: 429,
+            code: "RATE_LIMITED",
+            message: "请求过于频繁",
+            retryAfterSeconds: 2,
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("2 秒后可重试");
+    expect(screen.getByRole("button", { name: "2 秒后重试" })).toBeDisabled();
   });
 });
 
@@ -254,6 +318,76 @@ describe("administrator invitation creation", () => {
       expect(screen.getByRole("alert")).not.toHaveTextContent("private permission error");
     },
   );
+
+  it.each(["resolve", "reject"] as const)(
+    "ignores a stale clipboard %s after a newer invitation replaces its URL",
+    async (settlement) => {
+      const pendingCopy = deferred<void>();
+      const writeText = vi.fn(() => pendingCopy.promise);
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+      const invitationB = {
+        ...invitation,
+        id: "invite-2",
+        inviteUrl: "https://fitgrid.example/invite/new-private-token",
+      };
+      const createInvitation = vi.fn<CreateInvitationRequest>()
+        .mockResolvedValueOnce(invitation)
+        .mockResolvedValueOnce(invitationB);
+      const selectedValues: string[] = [];
+      const originalSelect = HTMLInputElement.prototype.select;
+      vi.spyOn(HTMLInputElement.prototype, "select").mockImplementation(function select(
+        this: HTMLInputElement,
+      ) {
+        selectedValues.push(this.value);
+        originalSelect.call(this);
+      });
+      render(
+        <AdminWorkspaceView
+          currentUserId="admin-1"
+          controller={controller()}
+          createInvitation={createInvitation}
+        />,
+      );
+      await userEvent.click(screen.getByRole("button", { name: "创建邀请" }));
+      await userEvent.click(await screen.findByRole("button", { name: "复制邀请链接" }));
+      await userEvent.click(screen.getByRole("button", { name: "创建新邀请" }));
+      expect(await screen.findByDisplayValue(invitationB.inviteUrl)).toBeInTheDocument();
+      selectedValues.length = 0;
+
+      await act(async () => {
+        if (settlement === "resolve") pendingCopy.resolve(undefined);
+        else pendingCopy.reject(new Error("late clipboard failure"));
+      });
+
+      expect(screen.queryByText("邀请链接已复制")).not.toBeInTheDocument();
+      expect(screen.queryByText(/请选中上方链接并手动复制/)).not.toBeInTheDocument();
+      expect(selectedValues).not.toContain(invitationB.inviteUrl);
+    },
+  );
+
+  it("ignores clipboard rejection after unmount without selecting the detached URL", async () => {
+    const pendingCopy = deferred<void>();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn(() => pendingCopy.promise) },
+    });
+    const select = vi.spyOn(HTMLInputElement.prototype, "select");
+    const view = render(
+      <AdminWorkspaceView
+        currentUserId="admin-1"
+        controller={controller()}
+        createInvitation={vi.fn<CreateInvitationRequest>().mockResolvedValue(invitation)}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "创建邀请" }));
+    await userEvent.click(await screen.findByRole("button", { name: "复制邀请链接" }));
+    select.mockClear();
+    view.unmount();
+
+    await act(async () => pendingCopy.reject(new Error("late clipboard failure")));
+
+    expect(select).not.toHaveBeenCalled();
+  });
 
   it("surfaces a public create error and aborts a pending request on unmount", async () => {
     const pending = deferred<typeof invitation>();
