@@ -1,0 +1,38 @@
+[
+  {
+    "productName": "Synthetic Aurora Test Product",
+    "productCode": "SYNTH-AURORA-9173",
+    "maxPrice": 731.25,
+    "perShare": 2468.13579,
+    "gearAmplitude": 7.125,
+    "keepShare": 37,
+    "increaseAmplitude": 11,
+    "mediumAmplitude": 29,
+    "bigAmplitude": 53,
+    "maxAmplitude": 83,
+    "minTradeQuantity": 137.5,
+    "category": "Fictional Fixture Only",
+    "sortOrder": 271,
+    "totalBuyAmount": 98765.4321,
+    "totalProfitAmount": 321.9876,
+    "totalProfitRate": 0.00326,
+    "gridItems": [
+      {
+        "sequence": 19,
+        "gridType": 2,
+        "gear": 14.375,
+        "buyPrice": 612.345,
+        "buyCount": 48.75,
+        "buyAmount": 29851.81875,
+        "sellPrice": 643.21,
+        "sellCount": 31.625,
+        "sellAmount": 20340.51625,
+        "profitAmount": 488.765,
+        "profitRate": 0.01637,
+        "keepProfit": 73.246,
+        "keepCount": 17.125
+      }
+    ],
+    "isShort": false
+  }
+]
