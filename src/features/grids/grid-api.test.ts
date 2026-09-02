@@ -222,6 +222,23 @@ it("returns controller-compatible demo conflict errors", async () => {
   });
 });
 
+it("reports a duplicate demo product code before a stale update timestamp", async () => {
+  vi.stubEnv("NEXT_PUBLIC_UI_DEMO_MODE", "1");
+  vi.stubEnv("NODE_ENV", "development");
+  const loaded = await getGridTrade("demo-grid-01");
+
+  await expect(updateGridTrade(loaded.id, {
+    ...loaded.input,
+    productCode: "510300",
+    expectedUpdatedAt: "2025-01-01T00:00:00.000Z",
+  })).rejects.toMatchObject({
+    status: 409,
+    code: "PRODUCT_CODE_CONFLICT",
+    requestId: "demo-product-code-conflict",
+    fieldErrors: { productCode: ["当前账号已存在相同产品代码"] },
+  });
+});
+
 it("keeps production detail and mutation functions on their existing HTTP branches", async () => {
   vi.stubEnv("NEXT_PUBLIC_UI_DEMO_MODE", "0");
   vi.stubEnv("NODE_ENV", "development");

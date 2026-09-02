@@ -31,7 +31,7 @@ type FieldDefinition = {
 };
 
 const identityFields: FieldDefinition[] = [
-  { name: "productName", label: "产品名称", placeholder: "例如：黄金 ETF" },
+  { name: "productName", label: "产品名称", placeholder: "例如：指数基金" },
   { name: "productCode", label: "产品代码", placeholder: "例如：518880", className: styles.codeField },
   { name: "category", label: "分类", placeholder: "例如：ETF" },
   { name: "sortOrder", label: "排序", inputMode: "numeric" },

@@ -1,21 +1,26 @@
 import { requestJson } from "@/lib/api-client";
 import { isUiDemoMode } from "@/lib/ui-demo";
 
-import {
-  createDemoGridTrade,
-  deleteDemoGridTrade,
-  getDemoGridTrade,
-  listDemoGridTrades,
-  recalculateDemoGridTrade,
-  updateDemoGridTrade,
-} from "./demo-grid-data";
 import type { GridTradeDetail, GridTradeMutationInput, GridTradePage } from "./types";
+
+type DemoGridData = typeof import("./demo-grid-data");
+
+const loadDemoGridData = process.env.NODE_ENV === "production"
+  ? null
+  : () => import("./demo-grid-data");
+
+function demoGridData(): Promise<DemoGridData> {
+  if (!loadDemoGridData) {
+    return Promise.reject(new Error("UI demo data is unavailable in production"));
+  }
+  return loadDemoGridData();
+}
 
 export function listGridTrades(
   { q, cursor, signal }: { q?: string; cursor?: string; signal?: AbortSignal } = {},
 ): Promise<GridTradePage> {
   if (isUiDemoMode()) {
-    return Promise.resolve(listDemoGridTrades({ q, cursor }));
+    return demoGridData().then((demo) => demo.listDemoGridTrades({ q, cursor }));
   }
 
   const params = new URLSearchParams();
@@ -28,7 +33,7 @@ export function listGridTrades(
 
 export function getGridTrade(id: string, signal?: AbortSignal) {
   if (isUiDemoMode()) {
-    return Promise.resolve().then(() => getDemoGridTrade(id));
+    return demoGridData().then((demo) => demo.getDemoGridTrade(id));
   }
 
   return requestJson<GridTradeDetail>(`/grid-trades/${id}`, { signal });
@@ -36,7 +41,7 @@ export function getGridTrade(id: string, signal?: AbortSignal) {
 
 export function createGridTrade(input: GridTradeMutationInput) {
   if (isUiDemoMode()) {
-    return Promise.resolve().then(() => createDemoGridTrade(input));
+    return demoGridData().then((demo) => demo.createDemoGridTrade(input));
   }
 
   return requestJson<GridTradeDetail>("/grid-trades", {
@@ -51,7 +56,7 @@ export function updateGridTrade(
   input: GridTradeMutationInput & { expectedUpdatedAt: string },
 ) {
   if (isUiDemoMode()) {
-    return Promise.resolve().then(() => updateDemoGridTrade(id, input));
+    return demoGridData().then((demo) => demo.updateDemoGridTrade(id, input));
   }
 
   return requestJson<GridTradeDetail>(`/grid-trades/${id}`, {
@@ -63,7 +68,7 @@ export function updateGridTrade(
 
 export function deleteGridTrade(id: string) {
   if (isUiDemoMode()) {
-    return Promise.resolve().then(() => deleteDemoGridTrade(id));
+    return demoGridData().then((demo) => demo.deleteDemoGridTrade(id));
   }
 
   return requestJson<void>(`/grid-trades/${id}`, { method: "DELETE" });
@@ -71,7 +76,7 @@ export function deleteGridTrade(id: string) {
 
 export function recalculateGridTrade(id: string) {
   if (isUiDemoMode()) {
-    return Promise.resolve().then(() => recalculateDemoGridTrade(id));
+    return demoGridData().then((demo) => demo.recalculateDemoGridTrade(id));
   }
 
   return requestJson<GridTradeDetail>(`/grid-trades/${id}/recalculate`, { method: "POST" });

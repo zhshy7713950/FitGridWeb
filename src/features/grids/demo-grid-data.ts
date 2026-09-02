@@ -279,6 +279,8 @@ export function updateDemoGridTrade(
 ): GridTradeDetail {
   const existing = demoRepository.get(id);
   if (!existing) throw missingGrid();
+  const sameCode = findByProductCode(input.productCode);
+  if (sameCode && sameCode.id !== id) throw productCodeConflict();
   if (input.expectedUpdatedAt !== existing.updatedAt) {
     throw new ClientApiError(
       409,
@@ -287,8 +289,6 @@ export function updateDemoGridTrade(
       "demo-edit-conflict",
     );
   }
-  const sameCode = findByProductCode(input.productCode);
-  if (sameCode && sameCode.id !== id) throw productCodeConflict();
 
   const nextInput = { ...input } as GridTradeMutationInput & { expectedUpdatedAt?: string };
   delete nextInput.expectedUpdatedAt;
