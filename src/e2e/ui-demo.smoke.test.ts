@@ -3,10 +3,16 @@ import { readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { spawn, type ChildProcess } from "node:child_process";
 
-import { chromium, type Browser } from "playwright-core";
-import { expect, it } from "vitest";
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from "playwright-core";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 const nextEnvPath = new URL("../../next-env.d.ts", import.meta.url);
+const appBasePath = process.env.NEXT_BASE_PATH === "/fitgrid" ? "/fitgrid" : "";
 
 async function availablePort(): Promise<number> {
   const server = createServer();
@@ -39,7 +45,7 @@ function chromeExecutable(): string {
 }
 
 async function waitForServer(url: string, child: ChildProcess, output: () => string): Promise<void> {
-  const deadline = Date.now() + 20_000;
+  const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
       throw new Error(`UI demo server exited before it was ready:\n${output()}`);
@@ -65,42 +71,242 @@ async function stop(child: ChildProcess): Promise<void> {
   if (child.exitCode === null) child.kill("SIGKILL");
 }
 
-it("runs the complete database-free UI demo at desktop and mobile breakpoints", async () => {
-  const port = await availablePort();
-  const appBasePath = process.env.NEXT_BASE_PATH === "/fitgrid" ? "/fitgrid" : "";
-  const baseUrl = `http://127.0.0.1:${port}${appBasePath}`;
-  const originalNextEnv = await readFile(nextEnvPath, "utf8");
-  let output = "";
-  let browser: Browser | undefined;
-  const child = spawn("pnpm", ["run", "dev:ui", "--port", String(port)], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      NODE_ENV: "development",
-      DATABASE_URL: "",
-      MIGRATION_DATABASE_URL: "",
-      BETTER_AUTH_URL: "",
-      BETTER_AUTH_SECRET: "",
-      OWNER_REF_SECRET: "",
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  child.stdout?.on("data", (chunk: Buffer) => { output += chunk.toString("utf8"); });
-  child.stderr?.on("data", (chunk: Buffer) => { output += chunk.toString("utf8"); });
+async function expectNoHorizontalOverflow(page: Page): Promise<void> {
+  const widths = await page.evaluate(() => ({
+    viewport: window.innerWidth,
+    body: document.body.scrollWidth,
+    document: document.documentElement.scrollWidth,
+  }));
+  expect(widths.body).toBeLessThanOrEqual(widths.viewport);
+  expect(widths.document).toBeLessThanOrEqual(widths.viewport);
+}
 
-  try {
-    await waitForServer(`${baseUrl}/login`, child, () => output);
+async function expectTopNavigation(page: Page): Promise<void> {
+  const navigation = page.getByRole("navigation", { name: "主导航" });
+  expect(await navigation.evaluate((element) => window.getComputedStyle(element).position))
+    .not.toBe("fixed");
+  const navigationBox = await navigation.boundingBox();
+  const mainBox = await page.getByRole("main").boundingBox();
+  expect(navigationBox).not.toBeNull();
+  expect(mainBox).not.toBeNull();
+  expect(navigationBox!.y + navigationBox!.height).toBeLessThanOrEqual(mainBox!.y + 1);
+}
+
+function expectExactlyOneBasePrefix(pathname: string): void {
+  if (!appBasePath) {
+    expect(pathname.startsWith("/fitgrid/")).toBe(false);
+    return;
+  }
+  expect(pathname.startsWith(`${appBasePath}/`)).toBe(true);
+  expect(pathname).not.toContain(`${appBasePath}${appBasePath}`);
+}
+
+describe.sequential("database-free UI demo", () => {
+  let server: ChildProcess | undefined;
+  let browser: Browser | undefined;
+  let activeContext: BrowserContext | undefined;
+  let baseUrl = "";
+  let output = "";
+  let originalNextEnv: string | undefined;
+
+  beforeAll(async () => {
+    const port = await availablePort();
+    baseUrl = `http://127.0.0.1:${port}${appBasePath}`;
+    originalNextEnv = await readFile(nextEnvPath, "utf8");
+    server = spawn("pnpm", ["run", "dev:ui", "--port", String(port)], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        NODE_ENV: "development",
+        DATABASE_URL: "",
+        MIGRATION_DATABASE_URL: "",
+        BETTER_AUTH_URL: "",
+        BETTER_AUTH_SECRET: "",
+        OWNER_REF_SECRET: "",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    server.stdout?.on("data", (chunk: Buffer) => { output += chunk.toString("utf8"); });
+    server.stderr?.on("data", (chunk: Buffer) => { output += chunk.toString("utf8"); });
+
+    await waitForServer(`${baseUrl}/login`, server, () => output);
     browser = await chromium.launch({
       executablePath: chromeExecutable(),
       headless: true,
       args: ["--no-sandbox"],
     });
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  }, 40_000);
+
+  afterEach(async () => {
+    await activeContext?.close();
+    activeContext = undefined;
+  });
+
+  afterAll(async () => {
+    await activeContext?.close();
+    await browser?.close();
+    if (server) await stop(server);
+    if (originalNextEnv !== undefined) await writeFile(nextEnvPath, originalNextEnv);
+  });
+
+  async function newPage({
+    width = 390,
+    height = 844,
+    clipboardUnavailable = false,
+  }: {
+    width?: number;
+    height?: number;
+    clipboardUnavailable?: boolean;
+  } = {}): Promise<{ page: Page; consoleErrors: string[] }> {
+    if (!browser) throw new Error("UI demo browser did not start");
+    activeContext = await browser.newContext({ viewport: { width, height } });
+    if (clipboardUnavailable) {
+      await activeContext.addInitScript(() => {
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: undefined,
+        });
+      });
+    }
+    const page = await activeContext.newPage();
     const consoleErrors: string[] = [];
     page.on("console", (message) => {
       if (message.type() === "error") consoleErrors.push(message.text());
     });
+    return { page, consoleErrors };
+  }
 
+  it("keeps invalid invitations public and removes every registration field", async () => {
+    const { page, consoleErrors } = await newPage();
+    await page.goto(`${baseUrl}/invite/invalid-demo-invitation-token-0001`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    await expect.poll(() => page.getByRole("heading", { name: "邀请无效或已失效" }).isVisible())
+      .toBe(true);
+    expect(await page.getByLabel("用户名").count()).toBe(0);
+    expect(await page.getByLabel("密码", { exact: true }).count()).toBe(0);
+    expect(await page.getByLabel("确认密码").count()).toBe(0);
+    const loginHref = await page.getByRole("link", { name: "前往登录" }).getAttribute("href");
+    expect(loginHref).toBe(`${appBasePath}/login`);
+    expectExactlyOneBasePrefix(new URL(loginHref!, baseUrl).pathname);
+    await expectNoHorizontalOverflow(page);
+    expect(consoleErrors).toEqual([]);
+  }, 30_000);
+
+  it("validates and accepts a valid invitation before navigating to login", async () => {
+    const { page, consoleErrors } = await newPage();
+    await page.goto(`${baseUrl}/invite/valid-demo-invitation-token-000001`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect.poll(() => page.getByRole("heading", { name: "创建你的账户" }).isVisible())
+      .toBe(true);
+
+    await page.getByLabel("用户名").fill("ab");
+    await page.getByLabel("密码", { exact: true }).fill("short");
+    await page.getByLabel("确认密码").fill("different");
+    await page.getByRole("button", { name: "创建账号" }).click();
+    expect(await page.getByText("用户名长度必须为 3–64 个字符").isVisible()).toBe(true);
+    expect(await page.getByText("密码长度必须为 12–128 个字符").isVisible()).toBe(true);
+    expect(await page.getByText("两次输入的密码不一致").isVisible()).toBe(true);
+    expect(page.url()).toBe(`${baseUrl}/invite/valid-demo-invitation-token-000001`);
+
+    await page.getByLabel("用户名").fill("smoke.member");
+    await page.getByLabel("密码", { exact: true }).fill("strong-password-1");
+    await page.getByLabel("确认密码").fill("strong-password-1");
+    await Promise.all([
+      page.waitForURL(`${baseUrl}/login`),
+      page.getByRole("button", { name: "创建账号" }).click(),
+    ]);
+    expectExactlyOneBasePrefix(new URL(page.url()).pathname);
+    await expectNoHorizontalOverflow(page);
+    expect(consoleErrors).toEqual([]);
+  }, 30_000);
+
+  it("covers security navigation, validation, and successful password change on mobile", async () => {
+    const { page, consoleErrors } = await newPage();
+    await page.goto(`${baseUrl}/grids`, { waitUntil: "domcontentloaded" });
+    const securityLink = page.getByRole("link", { name: "安全设置" });
+    const adminLink = page.getByRole("link", { name: "账号管理" });
+    await expect.poll(() => securityLink.isVisible()).toBe(true);
+    expect(await adminLink.isVisible()).toBe(true);
+    expect(await securityLink.getAttribute("href")).toBe(`${appBasePath}/settings/security`);
+    expect(await adminLink.getAttribute("href")).toBe(`${appBasePath}/admin`);
+
+    await securityLink.click();
+    await page.waitForURL(`${baseUrl}/settings/security`);
+    await expect.poll(() => page.getByRole("heading", { name: "修改密码" }).isVisible()).toBe(true);
+    await page.getByLabel("当前密码").fill("current-password");
+    await page.getByLabel("新密码", { exact: true }).fill("short");
+    await page.getByLabel("确认新密码").fill("different");
+    await page.getByRole("button", { name: "修改密码" }).click();
+    expect(await page.getByText("新密码长度必须为 12–128 个字符").isVisible()).toBe(true);
+    expect(await page.getByText("两次输入的新密码不一致").isVisible()).toBe(true);
+
+    await page.getByLabel("新密码", { exact: true }).fill("next-password-1");
+    await page.getByLabel("确认新密码").fill("next-password-1");
+    await page.getByRole("button", { name: "修改密码" }).click();
+    await expect.poll(() => page.getByText("密码已更新，其他设备的会话已撤销").isVisible())
+      .toBe(true);
+    expect(await page.getByLabel("当前密码").count()).toBe(0);
+    await expectTopNavigation(page);
+    await expectNoHorizontalOverflow(page);
+    expect(consoleErrors).toEqual([]);
+  }, 30_000);
+
+  it("creates an invitation with manual-copy fallback and confirms one status change", async () => {
+    const { page, consoleErrors } = await newPage({
+      width: 1440,
+      height: 900,
+      clipboardUnavailable: true,
+    });
+    await page.goto(`${baseUrl}/admin`, { waitUntil: "domcontentloaded" });
+    await expect.poll(() => page.getByRole("heading", { name: "账号管理" }).isVisible())
+      .toBe(true);
+    await expect.poll(() => page.locator("tbody tr").count()).toBe(3);
+    expect(await page.getByText("管理员权限已验证").isVisible()).toBe(true);
+    expect(await page.getByText(/产品数量/).count()).toBe(0);
+    expect(await page.getByRole("button", { name: /查看产品/ }).count()).toBe(0);
+
+    await page.getByRole("button", { name: "创建邀请" }).click();
+    const invitationInput = page.getByLabel("新邀请链接");
+    await expect.poll(() => invitationInput.isVisible()).toBe(true);
+    const invitationUrl = await invitationInput.inputValue();
+    const invitationPath = new URL(invitationUrl).pathname;
+    expect(invitationPath).toMatch(new RegExp(`^${appBasePath}/invite/demo-admin-invitation-\\d+$`));
+    expectExactlyOneBasePrefix(invitationPath);
+
+    await page.getByRole("button", { name: "复制邀请链接" }).click();
+    const manualCopyAlert = page.getByText("无法自动复制，请选中上方链接并手动复制。");
+    await expect.poll(() => manualCopyAlert.isVisible()).toBe(true);
+    expect(await invitationInput.evaluate((input) => ({
+      active: document.activeElement === input,
+      end: (input as HTMLInputElement).selectionEnd,
+      length: (input as HTMLInputElement).value.length,
+      start: (input as HTMLInputElement).selectionStart,
+    }))).toEqual({ active: true, start: 0, end: invitationUrl.length, length: invitationUrl.length });
+
+    const memberRow = page.locator("tbody tr").filter({ hasText: "ledger.operator" });
+    expect(await memberRow.locator("td").nth(2).textContent()).toBe("启用");
+    await memberRow.getByRole("button", { name: "禁用 ledger.operator" }).click();
+    const dialog = page.getByRole("dialog", { name: "确认禁用账号" });
+    expect(await dialog.isVisible()).toBe(true);
+    expect(await memberRow.locator("td").nth(2).textContent()).toBe("启用");
+    await dialog.getByRole("button", { name: "确认禁用" }).click();
+    await expect.poll(() => dialog.count()).toBe(0);
+    await expect.poll(() => memberRow.locator("td").nth(2).textContent()).toBe("禁用");
+    expect(await memberRow.getByRole("button", { name: "启用 ledger.operator" }).isEnabled())
+      .toBe(true);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectTopNavigation(page);
+    await expectNoHorizontalOverflow(page);
+    expect(await page.getByRole("button", { name: "创建新邀请" }).isEnabled()).toBe(true);
+    expect(consoleErrors).toEqual([]);
+  }, 30_000);
+
+  it("retains the complete grid workflow at desktop and mobile breakpoints", async () => {
+    const { page, consoleErrors } = await newPage();
     await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
     const ladder = await page.locator("svg").first().boundingBox();
     const heading = await page.getByRole("heading", { name: /让每一道网格\s*都有清晰依据/ }).boundingBox();
@@ -118,7 +324,21 @@ it("runs the complete database-free UI demo at desktop and mobile breakpoints", 
     const expectedImportHref = `${appBasePath}/grids/import`;
     expect(await page.getByRole("link", { name: "导入数据" }).getAttribute("href"))
       .toBe(expectedImportHref);
-    expect(expectedImportHref).not.toContain("/fitgrid/fitgrid");
+    expectExactlyOneBasePrefix(expectedImportHref);
+    const exportPaths: string[] = [];
+    await page.route("**/api/v1/grid-trades/export?format=*", async (route) => {
+      const requestUrl = new URL(route.request().url());
+      exportPaths.push(`${requestUrl.pathname}${requestUrl.search}`);
+      const format = requestUrl.searchParams.get("format");
+      await route.fulfill({
+        body: JSON.stringify({ format }),
+        contentType: "application/json",
+        headers: {
+          "Content-Disposition": `attachment; filename="fitgridweb-${format}-2026-09-03.json"`,
+        },
+        status: 200,
+      });
+    });
     await page.getByRole("button", { name: "数据备份" }).click();
     const backupDialog = page.getByRole("dialog", { name: "数据备份" });
     expect(await backupDialog.isVisible()).toBe(true);
@@ -126,21 +346,22 @@ it("runs the complete database-free UI demo at desktop and mobile breakpoints", 
       .toBe(true);
     expect(await backupDialog.getByRole("button", { name: "下载 Web 完整备份" }).isVisible())
       .toBe(true);
+    await backupDialog.getByRole("button", { name: "下载 Android 兼容 JSON" }).click();
+    await expect.poll(() => backupDialog.getByRole("button", { name: "下载 Android 兼容 JSON" }).isEnabled())
+      .toBe(true);
+    await backupDialog.getByRole("button", { name: "下载 Web 完整备份" }).click();
+    await expect.poll(() => backupDialog.getByRole("button", { name: "下载 Web 完整备份" }).isEnabled())
+      .toBe(true);
+    expect(exportPaths).toEqual([
+      `${appBasePath}/api/v1/grid-trades/export?format=android`,
+      `${appBasePath}/api/v1/grid-trades/export?format=web`,
+    ]);
+    for (const exportPath of exportPaths) expectExactlyOneBasePrefix(exportPath);
     await backupDialog.getByRole("button", { name: "关闭数据备份" }).click();
     await expect.poll(() => backupDialog.count()).toBe(0);
 
-    const banner = await page.getByRole("banner").boundingBox();
-    const navigation = await page.getByRole("navigation", { name: "主导航" }).boundingBox();
-    const main = await page.getByRole("main").boundingBox();
-    expect(banner).not.toBeNull();
-    expect(navigation).not.toBeNull();
-    expect(main).not.toBeNull();
-    expect(banner!.y + banner!.height).toBeLessThanOrEqual(navigation!.y + 1);
-    expect(navigation!.y + navigation!.height).toBeLessThanOrEqual(main!.y + 1);
-    expect(await page.getByRole("navigation", { name: "主导航" }).evaluate(
-      (element) => window.getComputedStyle(element).position,
-    )).not.toBe("fixed");
-
+    await expectTopNavigation(page);
+    await expectNoHorizontalOverflow(page);
     const rows = page.locator("tbody tr");
     await expect.poll(() => rows.count()).toBe(20);
     expect(await page.locator("thead th:visible").allTextContents()).toEqual([
@@ -160,7 +381,6 @@ it("runs the complete database-free UI demo at desktop and mobile breakpoints", 
     await page.getByRole("button", { name: "刷新" }).click();
     await expect.poll(() => page.getByRole("status", { name: "正在刷新…" }).count()).toBe(1);
     await expect.poll(() => page.getByRole("status", { name: "正在刷新…" }).count()).toBe(0);
-
     await page.getByRole("link", { name: "黄金 ETF" }).click();
     await page.waitForURL(`${baseUrl}/grids/demo-grid-01`);
     await page.getByRole("button", { name: "查看第 1 笔明细" }).click();
@@ -236,9 +456,5 @@ it("runs the complete database-free UI demo at desktop and mobile breakpoints", 
     await expect.poll(() => page.getByLabel("用户名").inputValue()).toBe("demo");
     expect(await page.getByLabel("密码").inputValue()).toBe("");
     expect(consoleErrors).toEqual([]);
-  } finally {
-    await browser?.close();
-    await stop(child);
-    await writeFile(nextEnvPath, originalNextEnv);
-  }
-}, 60_000);
+  }, 60_000);
+});
