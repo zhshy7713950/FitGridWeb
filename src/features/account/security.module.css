@@ -1,0 +1,238 @@
+.page {
+  width: min(1040px, 100%);
+  margin: 0 auto;
+  padding: 42px 38px 56px;
+}
+
+.heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.eyebrow,
+.operationLabel {
+  margin: 0 0 9px;
+  color: var(--text-muted);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.heading h1 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.lede {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.securityState {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--positive) 55%, var(--line));
+  border-radius: 4px;
+  color: var(--positive);
+  background: var(--surface);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.signal {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--positive);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--positive) 20%, transparent);
+}
+
+.operation {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(340px, 1.2fr);
+  gap: clamp(38px, 7vw, 88px);
+  padding-top: 38px;
+}
+
+.context h2,
+.success h2 {
+  margin: 0;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+
+.context > p:not(.operationLabel) {
+  margin: 13px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.sessionPolicy {
+  margin: 28px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.sessionPolicy div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 43px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+
+.sessionPolicy dt {
+  color: var(--text-muted);
+}
+
+.sessionPolicy dd {
+  margin: 0;
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+.form {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--action);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--canvas);
+}
+
+.field input:focus {
+  border-color: var(--action);
+}
+
+.field input[aria-invalid="true"] {
+  border-color: var(--negative);
+}
+
+.fieldError,
+.hint {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.fieldError,
+.publicError {
+  color: var(--negative);
+}
+
+.hint {
+  color: var(--text-muted);
+}
+
+.publicError {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--negative);
+  background: var(--canvas);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.submit {
+  min-height: 44px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--action);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.success {
+  min-height: 176px;
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--positive);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.success > span {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--positive);
+  border-radius: 50%;
+  color: var(--positive);
+  font-weight: 900;
+}
+
+.success p {
+  margin: 9px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 28px 20px 44px;
+  }
+
+  .heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .operation {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+    padding-top: 28px;
+  }
+
+  .form,
+  .success {
+    padding: 20px;
+  }
+}
