@@ -1,4 +1,13 @@
 .workspace {
+  --canvas: #080D12;
+  --surface: #111722;
+  --surface-raised: color-mix(in srgb, #E6EAF2 5%, #111722);
+  --line: #2B3444;
+  --text: #E6EAF2;
+  --action: #2962FF;
+  --positive: #22AB94;
+  --negative: #F23645;
+
   min-width: 0;
 }
 
@@ -24,15 +33,35 @@
 }
 
 .heading button,
+.heading a,
 .searchBar button,
 .pagination button,
-.errorBanner button {
+.errorBanner button,
+.emptyActions button,
+.emptyActions a {
   min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: 5px;
   color: var(--text);
   background: var(--surface);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.headingActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.heading .primaryAction,
+.emptyActions .primaryAction {
+  border-color: var(--action);
+  background: var(--action);
 }
 
 .heading button:disabled,
@@ -42,10 +71,14 @@
 }
 
 .heading button:focus-visible,
+.heading a:focus-visible,
 .searchBar button:focus-visible,
 .searchBar input:focus-visible,
 .pagination button:focus-visible,
-.errorBanner button:focus-visible {
+.errorBanner button:focus-visible,
+.emptyActions button:focus-visible,
+.emptyActions a:focus-visible,
+.productName a:focus-visible {
   outline: 2px solid var(--action);
   outline-offset: 2px;
 }
@@ -147,6 +180,18 @@
   font-weight: 650;
 }
 
+.productName a {
+  display: inline-block;
+  color: var(--text);
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+}
+
+.productName a:hover {
+  color: var(--action);
+  text-decoration-color: currentColor;
+}
+
 .numeric {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-variant-numeric: tabular-nums;
@@ -191,7 +236,7 @@
   border-radius: 6px;
   color: var(--text);
   background: var(--surface-raised);
-  box-shadow: 0 14px 36px rgb(0 0 0 / 32%);
+  box-shadow: 0 14px 36px color-mix(in srgb, #080D12 32%, transparent);
   font-size: 13px;
   font-weight: 650;
 }
@@ -229,6 +274,18 @@
   text-align: center;
 }
 
+.empty p {
+  margin: 0;
+}
+
+.emptyActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
 .srOnly {
   position: absolute;
   width: 1px;
@@ -240,7 +297,13 @@
 
 @media (max-width: 767px) {
   .heading {
-    align-items: center;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .headingActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 
   .listViewport {

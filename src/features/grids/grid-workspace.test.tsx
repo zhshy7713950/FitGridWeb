@@ -70,6 +70,19 @@ it("renders one responsive product table with richer desktop fields", () => {
   expect(within(table).queryByText("android-v2.1.0")).not.toBeInTheDocument();
 });
 
+it("links each product name to its stable detail route and offers creation from the heading", () => {
+  render(<GridWorkspaceView controller={controller()} />);
+
+  expect(screen.getByRole("link", { name: "黄金ETF网格" })).toHaveAttribute(
+    "href",
+    `/grids/${product.id}`,
+  );
+  expect(screen.getByRole("link", { name: "新建产品" })).toHaveAttribute(
+    "href",
+    "/grids/new",
+  );
+});
+
 it("keeps maximum-length codes and decimal values intact in the shared table", () => {
   const maximumProduct = {
     ...product,
@@ -180,25 +193,42 @@ it("ignores a rapid duplicate refresh and removes feedback after a rejected requ
 it("cancels its refresh feedback timer when the product view unmounts", () => {
   vi.useFakeTimers();
   const { unmount } = render(<GridWorkspaceView controller={controller()} />);
+  const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+  const clearTimeoutSpy = vi.spyOn(window, "clearTimeout");
 
   fireEvent.click(screen.getByRole("button", { name: "刷新" }));
-  expect(vi.getTimerCount()).toBe(1);
+  const refreshTimerIndex = setTimeoutSpy.mock.calls.findIndex((call) => call[1] === 500);
+  expect(refreshTimerIndex).toBeGreaterThanOrEqual(0);
+  const refreshTimer = setTimeoutSpy.mock.results[refreshTimerIndex]?.value;
 
   unmount();
 
-  expect(vi.getTimerCount()).toBe(0);
+  expect(clearTimeoutSpy).toHaveBeenCalledWith(refreshTimer);
 });
 
-it("distinguishes an empty account from an empty search", () => {
+it("offers creation and import for an empty account but only clearing for an empty search", async () => {
+  const emptyAccount = controller({ items: [] });
   const { rerender } = render(
-    <GridWorkspaceView controller={controller({ items: [] })} />,
+    <GridWorkspaceView controller={emptyAccount} />,
   );
   expect(screen.getByText("还没有网格产品")).toBeInTheDocument();
+  expect(screen.getAllByRole("link", { name: "新建产品" })).toHaveLength(2);
+  expect(screen.getByRole("link", { name: "导入产品" })).toHaveAttribute(
+    "href",
+    "/grids/import",
+  );
 
+  const emptySearch = controller({ items: [], query: "gold" });
   rerender(
-    <GridWorkspaceView controller={controller({ items: [], query: "gold" })} />,
+    <GridWorkspaceView controller={emptySearch} />,
   );
   expect(screen.getByText("没有匹配的产品")).toBeInTheDocument();
+  const searchEmpty = screen.getByRole("region", { name: "搜索结果空状态" });
+  expect(within(searchEmpty).queryByRole("link")).not.toBeInTheDocument();
+  const clear = within(searchEmpty).getByRole("button", { name: "清除搜索" });
+  expect(within(searchEmpty).getAllByRole("button")).toEqual([clear]);
+  await userEvent.click(clear);
+  expect(emptySearch.clearQuery).toHaveBeenCalledTimes(1);
 });
 
 it("treats whitespace-only input as an unfiltered empty account", () => {

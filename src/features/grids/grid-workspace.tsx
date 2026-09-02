@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, type UIEvent } from "react";
 
 import { formatDecimal } from "./decimal-display";
@@ -112,15 +113,18 @@ export function GridWorkspaceView({
           <span>Grid strategies · 已载入 {controller.items.length} 项</span>
           <h1 id="grid-title">网格产品</h1>
         </div>
-        <button
-          type="button"
-          disabled={refreshBusy}
-          aria-disabled={refreshBusy}
-          aria-busy={refreshBusy}
-          onClick={refreshWithFeedback}
-        >
-          刷新
-        </button>
+        <div className={styles.headingActions}>
+          <button
+            type="button"
+            disabled={refreshBusy}
+            aria-disabled={refreshBusy}
+            aria-busy={refreshBusy}
+            onClick={refreshWithFeedback}
+          >
+            刷新
+          </button>
+          <Link className={styles.primaryAction} href="/grids/new">新建产品</Link>
+        </div>
       </header>
 
       {refreshBusy ? (
@@ -140,7 +144,7 @@ export function GridWorkspaceView({
           value={controller.query}
           onChange={(event) => controller.setQuery(event.target.value)}
         />
-        {hasQuery ? (
+        {hasQuery && controller.items.length ? (
           <button type="button" onClick={controller.clearQuery}>
             清除搜索
           </button>
@@ -174,7 +178,22 @@ export function GridWorkspaceView({
       {!controller.initialLoading &&
       !controller.initialError &&
       !controller.items.length ? (
-        <div className={styles.empty}>{emptyText}</div>
+        hasQuery ? (
+          <div className={styles.empty} role="region" aria-label="搜索结果空状态">
+            <p>{emptyText}</p>
+            <div className={styles.emptyActions}>
+              <button type="button" onClick={controller.clearQuery}>清除搜索</button>
+            </div>
+          </div>
+        ) : (
+          <div className={styles.empty} role="region" aria-label="账号产品空状态">
+            <p>{emptyText}</p>
+            <div className={styles.emptyActions}>
+              <Link className={styles.primaryAction} href="/grids/new">新建产品</Link>
+              <Link href="/grids/import">导入产品</Link>
+            </div>
+          </div>
+        )
       ) : null}
 
       {controller.items.length ? (
@@ -207,7 +226,9 @@ export function GridWorkspaceView({
             <tbody>
               {controller.items.map((item) => (
                 <tr key={item.id}>
-                  <td className={styles.productName}>{displayName(item)}</td>
+                  <td className={styles.productName}>
+                    <Link href={`/grids/${item.id}`}>{displayName(item)}</Link>
+                  </td>
                   <td className={styles.numeric}>{item.productCode}</td>
                   <td className={styles.desktopOnly}>
                     <span className={item.isShort ? styles.short : styles.long}>

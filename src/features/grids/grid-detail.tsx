@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { ClientApiError } from "@/lib/api-client";
 
 import { formatDecimal } from "./decimal-display";
-import { getGridTrade, recalculateGridTrade } from "./grid-api";
+import { deleteGridTrade, getGridTrade, recalculateGridTrade } from "./grid-api";
 import { GridRowInspector } from "./grid-row-inspector";
 import type { GridItem, GridTradeDetail } from "./types";
 import styles from "./grid-detail.module.css";
@@ -61,11 +62,165 @@ function visibleError(error: unknown, fallback: string): VisibleError {
   return { message: fallback, retryable: true };
 }
 
+function visibleDeleteError(error: unknown): VisibleError {
+  if (error instanceof ClientApiError) {
+    return {
+      message: error.message || "删除产品失败，请重试",
+      requestId: error.requestId,
+    };
+  }
+  return { message: "删除产品失败，请重试" };
+}
+
 function displayName(detail: GridTradeDetail): string {
   return detail.productName || detail.productCode;
 }
 
+function DeleteConfirmation({
+  detail,
+  onConfirm,
+  onClose,
+}: {
+  detail: GridTradeDetail;
+  onConfirm: () => void | Promise<void>;
+  onClose: () => void;
+}) {
+  const [confirmation, setConfirmation] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<VisibleError | null>(null);
+  const deletingRef = useRef(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  const errorId = useId();
+
+  const close = useCallback(() => {
+    if (!deletingRef.current) onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (!focusable.length) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [close]);
+
+  async function handleConfirm() {
+    if (confirmation !== detail.productCode || deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await onConfirm();
+    } catch (error) {
+      deletingRef.current = false;
+      setDeleting(false);
+      setDeleteError(visibleDeleteError(error));
+    }
+  }
+
+  return (
+    <div className={styles.deleteLayer}>
+      <button
+        type="button"
+        className={styles.deleteBackdrop}
+        aria-label="关闭删除确认弹窗"
+        tabIndex={-1}
+        onClick={close}
+      />
+      <div
+        ref={dialogRef}
+        className={styles.deleteDialog}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={`${descriptionId}${deleteError ? ` ${errorId}` : ""}`}
+      >
+        <header className={styles.deleteHeader}>
+          <div>
+            <span className={styles.deleteEyebrow}>Permanent deletion</span>
+            <h2 id={titleId}>永久删除产品</h2>
+          </div>
+          <button type="button" aria-label="关闭" disabled={deleting} onClick={close}>×</button>
+        </header>
+
+        <div className={styles.deleteBody}>
+          <p id={descriptionId} className={styles.deleteWarning}>
+            此操作不可撤销。产品参数与所有网格计算结果都将永久删除。
+          </p>
+          <dl className={styles.deleteIdentity}>
+            <div><dt>产品名称</dt><dd>{displayName(detail)}</dd></div>
+            <div><dt>产品代码</dt><dd><code>{detail.productCode}</code></dd></div>
+          </dl>
+          <label htmlFor={`${titleId}-confirmation`}>输入产品代码确认</label>
+          <input
+            ref={inputRef}
+            id={`${titleId}-confirmation`}
+            value={confirmation}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={deleting}
+            onChange={(event) => setConfirmation(event.target.value)}
+          />
+          {deleteError ? (
+            <div id={errorId} className={styles.deleteError} role="alert">
+              <span>{deleteError.message}</span>
+              {deleteError.requestId ? <small>请求 ID：{deleteError.requestId}</small> : null}
+            </div>
+          ) : null}
+        </div>
+
+        <footer className={styles.deleteControls}>
+          <button type="button" disabled={deleting} onClick={close}>取消</button>
+          <button
+            type="button"
+            className={styles.confirmDelete}
+            disabled={confirmation !== detail.productCode || deleting}
+            aria-busy={deleting}
+            onClick={() => void handleConfirm()}
+          >
+            {deleting ? "正在删除…" : "确认永久删除"}
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 export function GridDetail({ id }: { id: string }) {
+  const router = useRouter();
   const [detail, setDetail] = useState<GridTradeDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<VisibleError | null>(null);
@@ -113,6 +268,11 @@ export function GridDetail({ id }: { id: string }) {
     }
   }
 
+  async function handleDelete() {
+    await deleteGridTrade(id);
+    router.replace("/grids");
+  }
+
   if (loading) {
     return (
       <div className={`${styles.detail} ${styles.pageStatus}`} role="status">
@@ -138,7 +298,7 @@ export function GridDetail({ id }: { id: string }) {
     <GridDetailView
       detail={detail}
       onRecalculate={handleRecalculate}
-      onDelete={() => undefined}
+      onDelete={handleDelete}
       recalculating={recalculating}
       actionError={actionError}
     />
@@ -153,13 +313,17 @@ export function GridDetailView({
   actionError = null,
 }: GridDetailViewProps) {
   const [selectedSequence, setSelectedSequence] = useState<number | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const rowTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   const restoreFocusRef = useRef(false);
+  const restoreDeleteFocusRef = useRef(false);
   const items = detail.calculation.items;
   const selectedIndex = selectedSequence === null
     ? null
     : items.findIndex((item) => item.sequence === selectedSequence);
   const inspectorOpen = selectedIndex !== null && selectedIndex >= 0;
+  const modalOpen = inspectorOpen || deleteOpen;
   const transactionColumns = detail.isShort
     ? [...sellColumns, ...buyColumns]
     : [...buyColumns, ...sellColumns];
@@ -168,6 +332,10 @@ export function GridDetailView({
     restoreFocusRef.current = true;
     setSelectedSequence(null);
   }, []);
+  const closeDelete = useCallback(() => {
+    restoreDeleteFocusRef.current = true;
+    setDeleteOpen(false);
+  }, []);
 
   useEffect(() => {
     if (!inspectorOpen && restoreFocusRef.current) {
@@ -175,6 +343,13 @@ export function GridDetailView({
       rowTriggerRef.current?.focus();
     }
   }, [inspectorOpen]);
+
+  useEffect(() => {
+    if (!deleteOpen && restoreDeleteFocusRef.current) {
+      restoreDeleteFocusRef.current = false;
+      deleteTriggerRef.current?.focus();
+    }
+  }, [deleteOpen]);
 
   return (
     <section
@@ -186,8 +361,8 @@ export function GridDetailView({
         className={styles.detailContent}
         role="group"
         aria-label="产品详情内容"
-        aria-hidden={inspectorOpen ? true : undefined}
-        inert={inspectorOpen ? true : undefined}
+        aria-hidden={modalOpen ? true : undefined}
+        inert={modalOpen ? true : undefined}
       >
         <header className={styles.heading}>
         <div className={styles.titleBlock}>
@@ -210,7 +385,12 @@ export function GridDetailView({
             {recalculating ? "正在计算…" : "重新计算"}
           </button>
           <Link href={`/grids/${detail.id}/edit`}>编辑产品</Link>
-          <button className={styles.deleteAction} type="button" onClick={() => void onDelete()}>
+          <button
+            ref={deleteTriggerRef}
+            className={styles.deleteAction}
+            type="button"
+            onClick={() => setDeleteOpen(true)}
+          >
             删除产品
           </button>
         </div>
@@ -316,6 +496,11 @@ export function GridDetailView({
           onSelect={(index) => setSelectedSequence(items[index]?.sequence ?? null)}
           onClose={closeInspector}
         />
+      ) : null}
+
+
+      {deleteOpen ? (
+        <DeleteConfirmation detail={detail} onConfirm={onDelete} onClose={closeDelete} />
       ) : null}
     </section>
   );

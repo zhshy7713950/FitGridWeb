@@ -11,9 +11,15 @@ import type { GridItem, GridTradeDetail } from "./types";
 const api = vi.hoisted(() => ({
   getGridTrade: vi.fn(),
   recalculateGridTrade: vi.fn(),
+  deleteGridTrade: vi.fn(),
+}));
+
+const navigation = vi.hoisted(() => ({
+  replace: vi.fn(),
 }));
 
 vi.mock("./grid-api", () => api);
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 
 import { GridDetail, GridDetailView } from "./grid-detail";
 import styles from "./grid-detail.module.css";
@@ -116,6 +122,8 @@ afterEach(cleanup);
 beforeEach(() => {
   api.getGridTrade.mockReset();
   api.recalculateGridTrade.mockReset();
+  api.deleteGridTrade.mockReset();
+  navigation.replace.mockReset();
 });
 
 describe("GridDetailView", () => {
@@ -240,6 +248,91 @@ describe("GridDetailView", () => {
     expect(background).not.toHaveAttribute("inert");
     await waitFor(() => expect(trigger).toHaveFocus());
   });
+
+  it("deletes only after the exact product code is entered and keeps success locked", async () => {
+    const user = userEvent.setup();
+    const request = deferred<void>();
+    const onDelete = vi.fn().mockReturnValue(request.promise);
+    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={onDelete} />);
+
+    await user.click(screen.getByRole("button", { name: "删除产品" }));
+    const dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    expect(dialog).toHaveTextContent("黄金 ETF");
+    expect(dialog).toHaveTextContent("518880");
+    expect(dialog).toHaveTextContent("此操作不可撤销");
+
+    const input = within(dialog).getByRole("textbox", { name: "输入产品代码确认" });
+    const confirm = within(dialog).getByRole("button", { name: "确认永久删除" });
+    expect(confirm).toBeDisabled();
+    await user.type(input, "51888");
+    expect(confirm).toBeDisabled();
+    await user.type(input, "0");
+
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(within(dialog).getByRole("button", { name: "正在删除…" })).toBeDisabled();
+
+    request.resolve();
+    await waitFor(() => {
+      expect(within(dialog).getByRole("button", { name: "正在删除…" })).toBeDisabled();
+    });
+  });
+
+  it("retains the delete dialog and typed code while showing the public failure details", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn().mockRejectedValue(
+      new ClientApiError(404, "NOT_FOUND", "该产品已被其他操作删除", "req-delete-5"),
+    );
+    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={onDelete} />);
+
+    await user.click(screen.getByRole("button", { name: "删除产品" }));
+    const dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    const input = within(dialog).getByRole("textbox", { name: "输入产品代码确认" });
+    await user.type(input, detail.productCode);
+    await user.click(within(dialog).getByRole("button", { name: "确认永久删除" }));
+
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert).toHaveTextContent("该产品已被其他操作删除");
+    expect(alert).toHaveTextContent("请求 ID：req-delete-5");
+    expect(input).toHaveValue(detail.productCode);
+    expect(within(dialog).getByRole("button", { name: "确认永久删除" })).toBeEnabled();
+  });
+
+  it("traps delete focus, isolates the background, and supports close, Escape, and backdrop", async () => {
+    const user = userEvent.setup();
+    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
+
+    const trigger = screen.getByRole("button", { name: "删除产品" });
+    const background = screen.getByRole("group", { name: "产品详情内容" });
+    await user.click(trigger);
+    let dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    const input = within(dialog).getByRole("textbox", { name: "输入产品代码确认" });
+    const close = within(dialog).getByRole("button", { name: "关闭" });
+    expect(input).toHaveFocus();
+    expect(background).toHaveAttribute("aria-hidden", "true");
+    expect(background).toHaveAttribute("inert");
+
+    await user.tab({ shift: true });
+    expect(close).toHaveFocus();
+    await user.tab();
+    expect(input).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "永久删除产品" })).not.toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveFocus());
+
+    await user.click(trigger);
+    dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    await user.click(within(dialog).getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("dialog", { name: "永久删除产品" })).not.toBeInTheDocument();
+
+    await user.click(trigger);
+    await user.click(screen.getByRole("button", { name: "关闭删除确认弹窗" }));
+    expect(screen.queryByRole("dialog", { name: "永久删除产品" })).not.toBeInTheDocument();
+    expect(background).not.toHaveAttribute("aria-hidden");
+    expect(background).not.toHaveAttribute("inert");
+  });
 });
 
 describe("GridDetail controller", () => {
@@ -344,5 +437,20 @@ describe("GridDetail controller", () => {
 
     expect(api.recalculateGridTrade).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "正在计算…" })).toBeDisabled();
+  });
+
+  it("deletes through the API and replaces history with the product list", async () => {
+    api.getGridTrade.mockResolvedValue(detail);
+    api.deleteGridTrade.mockResolvedValue(undefined);
+    render(<GridDetail id={detail.id} />);
+
+    await screen.findByRole("heading", { name: "黄金 ETF" });
+    await userEvent.click(screen.getByRole("button", { name: "删除产品" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "输入产品代码确认" }), detail.productCode);
+    await userEvent.click(screen.getByRole("button", { name: "确认永久删除" }));
+
+    await waitFor(() => expect(api.deleteGridTrade).toHaveBeenCalledWith(detail.id));
+    expect(api.deleteGridTrade).toHaveBeenCalledTimes(1);
+    expect(navigation.replace).toHaveBeenCalledWith("/grids");
   });
 });

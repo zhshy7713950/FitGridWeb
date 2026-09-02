@@ -470,6 +470,189 @@
   color: var(--detail-text);
 }
 
+.deleteLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.deleteBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--detail-ink) 78%, transparent);
+}
+
+.deleteDialog {
+  position: relative;
+  width: min(520px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--detail-line);
+  border-top: 2px solid var(--detail-short);
+  border-radius: 4px;
+  color: var(--detail-text);
+  background: var(--detail-surface);
+  box-shadow: 0 22px 58px color-mix(in srgb, var(--detail-ink) 54%, transparent);
+}
+
+.deleteHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 17px;
+  border-bottom: 1px solid var(--detail-line);
+}
+
+.deleteEyebrow {
+  color: var(--detail-short);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.deleteHeader h2 {
+  margin: 5px 0 0;
+  font-family: "Arial Narrow", "Roboto Condensed", "PingFang SC", sans-serif;
+  font-size: 24px;
+  letter-spacing: -0.035em;
+}
+
+.deleteHeader button,
+.deleteControls button {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 13px;
+  border: 1px solid var(--detail-line);
+  border-radius: 4px;
+  color: var(--detail-text);
+  background: var(--detail-surface);
+  font-weight: 650;
+}
+
+.deleteHeader button {
+  min-width: 40px;
+  padding: 0;
+  font-size: 20px;
+}
+
+.deleteBody {
+  padding: 20px 22px;
+}
+
+.deleteWarning {
+  margin: 0 0 18px;
+  padding: 11px 12px;
+  border-left: 3px solid var(--detail-short);
+  color: var(--detail-text);
+  background: color-mix(in srgb, var(--detail-short) 9%, transparent);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.deleteIdentity {
+  margin: 0 0 18px;
+  border-block: 1px solid var(--detail-line);
+}
+
+.deleteIdentity div {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--detail-line);
+}
+
+.deleteIdentity div:last-child {
+  border-bottom: 0;
+}
+
+.deleteIdentity dt {
+  color: var(--detail-muted);
+  font-size: 11px;
+}
+
+.deleteIdentity dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.deleteIdentity code {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.deleteBody label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--detail-muted);
+  font-size: 12px;
+}
+
+.deleteBody input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--detail-line);
+  border-radius: 4px;
+  color: var(--detail-text);
+  background: var(--detail-ink);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.deleteBody input:focus-visible,
+.deleteHeader button:focus-visible,
+.deleteControls button:focus-visible {
+  outline: 2px solid var(--detail-action);
+  outline-offset: 2px;
+}
+
+.deleteBody input:disabled,
+.deleteHeader button:disabled,
+.deleteControls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.deleteError {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--detail-short);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--detail-short) 8%, transparent);
+}
+
+.deleteError small {
+  display: block;
+  margin-top: 4px;
+  color: var(--detail-muted);
+}
+
+.deleteControls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 16px 22px 20px;
+  border-top: 1px solid var(--detail-line);
+}
+
+.deleteControls .confirmDelete:not(:disabled) {
+  border-color: var(--detail-short);
+  background: var(--detail-short);
+}
+
 .srOnly {
   position: absolute;
   width: 1px;
@@ -525,6 +708,24 @@
   .inspectorIndex,
   .inspectorValues,
   .inspectorControls {
+    padding-inline: 16px;
+  }
+
+  .deleteLayer {
+    align-items: end;
+    padding: 0;
+  }
+
+  .deleteDialog {
+    width: 100%;
+    border-inline: 0;
+    border-bottom: 0;
+    border-radius: 4px 4px 0 0;
+  }
+
+  .deleteHeader,
+  .deleteBody,
+  .deleteControls {
     padding-inline: 16px;
   }
 }
