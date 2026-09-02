@@ -1,0 +1,696 @@
+.workspace {
+  min-width: 0;
+  width: min(100%, 1040px);
+  margin-inline: auto;
+  color: var(--text);
+}
+
+.workspaceContent {
+  min-width: 0;
+}
+
+.heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 28px;
+  margin-bottom: 18px;
+}
+
+.heading h1 {
+  margin: 5px 0 0;
+  font-family: "Arial Narrow", "Aptos Narrow", "PingFang SC", sans-serif;
+  font-size: clamp(26px, 3vw, 34px);
+  font-stretch: condensed;
+  letter-spacing: -0.045em;
+}
+
+.heading p {
+  max-width: 390px;
+  margin: 0 0 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: right;
+}
+
+.eyebrow,
+.completeEyebrow {
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.stateRail {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0 0 12px;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  list-style: none;
+}
+
+.stateRail li {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-right: 1px solid var(--line);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.stateRail li:last-child {
+  border-right: 0;
+}
+
+.stateRail li[aria-current="step"] {
+  box-shadow: inset 3px 0 0 var(--action);
+  color: var(--text);
+  background: color-mix(in srgb, var(--action) 8%, var(--surface));
+}
+
+.selectPanel,
+.previewPanel,
+.completePanel {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.panelHeader {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+
+.panelHeader span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.panelHeader h2 {
+  margin: 4px 0 0;
+  font-size: 16px;
+  letter-spacing: -0.015em;
+}
+
+.panelHeader > code {
+  min-width: 0;
+  max-width: 48%;
+  overflow: hidden;
+  color: var(--text);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileControl {
+  padding: 24px 18px 18px;
+}
+
+.fileControl label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.fileControl input {
+  width: 100%;
+  min-height: 48px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--canvas);
+  cursor: pointer;
+}
+
+.fileControl input::file-selector-button {
+  min-height: 32px;
+  margin-right: 12px;
+  padding: 0 12px;
+  border: 1px solid var(--action);
+  border-radius: 3px;
+  color: var(--text);
+  background: var(--action);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.fileControl input:disabled,
+.fileControl input:disabled::file-selector-button {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.fileControl p,
+.trustNote p,
+.completePanel > p {
+  margin: 9px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.trustNote {
+  margin: 0 18px 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--positive);
+  background: color-mix(in srgb, var(--positive) 5%, var(--canvas));
+}
+
+.trustNote strong {
+  font-size: 11px;
+}
+
+.trustNote p {
+  margin-top: 4px;
+}
+
+.countStrip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+  list-style: none;
+}
+
+.countStrip li {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-right: 1px solid var(--line);
+}
+
+.countStrip li:last-child {
+  border-right: 0;
+}
+
+.countStrip span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.countStrip code,
+.recordGroup summary code {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.positive {
+  color: var(--positive);
+}
+
+.negative {
+  color: var(--negative);
+}
+
+.neutral {
+  color: var(--text);
+}
+
+.warning {
+  color: color-mix(in srgb, var(--negative) 52%, var(--text));
+}
+
+.recordGroups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.recordGroup {
+  min-width: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.recordGroup:nth-child(even) {
+  border-right: 0;
+}
+
+.recordGroup:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.recordGroup summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  list-style-position: inside;
+}
+
+.recordGroup summary:hover {
+  background: color-mix(in srgb, var(--action) 5%, var(--surface));
+}
+
+.recordGroup ol,
+.globalWarnings {
+  max-height: 230px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.recordItem,
+.globalWarnings li {
+  padding: 10px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+}
+
+.recordItem:last-child,
+.globalWarnings li:last-child {
+  border-bottom: 0;
+}
+
+.recordIdentity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.recordIdentity code,
+.fieldErrors code {
+  color: var(--text);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.recordMessages {
+  margin: 8px 0 0;
+  padding-left: 17px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.fieldErrors {
+  color: var(--negative);
+}
+
+.globalWarnings {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.emptyGroup {
+  margin: 0;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.policy {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.policy legend {
+  width: 100%;
+  margin-bottom: 9px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.policy label {
+  min-width: 0;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--canvas);
+  cursor: pointer;
+}
+
+.policy label:has(input:checked) {
+  border-color: var(--action);
+  background: color-mix(in srgb, var(--action) 8%, var(--canvas));
+}
+
+.policy .overwriteOption:has(input:checked) {
+  border-color: var(--negative);
+  background: color-mix(in srgb, var(--negative) 7%, var(--canvas));
+}
+
+.policy input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--action);
+}
+
+.policy .overwriteOption input {
+  accent-color: var(--negative);
+}
+
+.policy span,
+.policy small {
+  display: block;
+}
+
+.policy strong {
+  font-size: 11px;
+}
+
+.policy small {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 16px;
+}
+
+.actions button,
+.actions a,
+.errorBanner button,
+.dialog footer button,
+.dialogBody a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 15px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--surface);
+  cursor: pointer;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.actions .primaryAction,
+.dialogBody a {
+  border-color: var(--action);
+  background: var(--action);
+}
+
+.actions .riskAction,
+.dialog footer .confirmOverwrite {
+  border-color: var(--negative);
+  background: var(--negative);
+}
+
+.actions button:disabled,
+.dialog footer button:disabled,
+.dialogBody a[aria-disabled="true"] {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.errorBanner {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px 10px 8px 13px;
+  border: 1px solid color-mix(in srgb, var(--negative) 52%, var(--line));
+  border-radius: 4px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--negative) 8%, var(--surface));
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.errorBanner button {
+  flex: 0 0 auto;
+  min-height: 36px;
+}
+
+.busyOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--canvas) 38%, transparent);
+}
+
+.busyIndicator {
+  min-width: 168px;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--surface-raised);
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--canvas) 32%, transparent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.spinner {
+  width: 17px;
+  height: 17px;
+  border: 2px solid color-mix(in srgb, var(--action) 25%, var(--line));
+  border-top-color: var(--action);
+  border-radius: 50%;
+  animation: import-spin 0.7s linear infinite;
+}
+
+@keyframes import-spin {
+  to { transform: rotate(360deg); }
+}
+
+.dialogLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.dialogBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--canvas) 76%, transparent);
+  cursor: default;
+}
+
+.dialog {
+  position: relative;
+  width: min(100%, 520px);
+  max-height: calc(100dvh - 36px);
+  overflow: auto;
+  border: 1px solid var(--negative);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 20px 52px color-mix(in srgb, var(--canvas) 72%, transparent);
+}
+
+.dialog > header {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--negative) 8%, var(--surface-raised));
+}
+
+.dialog header span {
+  color: var(--negative);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.dialog h2 {
+  margin: 5px 0 0;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.dialogBody {
+  padding: 17px 18px;
+}
+
+.dialogBody p {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.dialogBody p:first-child {
+  color: var(--text);
+}
+
+.dialogBody a {
+  margin-top: 4px;
+}
+
+.dialog > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 13px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.completePanel {
+  padding: 26px 18px 0;
+}
+
+.completePanel h2 {
+  margin: 6px 0 0;
+  font-family: "Arial Narrow", "Aptos Narrow", "PingFang SC", sans-serif;
+  font-size: 26px;
+  letter-spacing: -0.04em;
+}
+
+.completePanel > .countStrip {
+  margin: 22px -18px 0;
+  border-top: 1px solid var(--line);
+}
+
+.completePanel > .actions {
+  margin: 0 -18px;
+}
+
+@media (max-width: 767px) {
+  .heading {
+    display: block;
+    margin-bottom: 14px;
+  }
+
+  .heading h1 {
+    font-size: 27px;
+  }
+
+  .heading p {
+    margin-top: 9px;
+    text-align: left;
+  }
+
+  .panelHeader {
+    align-items: start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .panelHeader > code {
+    max-width: 100%;
+  }
+
+  .countStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .countStrip li:nth-child(2) {
+    border-right: 0;
+  }
+
+  .countStrip li:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .recordGroups,
+  .policy {
+    grid-template-columns: 1fr;
+  }
+
+  .recordGroup,
+  .recordGroup:nth-child(even),
+  .recordGroup:nth-last-child(-n + 2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .recordGroup:last-child {
+    border-bottom: 0;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .completePanel .actions {
+    grid-template-columns: 1fr;
+  }
+
+  .actions button,
+  .actions a,
+  .dialogBody a {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .dialogLayer {
+    padding: 10px;
+  }
+
+  .dialog {
+    max-height: calc(100dvh - 20px);
+  }
+
+  .dialogBody a {
+    text-align: center;
+  }
+
+  .dialog > footer {
+    display: grid;
+    grid-template-columns: 1fr 1.35fr;
+  }
+}
