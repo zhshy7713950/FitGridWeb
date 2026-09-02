@@ -599,7 +599,7 @@ components:
     InvitationStatusResponse:
       type: object
       additionalProperties: false
-      required: [status]
+      required: [status, expiresAt]
       properties:
         status: {type: string, enum: [valid, used, expired]}
         expiresAt: {type: [string, 'null'], format: date-time}

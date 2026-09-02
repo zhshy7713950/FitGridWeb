@@ -99,6 +99,19 @@ describe("OpenAPI route coverage", () => {
     });
   });
 
+  it("requires both fields in the invitation status response contract", async () => {
+    const source = await readFile(
+      path.join(process.cwd(), "docs/fit-replication/contracts/openapi.yaml"),
+      "utf8",
+    );
+    const document = parse(source) as {
+      components: { schemas: { InvitationStatusResponse: { required?: string[] } } };
+    };
+
+    expect(document.components.schemas.InvitationStatusResponse.required)
+      .toEqual(["status", "expiresAt"]);
+  });
+
   it.each([
     [undefined, "https://fitgrid.example/invite/route-contract-token-000000000001"],
     ["/fitgrid", "https://fitgrid.example/fitgrid/invite/route-contract-token-000000000001"],

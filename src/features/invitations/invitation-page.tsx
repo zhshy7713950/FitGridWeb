@@ -25,8 +25,13 @@ type AcceptRequest = (
   token: string,
   username: string,
   password: string,
+  signal?: AbortSignal,
 ) => Promise<InvitationRegistrationUser>;
-type FormAcceptRequest = (username: string, password: string) => Promise<InvitationRegistrationUser>;
+type FormAcceptRequest = (
+  username: string,
+  password: string,
+  signal?: AbortSignal,
+) => Promise<InvitationRegistrationUser>;
 
 const unavailableAccept: FormAcceptRequest = () => Promise.reject(
   new Error("Invitation acceptance is unavailable"),
@@ -37,7 +42,7 @@ function requestIdSuffix(requestId?: string): string {
 }
 
 function stateFromError(caught: unknown): InvitationPageState {
-  if (caught instanceof ClientApiError && caught.status === 404) {
+  if (caught instanceof ClientApiError && [404, 422].includes(caught.status)) {
     return { kind: "invalid", expiresAt: null };
   }
   if (caught instanceof ClientApiError) {
@@ -103,8 +108,9 @@ export function InvitationPage({
 
   return (
     <InvitationPageView
+      key={`${token}:${reload}`}
       state={state}
-      accept={(username, password) => accept(token, username, password)}
+      accept={(username, password, signal) => accept(token, username, password, signal)}
       onAccepted={() => navigate("/login")}
       onRetry={() => setReload((value) => value + 1)}
     />
@@ -135,21 +141,7 @@ export function InvitationPageView({
   }
 
   if (state.kind === "error") {
-    return (
-      <InvitationFrame step="verify">
-        <section className={styles.statusPanel}>
-          <span className={`${styles.statusMark} ${styles.errorMark}`} aria-hidden="true">!</span>
-          <h1>暂时无法验证邀请</h1>
-          <p className={styles.publicError} role="alert">
-            {state.message}{requestIdSuffix(state.requestId)}
-            {state.retryAfterSeconds ? ` ${state.retryAfterSeconds} 秒后重试。` : ""}
-          </p>
-          <button className={styles.secondaryAction} type="button" onClick={onRetry}>
-            重新检查邀请
-          </button>
-        </section>
-      </InvitationFrame>
-    );
+    return <RetryableStatusPanel state={state} onRetry={onRetry} />;
   }
 
   if (state.kind !== "valid") {
@@ -183,6 +175,53 @@ export function InvitationPageView({
   );
 }
 
+function RetryableStatusPanel({
+  state,
+  onRetry,
+}: {
+  state: Extract<InvitationPageState, { kind: "error" }>;
+  onRetry: () => void;
+}) {
+  const [retryAfter, setRetryAfter] = useState(Math.max(0, state.retryAfterSeconds ?? 0));
+  const retryLock = useRef(false);
+
+  useEffect(() => {
+    if (retryAfter <= 0) return;
+    const timer = window.setTimeout(() => {
+      setRetryAfter((value) => Math.max(0, value - 1));
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [retryAfter]);
+
+  function retry() {
+    if (retryAfter > 0 || retryLock.current) return;
+    retryLock.current = true;
+    onRetry();
+  }
+
+  return (
+    <InvitationFrame step="verify">
+      <section className={styles.statusPanel}>
+        <span className={`${styles.statusMark} ${styles.errorMark}`} aria-hidden="true">!</span>
+        <h1>暂时无法验证邀请</h1>
+        <p className={styles.publicError} role="alert">
+          {state.message}{requestIdSuffix(state.requestId)}
+          {retryAfter > 0 ? ` ${retryAfter} 秒后重试。` : ""}
+        </p>
+        <button
+          className={styles.secondaryAction}
+          type="button"
+          aria-label="重新检查邀请"
+          disabled={retryAfter > 0}
+          onClick={retry}
+        >
+          {retryAfter > 0 ? `${retryAfter} 秒后重试` : "重新检查邀请"}
+        </button>
+      </section>
+    </InvitationFrame>
+  );
+}
+
 function RegistrationForm({
   accept,
   onAccepted,
@@ -200,6 +239,19 @@ function RegistrationForm({
   const [formError, setFormError] = useState("");
   const [retryAfter, setRetryAfter] = useState(0);
   const submissionLock = useRef(false);
+  const mounted = useRef(false);
+  const requestGeneration = useRef(0);
+  const activeController = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      requestGeneration.current += 1;
+      activeController.current?.abort();
+      activeController.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (retryAfter <= 0) return;
@@ -233,13 +285,18 @@ function RegistrationForm({
 
     submissionLock.current = true;
     setPending(true);
+    const controller = new AbortController();
+    const generation = ++requestGeneration.current;
+    activeController.current = controller;
+    const isCurrent = () => mounted.current
+      && requestGeneration.current === generation
+      && activeController.current === controller
+      && !controller.signal.aborted;
+
     try {
-      await accept(username.trim(), password);
-      setPassword("");
-      setConfirmation("");
-      setAccepted(true);
-      onAccepted();
+      await accept(username.trim(), password, controller.signal);
     } catch (caught) {
+      if (!isCurrent()) return;
       if (caught instanceof ClientApiError && caught.status === 404) {
         setPassword("");
         setConfirmation("");
@@ -253,7 +310,16 @@ function RegistrationForm({
       }
       submissionLock.current = false;
       setPending(false);
+      activeController.current = null;
+      return;
     }
+
+    if (!isCurrent()) return;
+    activeController.current = null;
+    setPassword("");
+    setConfirmation("");
+    setAccepted(true);
+    onAccepted();
   }
 
   if (unavailable) {

@@ -50,6 +50,30 @@ describe("invitation API", () => {
     );
   });
 
+  it("forwards an AbortSignal to the acceptance request", async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json({
+      id: "user-1",
+      username: "member",
+      role: "member",
+      status: "active",
+    }, { status: 201 }));
+    vi.stubGlobal("fetch", fetcher);
+    const controller = new AbortController();
+    const requestWithSignal = acceptInvitation as (
+      token: string,
+      username: string,
+      password: string,
+      signal?: AbortSignal,
+    ) => ReturnType<typeof acceptInvitation>;
+
+    await requestWithSignal("token-value", "member", "strong-password-1", controller.signal);
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/v1/invitations/token-value/accept",
+      expect.objectContaining({ signal: controller.signal }),
+    );
+  });
+
   it("preserves the public error envelope, request ID, and retry delay", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(
       { code: "RATE_LIMITED", message: "请求过快", requestId: "01INVITE" },

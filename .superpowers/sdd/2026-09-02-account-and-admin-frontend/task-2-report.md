@@ -45,3 +45,15 @@ The initial sandboxed full-suite baseline could not bind `127.0.0.1` (`EPERM`), 
 - Password and confirmation exist only in the mounted React form state and request body; no UI storage, URL, or logging path was added.
 - The form subtree unmounts whenever invitation state is non-valid, removing password state. Success explicitly clears both password fields before showing success and navigating.
 - Production builds contain the real API path only; demo data remains behind the established `NODE_ENV`-guarded dynamic import boundary.
+
+## Fix review round 1/5
+
+The review findings were reproduced with nine failing focused assertions before implementation:
+
+- invitation acceptance now forwards an `AbortSignal`; token changes and form/page unmount abort the active request;
+- a mounted flag, request generation, and controller-identity guard ignore stale promises even when an adapter does not honor abort, so old success cannot navigate and old failure cannot update state;
+- invitation status `422` responses, including malformed or too-short tokens, render the public invalid state without leaking field details;
+- retryable `429` responses use `retryAfterSeconds` for a visible countdown and a disabled retry action, reject repeated clicks, and clear the timer when the token changes;
+- the OpenAPI `InvitationStatusResponse.required` contract now includes both `status` and `expiresAt`.
+
+The focused GREEN gate passed 49 tests across five files. The fresh non-listener full gate passed 443 tests in 56 files, with one PostgreSQL environment-gated file/test skipped. `pnpm typecheck`, `pnpm lint`, `NEXT_BASE_PATH=/fitgrid pnpm build`, `git diff --check`, and the production demo-marker scan all passed; the build manifest still includes `ƒ /invite/[token]`.

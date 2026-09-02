@@ -35,6 +35,7 @@ export function acceptInvitation(
   token: string,
   username: string,
   password: string,
+  signal?: AbortSignal,
 ): Promise<InvitationRegistrationUser> {
   if (isUiDemoMode()) {
     return demoInvitationData().then((demo) => (
@@ -48,6 +49,7 @@ export function acceptInvitation(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
+      signal,
     },
   );
 }
