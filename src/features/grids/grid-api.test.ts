@@ -291,10 +291,13 @@ it("creates a grid trade with the complete browser DTO", async () => {
     "/api/v1/grid-trades",
     expect.objectContaining({
       method: "POST",
-      headers: expect.objectContaining({ "Content-Type": "application/json" }),
       body: JSON.stringify(validInput),
     }),
   );
+  const init = fetcher.mock.calls[0][1] as RequestInit;
+  const headers = new Headers(init.headers);
+  expect(headers.get("Content-Type")).toBe("application/json");
+  expect(headers.get("Accept")).toBe("application/json");
 });
 
 it("sends the optimistic-lock timestamp when updating", async () => {
