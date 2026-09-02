@@ -14,7 +14,16 @@ interface Workflow {
     workflow_dispatch: unknown;
   };
   permissions: { contents: string; packages: string };
-  jobs: Record<string, unknown>;
+  jobs: Record<string, {
+    env?: Record<string, string>;
+    services?: Record<string, {
+      image?: string;
+      env?: Record<string, string>;
+      ports?: string[];
+      options?: string;
+    }>;
+    steps?: Array<{ run?: string }>;
+  }>;
 }
 
 describe("server image release workflow", () => {
@@ -88,6 +97,43 @@ describe("server image release workflow", () => {
     expect(serialized).toContain("DATABASE_URL=file:/tmp/cli-check.db");
     expect(serialized).toContain("/app/node_modules/.bin/prisma");
     expect(serialized).toContain("/app/node_modules/.bin/tsx");
+  });
+
+  it("migrates a healthy PostgreSQL service before running mandatory integration tests", () => {
+    const source = readFileSync(
+      path.join(process.cwd(), ".github/workflows/server-image.yml"),
+      "utf8",
+    );
+    const workflow = parse(source) as Workflow;
+    const verify = workflow.jobs.verify;
+    const postgres = verify.services?.postgres;
+
+    expect(postgres).toMatchObject({
+      image: "postgres:17-alpine",
+      env: {
+        POSTGRES_DB: "fitgridweb_test",
+        POSTGRES_USER: "fitgrid_ci",
+        POSTGRES_PASSWORD: "fitgrid_ci_local",
+      },
+      ports: ["5432:5432"],
+    });
+    expect(postgres?.options).toMatch(/--health-cmd ["']?pg_isready\b/);
+    expect(postgres?.options).toContain("--health-interval 10s");
+    expect(postgres?.options).toContain("--health-timeout 5s");
+    expect(postgres?.options).toContain("--health-retries 5");
+
+    const databaseUrl = "postgresql://fitgrid_ci:fitgrid_ci_local@localhost:5432/fitgridweb_test";
+    expect(verify.env).toMatchObject({
+      DATABASE_URL: databaseUrl,
+      TEST_DATABASE_URL: databaseUrl,
+    });
+    expect(JSON.stringify(verify.env)).not.toContain("${{ secrets.");
+
+    const commands = verify.steps?.flatMap((step) => step.run ? [step.run] : []) ?? [];
+    expect(commands.indexOf("pnpm exec prisma migrate deploy")).toBeGreaterThanOrEqual(0);
+    expect(commands.indexOf("pnpm test")).toBeGreaterThan(
+      commands.indexOf("pnpm exec prisma migrate deploy"),
+    );
   });
 
   it("keeps the low-memory VPS runbook operationally complete", () => {

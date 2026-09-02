@@ -65,3 +65,22 @@ Only Task 4 administrator contracts, server status safety, client state/UI behav
 - `NEXT_BASE_PATH=/fitgrid pnpm build`: passed; the production build includes `/admin` and all administrator API routes and records `basePath: /fitgrid`.
 - `NEXT_BASE_PATH=/fitgrid pnpm exec vitest run src/e2e/ui-demo.smoke.test.ts`: passed.
 - Production runtime bundle scan over `.next/static` and `.next/server`: clean of `demo-admin-data`, demo administrator/member identifiers, invitation tokens, and demo error markers. `.next/dev` was intentionally excluded because the database-free smoke creates development-only demo chunks there.
+
+## Repair Round 2: Mandatory PostgreSQL Verification
+
+- Added a PostgreSQL 17 service to the image workflow's `verify` job with explicit `pg_isready` health checks and non-secret, CI-local credentials. The job exposes the same fresh database through `DATABASE_URL` and `TEST_DATABASE_URL`, runs `pnpm exec prisma migrate deploy`, then runs the test suite. PostgreSQL integration tests can no longer be silently skipped in image-publishing CI.
+- Strengthened the administrator concurrency integration test to issue the mutual disables through two independent Prisma clients, repositories, and `AdminService` instances. The database assertion requires exactly one successful disable, one `LAST_ACTIVE_ADMIN`, one remaining active administrator with its session, and one disabled administrator with no session.
+- Added a real PostgreSQL rollback test. A uniquely named trigger/function rejects deletion only for the target test session; the failed disable must leave both administrator statuses active and retain the target session. `afterEach` drops the exact trigger/function, removes only the generated user UUIDs, disconnects every client, and reports any cleanup failure.
+- The in-memory race remains a fast repository-contract test only. The independent-connection and rollback claims are now owned by the PostgreSQL integration suite and enforced by CI.
+
+### Round 2 TDD and Verification
+
+- RED: the parsed workflow contract failed because the verify job had no PostgreSQL service, database URLs, health policy, or migration-before-test step.
+- GREEN: `src/server/ops/release-config.test.ts` passed all 6 tests after adding the service and ordered migration gate.
+- Focused non-PostgreSQL gate: 15 tests passed; the 2 administrator PostgreSQL cases were explicitly skipped locally.
+- `pnpm test`: 62 files passed, 2 integration files skipped; 517 tests passed and 3 PostgreSQL tests skipped locally.
+- `pnpm typecheck`: passed, including both PostgreSQL integration cases.
+- `pnpm lint`: passed with no warnings or errors.
+- `NEXT_BASE_PATH=/fitgrid pnpm build`: passed with the administrator page and all three administrator API routes.
+- `NEXT_BASE_PATH=/fitgrid pnpm exec vitest run src/e2e/ui-demo.smoke.test.ts`: passed.
+- Local limitation: this host has no `TEST_DATABASE_URL`, `psql`, Docker, or Podman, so it could not execute the PostgreSQL cases. The image verify job now creates, migrates, health-checks, and requires that database on every CI run.
