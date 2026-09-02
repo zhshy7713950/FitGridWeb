@@ -7,6 +7,7 @@ assertUiDemoConfiguration();
 const basePath = normalizeBasePath(process.env.NEXT_BASE_PATH);
 
 const nextConfig: NextConfig = {
+  agentRules: false,
   basePath,
   env: { NEXT_PUBLIC_APP_BASE_PATH: basePath },
   output: "standalone",

@@ -25,7 +25,7 @@ describe("server image release workflow", () => {
     });
 
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain("next dev");
+    expect(`${result.stdout}\n${result.stderr}`).toContain("next dev --hostname 127.0.0.1");
   });
 
   it("starts the same standalone runtime that the production image uses", async () => {
