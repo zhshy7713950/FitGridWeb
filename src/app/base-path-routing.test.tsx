@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 
 const { getOptionalSession, redirect } = vi.hoisted(() => ({
   getOptionalSession: vi.fn(),
@@ -50,13 +51,15 @@ describe("server redirects with a configured Next.js base path", () => {
     expect(redirect).toHaveBeenCalledWith("/grids");
   });
 
-  it("lets Next.js prefix the protected-route login redirect exactly once", async () => {
+  it("renders only a browser redirect surface for an anonymous protected route", async () => {
     getOptionalSession.mockResolvedValue(null);
 
-    await expect(ProtectedLayout({ children: null })).rejects.toThrow(
-      "redirect:/login?returnTo=%2Fgrids",
-    );
-    expect(redirect).toHaveBeenCalledWith("/login?returnTo=%2Fgrids");
+    const result = await ProtectedLayout({ children: <p>受保护产品内容</p> });
+    const markup = renderToStaticMarkup(result);
+
+    expect(markup).toContain("正在进入登录页");
+    expect(markup).not.toContain("受保护产品内容");
+    expect(redirect).not.toHaveBeenCalled();
   });
 
   it("opens protected UI routes without a database only in local demo mode", async () => {

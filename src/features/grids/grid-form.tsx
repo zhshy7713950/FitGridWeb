@@ -17,6 +17,8 @@ export type GridFormProps = {
   onSubmit(input: GridTradeMutationInput): Promise<void>;
   serverFieldErrors?: Record<string, string[]>;
   formError?: string | null;
+  requestId?: string;
+  onFieldEdit?: (name: keyof GridFormValues) => void;
 };
 
 type FieldName = Exclude<keyof GridFormValues, "isShort">;
@@ -34,7 +36,7 @@ const identityFields: FieldDefinition[] = [
   { name: "productName", label: "产品名称", placeholder: "例如：指数基金" },
   { name: "productCode", label: "产品代码", placeholder: "例如：518880", className: styles.codeField },
   { name: "category", label: "分类", placeholder: "例如：ETF" },
-  { name: "sortOrder", label: "排序", inputMode: "numeric" },
+  { name: "sortOrder", label: "排序", inputMode: "text" },
 ];
 
 const ladderFields: FieldDefinition[] = [
@@ -61,6 +63,8 @@ export function GridForm({
   onSubmit,
   serverFieldErrors = {},
   formError,
+  requestId,
+  onFieldEdit,
 }: GridFormProps) {
   const [values, setValues] = useState<GridFormValues>(initialValues);
   const [clientFieldErrors, setClientFieldErrors] = useState<Record<string, string[]>>({});
@@ -81,6 +85,7 @@ export function GridForm({
 
   function updateField(name: FieldName, value: string) {
     setValues((current) => ({ ...current, [name]: value }));
+    onFieldEdit?.(name);
     setClientFieldErrors((current) => {
       if (!current[name]) return current;
       const next = { ...current };
@@ -150,9 +155,12 @@ export function GridForm({
         <p>输入策略参数，计算将在保存后由服务器完成。</p>
       </div>
 
-      {formError ? (
+      {formError || requestId ? (
         <div className={styles.formError} role="alert" aria-label="表单错误">
-          {formError}
+          <div className={styles.loadErrorMessage}>
+            {formError ? <span>{formError}</span> : null}
+            {requestId ? <small>请求 ID：{requestId}</small> : null}
+          </div>
         </div>
       ) : null}
 
@@ -185,7 +193,10 @@ export function GridForm({
                 type="button"
                 className={styles.longButton}
                 aria-pressed={!values.isShort}
-                onClick={() => setValues((current) => ({ ...current, isShort: false }))}
+                onClick={() => {
+                  setValues((current) => ({ ...current, isShort: false }));
+                  onFieldEdit?.("isShort");
+                }}
               >
                 做多
               </button>
@@ -193,13 +204,16 @@ export function GridForm({
                 type="button"
                 className={styles.shortButton}
                 aria-pressed={values.isShort}
-                onClick={() => setValues((current) => ({
-                  ...current,
-                  isShort: true,
-                  keepShare: "",
-                  mediumAmplitude: "",
-                  bigAmplitude: "",
-                }))}
+                onClick={() => {
+                  setValues((current) => ({
+                    ...current,
+                    isShort: true,
+                    keepShare: "",
+                    mediumAmplitude: "",
+                    bigAmplitude: "",
+                  }));
+                  onFieldEdit?.("isShort");
+                }}
               >
                 做空
               </button>

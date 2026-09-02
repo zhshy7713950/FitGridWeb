@@ -118,7 +118,10 @@ const detail: GridTradeDetail = {
   },
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  document.body.style.removeProperty("overflow");
+});
 
 beforeEach(() => {
   api.getGridTrade.mockReset();
@@ -160,6 +163,13 @@ describe("GridDetailView", () => {
     expect(summary).toHaveTextContent(/买入总金额\s*6,850\.800/);
     expect(summary).toHaveTextContent(/总盈利\s*1,542\.468/);
     expect(summary).toHaveTextContent(/总盈利率\s*22\.515%/);
+    const summaryCells = within(summary).getAllByRole("cell");
+    expect(summaryCells.map((cell) => cell.textContent)).toEqual([
+      "买入总金额 6,850.800",
+      "总盈利 1,542.468",
+      "总盈利率 22.515%",
+    ]);
+    expect(summaryCells.map((cell) => cell.getAttribute("colspan"))).toEqual(["3", "3", "4"]);
   });
 
   it("opens a row and moves through calculation items with bounded controls", async () => {
@@ -211,6 +221,15 @@ describe("GridDetailView", () => {
       "本期留存数量",
     ]);
 
+    const summary = screen.getByRole("row", { name: /计算汇总/ });
+    const summaryCells = within(summary).getAllByRole("cell");
+    expect(summaryCells.map((cell) => cell.textContent)).toEqual([
+      "总盈利 1,542.468",
+      "买入总金额 6,850.800",
+      "总盈利率 22.515%",
+    ]);
+    expect(summaryCells.map((cell) => cell.getAttribute("colspan"))).toEqual(["3", "3", "4"]);
+
     await user.click(screen.getByRole("button", { name: "查看第 1 笔明细" }));
     const dialog = screen.getByRole("dialog", { name: "网格行明细" });
     expect(within(dialog).getAllByRole("term").map((node) => node.textContent)).toEqual([
@@ -248,6 +267,66 @@ describe("GridDetailView", () => {
     expect(background).not.toHaveAttribute("aria-hidden");
     expect(background).not.toHaveAttribute("inert");
     await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it("isolates the complete AppShell-like document and restores prior state after inspector close", async () => {
+    const user = userEvent.setup();
+    document.body.style.overflow = "clip";
+    render(
+      <>
+        <div data-testid="shell">
+          <header data-testid="account-bar" aria-hidden="false">账户栏</header>
+          <nav data-testid="rail" inert={true}>导航栏</nav>
+          <main>
+            <GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />
+          </main>
+        </div>
+        <footer data-testid="outside-footer" aria-hidden="false" inert={true}>站点页脚</footer>
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "查看第 1 笔明细" }));
+
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(screen.getByTestId("account-bar")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByTestId("account-bar")).toHaveAttribute("inert");
+    expect(screen.getByTestId("rail")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByTestId("rail")).toHaveAttribute("inert");
+    expect(screen.getByTestId("outside-footer")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByTestId("outside-footer")).toHaveAttribute("inert");
+
+    await user.click(within(screen.getByRole("dialog", { name: "网格行明细" })).getByRole(
+      "button",
+      { name: "关闭" },
+    ));
+
+    expect(document.body.style.overflow).toBe("clip");
+    expect(screen.getByTestId("account-bar")).toHaveAttribute("aria-hidden", "false");
+    expect(screen.getByTestId("account-bar")).not.toHaveAttribute("inert");
+    expect(screen.getByTestId("rail")).not.toHaveAttribute("aria-hidden");
+    expect(screen.getByTestId("rail")).toHaveAttribute("inert");
+    expect(screen.getByTestId("outside-footer")).toHaveAttribute("aria-hidden", "false");
+    expect(screen.getByTestId("outside-footer")).toHaveAttribute("inert");
+  });
+
+  it("restores document isolation and scrolling when an open inspector unmounts", async () => {
+    document.body.style.overflow = "scroll";
+    const rendered = render(
+      <>
+        <nav data-testid="outer-navigation" aria-hidden="false">导航栏</nav>
+        <GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />
+      </>,
+    );
+    const navigation = screen.getByTestId("outer-navigation");
+    await userEvent.click(screen.getByRole("button", { name: "查看第 1 笔明细" }));
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(navigation).toHaveAttribute("aria-hidden", "true");
+
+    rendered.unmount();
+
+    expect(document.body.style.overflow).toBe("scroll");
+    expect(navigation).toHaveAttribute("aria-hidden", "false");
+    expect(navigation).not.toHaveAttribute("inert");
   });
 
   it("deletes only after the exact product code is entered and keeps success locked", async () => {

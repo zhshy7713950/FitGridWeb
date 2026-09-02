@@ -9,6 +9,7 @@ import { ClientApiError } from "@/lib/api-client";
 import { formatDecimal } from "./decimal-display";
 import { deleteGridTrade, getGridTrade, recalculateGridTrade } from "./grid-api";
 import { GridRowInspector } from "./grid-row-inspector";
+import { lockDocumentForModal } from "./modal-isolation";
 import type { GridItem, GridTradeDetail } from "./types";
 import styles from "./grid-detail.module.css";
 
@@ -76,42 +77,6 @@ function displayName(detail: GridTradeDetail): string {
   return detail.productName || detail.productCode;
 }
 
-function isolateOutsideModal(layer: HTMLElement): () => void {
-  const isolated: Array<{
-    element: HTMLElement;
-    ariaHidden: string | null;
-    hadInert: boolean;
-  }> = [];
-  let branch: HTMLElement = layer;
-
-  while (branch !== document.body && branch.parentElement) {
-    const parent = branch.parentElement;
-    for (const sibling of Array.from(parent.children)) {
-      if (!(sibling instanceof HTMLElement) || sibling === branch) continue;
-      if (sibling.hasAttribute("inert") && sibling.getAttribute("aria-hidden") === "true") {
-        continue;
-      }
-      isolated.push({
-        element: sibling,
-        ariaHidden: sibling.getAttribute("aria-hidden"),
-        hadInert: sibling.hasAttribute("inert"),
-      });
-      sibling.setAttribute("inert", "");
-      sibling.setAttribute("aria-hidden", "true");
-    }
-    branch = parent;
-  }
-
-  return () => {
-    for (const { element, ariaHidden, hadInert } of isolated) {
-      if (hadInert) element.setAttribute("inert", "");
-      else element.removeAttribute("inert");
-      if (ariaHidden === null) element.removeAttribute("aria-hidden");
-      else element.setAttribute("aria-hidden", ariaHidden);
-    }
-  };
-}
-
 function DeleteConfirmation({
   detail,
   onConfirm,
@@ -138,11 +103,9 @@ function DeleteConfirmation({
 
   useEffect(() => {
     inputRef.current?.focus();
-    const previousOverflow = document.body.style.overflow;
-    const restoreIsolation = layerRef.current
-      ? isolateOutsideModal(layerRef.current)
+    const restoreDocument = layerRef.current
+      ? lockDocumentForModal(layerRef.current)
       : () => undefined;
-    document.body.style.overflow = "hidden";
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -183,8 +146,7 @@ function DeleteConfirmation({
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
-      restoreIsolation();
+      restoreDocument();
     };
   }, [close]);
 
@@ -535,8 +497,17 @@ export function GridDetailView({
           <tfoot>
             <tr aria-label="计算汇总">
               <th scope="row" colSpan={3}>计算汇总</th>
-              <td colSpan={3}>买入总金额 <strong>{formatDecimal(detail.calculation.totalBuyAmount)}</strong></td>
-              <td colSpan={3}>总盈利 <strong>{formatDecimal(detail.calculation.totalProfitAmount)}</strong></td>
+              {detail.isShort ? (
+                <>
+                  <td colSpan={3}>总盈利 <strong>{formatDecimal(detail.calculation.totalProfitAmount)}</strong></td>
+                  <td colSpan={3}>买入总金额 <strong>{formatDecimal(detail.calculation.totalBuyAmount)}</strong></td>
+                </>
+              ) : (
+                <>
+                  <td colSpan={3}>买入总金额 <strong>{formatDecimal(detail.calculation.totalBuyAmount)}</strong></td>
+                  <td colSpan={3}>总盈利 <strong>{formatDecimal(detail.calculation.totalProfitAmount)}</strong></td>
+                </>
+              )}
               <td colSpan={4}>总盈利率 <strong>{formatDecimal(detail.calculation.totalProfitRate)}%</strong></td>
             </tr>
           </tfoot>

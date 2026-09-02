@@ -24,4 +24,31 @@ describe("application paths", () => {
     expect(loginRoute("/grids?q=gold")).toBe("/login?returnTo=%2Fgrids%3Fq%3Dgold");
     expect(unauthorizedRoute("/fitgrid/grids?q=gold", "/fitgrid")).toBe("/login?returnTo=%2Fgrids%3Fq%3Dgold");
   });
+
+  it("preserves an exact root-mounted protected detail deep link", () => {
+    expect(unauthorizedRoute("/grids/grid-1", "")).toBe(
+      "/login?returnTo=%2Fgrids%2Fgrid-1",
+    );
+    expect(unauthorizedRoute("/grids/grid-1/edit?x=1#row", "")).toBe(
+      "/login?returnTo=%2Fgrids%2Fgrid-1%2Fedit%3Fx%3D1%23row",
+    );
+  });
+
+  it("strips the configured base path exactly once from a protected deep link", () => {
+    expect(unauthorizedRoute("/fitgrid/grids/grid-1/edit?x=1#row", "/fitgrid")).toBe(
+      "/login?returnTo=%2Fgrids%2Fgrid-1%2Fedit%3Fx%3D1%23row",
+    );
+    expect(unauthorizedRoute("/fitgrid/fitgrid/grids/grid-1", "/fitgrid")).toBe(
+      "/login?returnTo=%2Fgrids",
+    );
+  });
+
+  it.each([
+    ["/admin?next=/grids/grid-1", ""],
+    ["//evil.example/grids/grid-1", ""],
+    ["/fitgrid/admin#users", "/fitgrid"],
+    ["/fitgrid//evil.example/grids/grid-1", "/fitgrid"],
+  ] as const)("falls back from an unsafe visible path %s", (visiblePath, basePath) => {
+    expect(unauthorizedRoute(visiblePath, basePath)).toBe("/login?returnTo=%2Fgrids");
+  });
 });

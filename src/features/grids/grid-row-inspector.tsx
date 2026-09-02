@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import { formatDecimal } from "./decimal-display";
+import { lockDocumentForModal } from "./modal-isolation";
 import type { GridItem } from "./types";
 import styles from "./grid-detail.module.css";
 
@@ -29,10 +30,14 @@ export function GridRowInspector({
 }: GridRowInspectorProps) {
   const closeButton = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLElement>(null);
+  const layer = useRef<HTMLDivElement>(null);
   const item = items[selectedIndex];
 
   useEffect(() => {
     closeButton.current?.focus();
+    const restoreDocument = layer.current
+      ? lockDocumentForModal(layer.current)
+      : () => undefined;
 
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -61,7 +66,10 @@ export function GridRowInspector({
     }
 
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+      restoreDocument();
+    };
   }, [onClose]);
 
   if (!item) return null;
@@ -77,7 +85,7 @@ export function GridRowInspector({
   const fields = isShort ? [...sellFields, ...buyFields] : [...buyFields, ...sellFields];
 
   return (
-    <div className={styles.inspectorLayer}>
+    <div ref={layer} className={styles.inspectorLayer}>
       <button
         className={styles.inspectorBackdrop}
         type="button"

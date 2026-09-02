@@ -17,6 +17,7 @@ import styles from "./grid-form.module.css";
 type SubmitErrors = {
   fieldErrors: Record<string, string[]>;
   formError: string | null;
+  requestId?: string;
 };
 
 type LoadErrorState = {
@@ -33,14 +34,23 @@ function errorState(error: unknown, fallback: string): SubmitErrors {
       return {
         fieldErrors: {},
         formError: "产品已在其他页面更新，请重新载入后再编辑",
+        requestId: error.requestId,
       };
     }
-    if (error.fieldErrors && Object.keys(error.fieldErrors).length) {
-      return { fieldErrors: error.fieldErrors, formError: null };
-    }
-    return { fieldErrors: {}, formError: error.message || fallback };
+    return {
+      fieldErrors: error.fieldErrors ?? {},
+      formError: error.message || fallback,
+      requestId: error.requestId,
+    };
   }
   return { fieldErrors: {}, formError: fallback };
+}
+
+function withoutFieldError(errors: SubmitErrors, name: string): SubmitErrors {
+  if (!errors.fieldErrors[name]) return errors;
+  const fieldErrors = { ...errors.fieldErrors };
+  delete fieldErrors[name];
+  return { ...errors, fieldErrors };
 }
 
 function loadErrorState(error: unknown): LoadErrorState {
@@ -76,6 +86,8 @@ export function NewGridFormPage() {
       onSubmit={create}
       serverFieldErrors={errors.fieldErrors}
       formError={errors.formError}
+      requestId={errors.requestId}
+      onFieldEdit={(name) => setErrors((current) => withoutFieldError(current, name))}
     />
   );
 }
@@ -154,6 +166,8 @@ export function EditGridFormPage({ id }: { id: string }) {
       onSubmit={update}
       serverFieldErrors={errors.fieldErrors}
       formError={errors.formError}
+      requestId={errors.requestId}
+      onFieldEdit={(name) => setErrors((current) => withoutFieldError(current, name))}
     />
   );
 }

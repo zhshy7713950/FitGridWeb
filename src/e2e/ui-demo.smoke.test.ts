@@ -176,6 +176,33 @@ it("runs the complete database-free UI demo at desktop and mobile breakpoints", 
     );
     expect(directionFontSize).toBeGreaterThanOrEqual(14);
 
+    await page.getByRole("link", { name: "新建产品" }).click();
+    await page.waitForURL(`${baseUrl}/grids/new`);
+    await page.getByLabel("产品名称").fill("Smoke 新建产品");
+    await page.getByLabel("产品代码").fill("SMOKE-NEW-01");
+    await Promise.all([
+      page.waitForURL(`${baseUrl}/grids/demo-grid-created-01`),
+      page.getByRole("button", { name: "创建产品" }).click(),
+    ]);
+    expect(await page.getByRole("heading", { name: "Smoke 新建产品" }).isVisible()).toBe(true);
+
+    await page.getByRole("link", { name: "编辑产品" }).click();
+    await page.waitForURL(`${baseUrl}/grids/demo-grid-created-01/edit`);
+    await page.getByLabel("产品名称").fill("Smoke 编辑产品");
+    await Promise.all([
+      page.waitForURL(`${baseUrl}/grids/demo-grid-created-01`),
+      page.getByRole("button", { name: "保存修改" }).click(),
+    ]);
+    expect(await page.getByRole("heading", { name: "Smoke 编辑产品" }).isVisible()).toBe(true);
+
+    await page.getByRole("button", { name: "删除产品" }).click();
+    await page.getByLabel("输入产品代码确认").fill("SMOKE-NEW-01");
+    await Promise.all([
+      page.waitForURL(`${baseUrl}/grids`),
+      page.getByRole("button", { name: "确认永久删除" }).click(),
+    ]);
+    await expect.poll(() => page.getByRole("link", { name: "Smoke 编辑产品" }).count()).toBe(0);
+
     await page.getByRole("link", { name: "黄金 ETF" }).click();
     await page.waitForURL(`${baseUrl}/grids/demo-grid-01`);
     await page.getByRole("button", { name: "查看第 1 笔明细" }).click();
@@ -193,7 +220,7 @@ it("runs the complete database-free UI demo at desktop and mobile breakpoints", 
 
     await page.getByRole("button", { name: "退出登录" }).click();
     await page.waitForURL(`${baseUrl}/login`);
-    expect(await page.getByLabel("用户名").inputValue()).toBe("demo");
+    await expect.poll(() => page.getByLabel("用户名").inputValue()).toBe("demo");
     expect(await page.getByLabel("密码").inputValue()).toBe("");
     expect(consoleErrors).toEqual([]);
   } finally {

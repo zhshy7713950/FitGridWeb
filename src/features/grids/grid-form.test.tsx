@@ -177,6 +177,7 @@ describe("GridForm", () => {
         onSubmit={vi.fn()}
         serverFieldErrors={{ productCode: ["产品代码已存在"] }}
         formError="保存失败，请检查参数"
+        requestId="req-form-1"
       />,
     );
 
@@ -184,7 +185,47 @@ describe("GridForm", () => {
     expect(screen.getByText("产品代码已存在")).toHaveAttribute("role", "alert");
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(input.getAttribute("aria-describedby")).toContain("productCode-error");
-    expect(screen.getByRole("alert", { name: "表单错误" })).toHaveTextContent("保存失败，请检查参数");
+    const formAlert = screen.getByRole("alert", { name: "表单错误" });
+    expect(formAlert).toHaveTextContent("保存失败，请检查参数");
+    expect(formAlert).toHaveTextContent("请求 ID：req-form-1");
+  });
+
+  it("uses a mobile hint that still permits a negative sort order", () => {
+    render(
+      <GridForm
+        initialValues={validFormValues}
+        submitLabel="保存修改"
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("排序")).toHaveAttribute("inputmode", "text");
+  });
+
+  it("reports only the edited server-error field without dismissing the form request id", async () => {
+    const onFieldEdit = vi.fn();
+    render(
+      <GridForm
+        initialValues={validFormValues}
+        submitLabel="保存修改"
+        onSubmit={vi.fn()}
+        onFieldEdit={onFieldEdit}
+        serverFieldErrors={{
+          productCode: ["产品代码已存在"],
+          maxPrice: ["最高价格无效"],
+        }}
+        formError="请求参数校验失败"
+        requestId="req-fields-1"
+      />,
+    );
+
+    await userEvent.type(screen.getByLabelText("产品代码"), "A");
+
+    expect(onFieldEdit).toHaveBeenCalledWith("productCode");
+    expect(screen.getByText("最高价格无效")).toBeInTheDocument();
+    expect(screen.getByRole("alert", { name: "表单错误" })).toHaveTextContent(
+      "请求 ID：req-fields-1",
+    );
   });
 
   it("blocks a second save while the first save is pending", async () => {
@@ -259,7 +300,7 @@ describe("grid form page controllers", () => {
     await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/grids/grid-1"));
   });
 
-  it("maps create field errors back to the reusable form", async () => {
+  it("maps create field errors and the public request id to accessible form feedback", async () => {
     api.createGridTrade.mockRejectedValue(new ClientApiError(
       422,
       "VALIDATION_ERROR",
@@ -273,7 +314,35 @@ describe("grid form page controllers", () => {
     await userEvent.click(screen.getByRole("button", { name: "创建产品" }));
 
     expect(await screen.findByText("产品代码已存在")).toHaveAttribute("role", "alert");
+    const formAlert = screen.getByRole("alert", { name: "表单错误" });
+    expect(formAlert).toHaveTextContent("请求参数校验失败");
+    expect(formAlert).toHaveTextContent("请求 ID：req-1");
     expect(navigation.push).not.toHaveBeenCalled();
+  });
+
+  it("clears only the edited server field error while retaining its request id", async () => {
+    api.createGridTrade.mockRejectedValue(new ClientApiError(
+      422,
+      "VALIDATION_ERROR",
+      "请求参数校验失败",
+      "req-fields-controller",
+      {
+        productCode: ["产品代码已存在"],
+        maxPrice: ["最高价格无效"],
+      },
+    ));
+    render(<NewGridFormPage />);
+    await userEvent.type(screen.getByLabelText("产品代码"), "518880");
+    await userEvent.click(screen.getByRole("button", { name: "创建产品" }));
+    await screen.findByText("产品代码已存在");
+
+    await userEvent.type(screen.getByLabelText("产品代码"), "A");
+
+    expect(screen.queryByText("产品代码已存在")).not.toBeInTheDocument();
+    expect(screen.getByText("最高价格无效")).toBeInTheDocument();
+    expect(screen.getByRole("alert", { name: "表单错误" })).toHaveTextContent(
+      "请求 ID：req-fields-controller",
+    );
   });
 
   it("unlocks after a failed create so the user can retry", async () => {
@@ -312,9 +381,7 @@ describe("grid form page controllers", () => {
     await userEvent.type(productCode, "518880");
 
     await userEvent.click(screen.getByRole("button", { name: "创建产品" }));
-    await screen.findByText("产品代码已存在");
-
-    expect(productCode).toHaveFocus();
+    await waitFor(() => expect(productCode).toHaveFocus());
   });
 
   it("loads an existing product and sends its optimistic-lock timestamp", async () => {
@@ -339,15 +406,36 @@ describe("grid form page controllers", () => {
       409,
       "EDIT_CONFLICT",
       "conflict",
+      "req-edit-conflict",
     ));
     render(<EditGridFormPage id="grid-1" />);
 
     await screen.findByLabelText("产品代码");
     await userEvent.click(screen.getByRole("button", { name: "保存修改" }));
 
-    expect(await screen.findByRole("alert", { name: "表单错误" })).toHaveTextContent(
-      "产品已在其他页面更新，请重新载入后再编辑",
-    );
+    const alert = await screen.findByRole("alert", { name: "表单错误" });
+    expect(alert).toHaveTextContent("产品已在其他页面更新，请重新载入后再编辑");
+    expect(alert).toHaveTextContent("请求 ID：req-edit-conflict");
+  });
+
+  it.each([
+    [429, "RATE_LIMITED", "请求过快", "req-rate-limit"],
+    [503, "SERVICE_UNAVAILABLE", "服务暂时不可用", "req-service"],
+  ] as const)("keeps public submission feedback for HTTP %s with its request id", async (
+    status,
+    code,
+    message,
+    requestId,
+  ) => {
+    api.createGridTrade.mockRejectedValue(new ClientApiError(status, code, message, requestId));
+    render(<NewGridFormPage />);
+    await userEvent.type(screen.getByLabelText("产品代码"), "518880");
+
+    await userEvent.click(screen.getByRole("button", { name: "创建产品" }));
+
+    const alert = await screen.findByRole("alert", { name: "表单错误" });
+    expect(alert).toHaveTextContent(message);
+    expect(alert).toHaveTextContent(`请求 ID：${requestId}`);
   });
 
   it("shows a recoverable loading error", async () => {
