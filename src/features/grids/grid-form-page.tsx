@@ -19,6 +19,12 @@ type SubmitErrors = {
   formError: string | null;
 };
 
+type LoadErrorState = {
+  message: string;
+  requestId?: string;
+  retryable: boolean;
+};
+
 const emptyErrors: SubmitErrors = { fieldErrors: {}, formError: null };
 
 function errorState(error: unknown, fallback: string): SubmitErrors {
@@ -37,6 +43,17 @@ function errorState(error: unknown, fallback: string): SubmitErrors {
   return { fieldErrors: {}, formError: fallback };
 }
 
+function loadErrorState(error: unknown): LoadErrorState {
+  if (error instanceof ClientApiError) {
+    return {
+      message: error.status === 404 ? "网格产品不存在" : error.message,
+      requestId: error.requestId,
+      retryable: error.status !== 404,
+    };
+  }
+  return { message: "加载产品失败，请重试", retryable: true };
+}
+
 export function NewGridFormPage() {
   const router = useRouter();
   const [errors, setErrors] = useState<SubmitErrors>(emptyErrors);
@@ -48,6 +65,7 @@ export function NewGridFormPage() {
       router.push(`/grids/${created.id}`);
     } catch (error) {
       setErrors(errorState(error, "创建产品失败，请重试"));
+      throw error;
     }
   }
 
@@ -66,7 +84,7 @@ export function EditGridFormPage({ id }: { id: string }) {
   const router = useRouter();
   const [detail, setDetail] = useState<GridTradeDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<LoadErrorState | null>(null);
   const [errors, setErrors] = useState<SubmitErrors>(emptyErrors);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -76,10 +94,10 @@ export function EditGridFormPage({ id }: { id: string }) {
       .then((loaded) => {
         if (!controller.signal.aborted) setDetail(loaded);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!controller.signal.aborted) {
           setDetail(null);
-          setLoadError("加载产品失败，请重试");
+          setLoadError(loadErrorState(error));
         }
       })
       .finally(() => {
@@ -105,6 +123,7 @@ export function EditGridFormPage({ id }: { id: string }) {
       router.push(`/grids/${id}`);
     } catch (error) {
       setErrors(errorState(error, "保存产品失败，请重试"));
+      throw error;
     }
   }
 
@@ -113,10 +132,17 @@ export function EditGridFormPage({ id }: { id: string }) {
   }
 
   if (loadError || !detail) {
+    const visibleError = loadError ?? {
+      message: "加载产品失败，请重试",
+      retryable: true,
+    };
     return (
       <div className={styles.loadError} role="alert">
-        <span>{loadError ?? "加载产品失败，请重试"}</span>
-        <button type="button" onClick={reload}>重试</button>
+        <div className={styles.loadErrorMessage}>
+          <span>{visibleError.message}</span>
+          {visibleError.requestId ? <small>请求 ID：{visibleError.requestId}</small> : null}
+        </div>
+        {visibleError.retryable ? <button type="button" onClick={reload}>重试</button> : null}
       </div>
     );
   }

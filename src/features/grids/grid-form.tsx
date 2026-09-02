@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import {
   validateGridForm,
   type GridFormValues,
 } from "./grid-form-model";
 import type { GridTradeMutationInput } from "./types";
+import { useUnsavedChangesGuard } from "./use-unsaved-changes-guard";
 import styles from "./grid-form.module.css";
 
 export type GridFormProps = {
@@ -65,20 +66,18 @@ export function GridForm({
   const [clientFieldErrors, setClientFieldErrors] = useState<Record<string, string[]>>({});
   const [saving, setSaving] = useState(false);
   const [initialSnapshot] = useState(() => JSON.stringify(initialValues));
+  const productCodeInput = useRef<HTMLInputElement>(null);
+  const productCodeServerErrors = serverFieldErrors.productCode;
   const dirty = useMemo(
     () => JSON.stringify(values) !== initialSnapshot,
     [initialSnapshot, values],
   );
 
+  useUnsavedChangesGuard(dirty);
+
   useEffect(() => {
-    if (!dirty) return;
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warnBeforeUnload);
-    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
-  }, [dirty]);
+    if (productCodeServerErrors?.length) productCodeInput.current?.focus();
+  }, [productCodeServerErrors]);
 
   function updateField(name: FieldName, value: string) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -107,6 +106,7 @@ export function GridForm({
             type="text"
             inputMode={field.inputMode}
             autoComplete="off"
+            ref={field.name === "productCode" ? productCodeInput : undefined}
             value={values[field.name]}
             placeholder={field.placeholder}
             aria-invalid={errors.length ? true : undefined}
@@ -135,14 +135,8 @@ export function GridForm({
     setSaving(true);
     try {
       await onSubmit(result.input);
-    } finally {
+    } catch {
       setSaving(false);
-    }
-  }
-
-  function guardCancel(event: React.MouseEvent<HTMLAnchorElement>) {
-    if (dirty && !window.confirm("尚有未保存的修改，确定离开吗？")) {
-      event.preventDefault();
     }
   }
 
@@ -199,7 +193,13 @@ export function GridForm({
                 type="button"
                 className={styles.shortButton}
                 aria-pressed={values.isShort}
-                onClick={() => setValues((current) => ({ ...current, isShort: true }))}
+                onClick={() => setValues((current) => ({
+                  ...current,
+                  isShort: true,
+                  keepShare: "",
+                  mediumAmplitude: "",
+                  bigAmplitude: "",
+                }))}
               >
                 做空
               </button>
@@ -213,7 +213,7 @@ export function GridForm({
       </div>
 
       <div className={styles.actions}>
-        <Link href="/grids" onClick={guardCancel}>取消</Link>
+        <Link href="/grids">取消</Link>
         <button type="submit" disabled={saving} aria-busy={saving}>
           {saving ? "正在保存…" : submitLabel}
         </button>

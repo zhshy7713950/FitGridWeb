@@ -115,6 +115,32 @@ describe("GridForm", () => {
     expect(screen.queryByLabelText("大网幅度")).not.toBeInTheDocument();
   });
 
+  it("clears long-only controlled values before returning to long", async () => {
+    render(
+      <GridForm
+        initialValues={validFormValues}
+        submitLabel="保存修改"
+        onSubmit={vi.fn()}
+      />,
+    );
+    const keepShare = screen.getByLabelText("留存份数");
+    const mediumAmplitude = screen.getByLabelText("中网幅度");
+    const bigAmplitude = screen.getByLabelText("大网幅度");
+    await userEvent.clear(keepShare);
+    await userEvent.type(keepShare, "9");
+    await userEvent.clear(mediumAmplitude);
+    await userEvent.type(mediumAmplitude, "25");
+    await userEvent.clear(bigAmplitude);
+    await userEvent.type(bigAmplitude, "40");
+
+    await userEvent.click(screen.getByRole("button", { name: "做空" }));
+    await userEvent.click(screen.getByRole("button", { name: "做多" }));
+
+    expect(screen.getByLabelText("留存份数")).toHaveValue("");
+    expect(screen.getByLabelText("中网幅度")).toHaveValue("");
+    expect(screen.getByLabelText("大网幅度")).toHaveValue("");
+  });
+
   it("validates fields inline and submits the normalized mutation input", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     render(
@@ -179,6 +205,24 @@ describe("GridForm", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the save lock after success until route unmount", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(
+      <GridForm
+        initialValues={validFormValues}
+        submitLabel="创建产品"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "创建产品" }));
+    const locked = await screen.findByRole("button", { name: "正在保存…" });
+    expect(locked).toBeDisabled();
+    fireEvent.click(locked);
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it("guards only dirty browser and cancel navigation", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     render(
@@ -232,6 +276,47 @@ describe("grid form page controllers", () => {
     expect(navigation.push).not.toHaveBeenCalled();
   });
 
+  it("unlocks after a failed create so the user can retry", async () => {
+    api.createGridTrade
+      .mockRejectedValueOnce(new ClientApiError(
+        422,
+        "VALIDATION_ERROR",
+        "请求参数校验失败",
+        "req-1",
+        { productCode: ["产品代码已存在"] },
+      ))
+      .mockResolvedValueOnce(detail);
+    render(<NewGridFormPage />);
+    await userEvent.type(screen.getByLabelText("产品代码"), "518880");
+
+    await userEvent.click(screen.getByRole("button", { name: "创建产品" }));
+    await screen.findByText("产品代码已存在");
+    const retry = screen.getByRole("button", { name: "创建产品" });
+    expect(retry).toBeEnabled();
+    await userEvent.click(retry);
+
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/grids/grid-1"));
+    expect(api.createGridTrade).toHaveBeenCalledTimes(2);
+  });
+
+  it("focuses product code when the server reports a code conflict", async () => {
+    api.createGridTrade.mockRejectedValue(new ClientApiError(
+      409,
+      "PRODUCT_CODE_CONFLICT",
+      "产品代码已存在",
+      "req-conflict",
+      { productCode: ["产品代码已存在"] },
+    ));
+    render(<NewGridFormPage />);
+    const productCode = screen.getByLabelText("产品代码");
+    await userEvent.type(productCode, "518880");
+
+    await userEvent.click(screen.getByRole("button", { name: "创建产品" }));
+    await screen.findByText("产品代码已存在");
+
+    expect(productCode).toHaveFocus();
+  });
+
   it("loads an existing product and sends its optimistic-lock timestamp", async () => {
     api.getGridTrade.mockResolvedValue(detail);
     api.updateGridTrade.mockResolvedValue(detail);
@@ -275,5 +360,38 @@ describe("grid form page controllers", () => {
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
     expect(await screen.findByLabelText("产品代码")).toHaveValue("518880");
     expect(api.getGridTrade).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a non-retryable missing-resource state for an edit 404", async () => {
+    api.getGridTrade.mockRejectedValue(new ClientApiError(
+      404,
+      "GRID_TRADE_NOT_FOUND",
+      "网格产品不存在",
+      "req-not-found",
+    ));
+    render(<EditGridFormPage id="missing-grid" />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("网格产品不存在");
+    expect(alert).toHaveTextContent("请求 ID：req-not-found");
+    expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
+  });
+
+  it("shows a public load error request id without exposing its stack", async () => {
+    const error = new ClientApiError(
+      503,
+      "SERVICE_UNAVAILABLE",
+      "服务暂时不可用",
+      "req-public",
+    );
+    error.stack = "SECRET_INTERNAL_STACK";
+    api.getGridTrade.mockRejectedValue(error);
+    render(<EditGridFormPage id="grid-1" />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("服务暂时不可用");
+    expect(alert).toHaveTextContent("请求 ID：req-public");
+    expect(alert).not.toHaveTextContent("SECRET_INTERNAL_STACK");
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
 });
