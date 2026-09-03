@@ -22,7 +22,11 @@ interface Workflow {
       ports?: string[];
       options?: string;
     }>;
-    steps?: Array<{ run?: string }>;
+    steps?: Array<{
+      env?: Record<string, string>;
+      name?: string;
+      run?: string;
+    }>;
   }>;
 }
 
@@ -122,15 +126,30 @@ describe("server image release workflow", () => {
     expect(postgres?.options).toContain("--health-timeout 5s");
     expect(postgres?.options).toContain("--health-retries 5");
 
-    const databaseUrl = "postgresql://fitgrid_ci:fitgrid_ci_local@localhost:5432/fitgridweb_test";
+    const migrationDatabaseUrl = "postgresql://fitgrid_ci:fitgrid_ci_local@localhost:5432/fitgridweb_test";
+    const runtimeDatabaseUrl = "postgresql://fitgrid_app_ci:fitgrid_app_ci_local@localhost:5432/fitgridweb_test";
     expect(verify.env).toMatchObject({
-      DATABASE_URL: databaseUrl,
-      TEST_DATABASE_URL: databaseUrl,
+      DATABASE_URL: runtimeDatabaseUrl,
+      MIGRATION_DATABASE_URL: migrationDatabaseUrl,
+      TEST_DATABASE_URL: runtimeDatabaseUrl,
     });
+    expect(new URL(verify.env!.DATABASE_URL).username).not.toBe(
+      new URL(verify.env!.MIGRATION_DATABASE_URL).username,
+    );
     expect(verify.env?.CURSOR_SIGNING_SECRET).toMatch(/^[A-Za-z0-9_-]{32,}$/);
     expect(JSON.stringify(verify.env)).not.toContain("${{ secrets.");
 
     const commands = verify.steps?.flatMap((step) => step.run ? [step.run] : []) ?? [];
+    const configureRole = verify.steps?.find(
+      (step) => step.name === "Configure restricted runtime database role",
+    );
+    const migrate = verify.steps?.find((step) => step.run === "pnpm exec prisma migrate deploy");
+
+    expect(configureRole?.run).toContain("docker/postgres/init-app-role.sh");
+    expect(commands.indexOf(configureRole!.run!)).toBeLessThan(
+      commands.indexOf("pnpm exec prisma migrate deploy"),
+    );
+    expect(migrate?.env?.DATABASE_URL).toBe("${{ env.MIGRATION_DATABASE_URL }}");
     expect(commands.indexOf("pnpm exec prisma migrate deploy")).toBeGreaterThanOrEqual(0);
     expect(commands.indexOf("pnpm test")).toBeGreaterThan(
       commands.indexOf("pnpm exec prisma migrate deploy"),
