@@ -5,13 +5,13 @@
 
 ## 状态摘要
 
-- 服务端代码与本机可运行的自动化门禁已经完成。
+- 服务端主体和自动化覆盖已实现；本机门禁已执行，但当前完整结果包含下述 1 个可复现 UI-demo 产品失败，不能整体标记为通过。
 - Better Auth 使用 `sessions` 表保存标准数据库会话；浏览器只接收 `HttpOnly`、`Secure`、`SameSite=Lax` Cookie，不向前端返回长期 token。
 - 产品查询、冲突检测、游标、导入与导出均绑定会话 owner；`grid_trades` 和 `import_previews` 同时启用 `FORCE ROW LEVEL SECURITY`。
 - OpenAPI 中 16 个路径的每个 operationId 都有 Route Handler；Android 与 Web 导出均通过发布的 JSON Schema。
 - 已实现 `/fitgrid` 固定生产子路径、Better Auth Cookie Path、GHCR 完整 SHA 流水线、2 GiB 低内存 Compose、现有 nginx 安全集成、迁移前置/应用回滚和 systemd 开机恢复。
-- 管理员数据保险库、age 便携备份、最近 5 份下载历史、流式上传预检、整库恢复/单次自动回滚、root-only intervention state、维护 path unit 和可选异机 timer 已实现并有自动化行为覆盖。
-- 本次 Task 7 主机没有 Docker、age、systemd、`pg_restore` 或 `TEST_DATABASE_URL`，因此真实 PostgreSQL RLS、GHCR 镜像拉取、HTTPS 部署、VPS 重启、真实加解密和生产等价恢复演练仍是发布前环境门控。
+- 管理员数据保险库、age 便携备份、最近 5 份下载历史、流式上传预检、整库恢复/单次自动回滚、root-only intervention state、维护 path unit 和可选异机 timer 已实现，相关自动化套件已运行；但完整本机测试门禁当前并非全绿：可复现的 Task 6 `dev:ui` 数据保险库配置问题会令 UI-demo smoke 捕获一次 HTTP 500。它是待修复的产品/demo 配置问题，不是环境跳过。
+- 与上述本机测试失败分开，本次 Task 7 主机没有 Docker、age、systemd、`pg_restore` 或 `TEST_DATABASE_URL`，因此真实 PostgreSQL RLS、GHCR 镜像拉取、HTTPS 部署、VPS 重启、真实加解密和生产等价恢复演练仍是发布前环境门控；`pnpm typecheck`、`pnpm lint`、`pnpm build` 和 `git diff --check` 均通过。
 
 ## 前端基础
 
@@ -88,12 +88,12 @@
 | OPS-02 | `create-admin.ts` 强制 TTY 隐藏输入、拒绝密码参数、仅空用户表 | 需空生产等价数据库演练 |
 | OPS-03 | 配置测试只接受完整 40 位 commit SHA/digest；升级保留秘密和数据库卷 | 需 GHCR 发布与实际升级冒烟 |
 | OPS-04 | 状态机测试验证迁移失败不更新 app、健康失败恢复旧 SHA；不逆向 migration | 需实际回滚演练 |
-| OPS-05 | `backup.sh`：custom dump/list、AES-256/PBKDF2、SHA-256、远端 copy+checksum 后才清理本机过期文件；installer 只在异设备有效挂载时启用 timer | shell/installer 自动化通过；需真实 PostgreSQL、异机挂载、掉挂载监控和 timer 实跑 |
-| OPS-06 | `restore.sh` 要求显式确认并拒绝生产/维护库；portable worker 固定执行预检、恢复前快照、单事务 restore、migration、session 清除、健康和一次 rollback | 状态机/失败注入自动化通过；需完整隔离恢复、RLS/算法/2 GiB 验收与 RPO/RTO 记录 |
+| OPS-05 | `backup.sh`：custom dump/list、AES-256/PBKDF2、SHA-256、远端 copy+checksum 后才清理本机过期文件；installer 在安装/升级时只为异设备有效挂载启用 timer，直接启用 timer 不做检查 | shell/installer 自动化通过；需真实 PostgreSQL、异机挂载、掉挂载监控和 timer 实跑 |
+| OPS-06 | `restore.sh` 要求显式确认并拒绝生产/维护库；portable worker 固定执行预检和恢复前快照，替换前失败不回滚，进入替换路径后失败只尝试一次 rollback | 状态机/失败注入自动化通过；需完整隔离恢复、RLS/算法/2 GiB 验收与 RPO/RTO 记录 |
 | OPS-07 | 文档要求同一 reviewed SHA、临时管理员、portable upload/preview/restore、备份内管理员、三项秘密连续性、验收、DNS 和旧 VPS 只读 72 小时 | 操作顺序已文档化；需双 VPS 实跑 |
 | OPS-08 | 环境文件 600；web/root/portable 权限边界；密码/上传/状态/audit 清理与脱敏；下载 token 单次持久化 | 自动化通过；需容器挂载、Git、journal/logrotate 和实际文件权限人工审计 |
 | OPS-09 | `fitgridweb.service` 仅启动/停止 `db app`；maintenance path 与 off-host timer 分离；容器 `unless-stopped` | unit/installer 契约通过；需 `systemctl restart`、path 激活、timer 和整机 reboot 验收 |
-| OPS-10 | 管理员数据保险库与 root TTY 便携备份共享最多 5 份；raw-stream upload、10 分钟 challenge、精确短语、恢复后 logout | API/UI/shell自动化通过；需 HTTPS 浏览器端到端下载/上传/恢复实跑 |
+| OPS-10 | 管理员数据保险库与 root TTY 便携备份共享最多 5 份；raw-stream upload、10 分钟 challenge、精确短语、恢复后 logout | 专项 API/UI/shell 自动化通过；完整本机门禁仍有上述 Task 6 UI-demo 500；需 HTTPS 浏览器端到端下载/上传/恢复实跑 |
 
 ## 2026-09-03 Task 7 验证记录
 

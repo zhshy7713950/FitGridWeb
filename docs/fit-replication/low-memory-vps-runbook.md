@@ -221,7 +221,7 @@ findmnt --target / --noheadings --output MAJ:MIN
 findmnt --target /mnt/fitgridweb-offsite --noheadings --output MAJ:MIN
 ```
 
-把 `BACKUP_REMOTE_DIR=/mnt/fitgridweb-offsite` 写入环境文件并保持文件模式 `600`。`realpath` 必须成功且仍是预期路径；两个 `findmnt` 的 `MAJ:MIN` 必须非空且不同。安装器的启用检查还要求安全的绝对路径、非 `/`、现有目录、非符号链接、root 可写。条件满足后先手工运行一次并核验远端副本：
+把 `BACKUP_REMOTE_DIR=/mnt/fitgridweb-offsite` 写入环境文件并保持文件模式 `600`。`realpath` 必须成功且仍是预期路径；两个 `findmnt` 的 `MAJ:MIN` 必须非空且不同。安装/升级流程运行时的启用检查还要求安全的绝对路径、非 `/`、现有目录、非符号链接、root 可写；systemd timer 和 service 本身不运行这项检查。无论首次手工启用还是掉挂载后的重新启用，都要当场重新执行上面的 `realpath`、`test` 和 `findmnt` 命令，再手工运行一次并核验远端副本：
 
 ```bash
 sudo /opt/fitgridweb/ops/backup.sh
@@ -229,7 +229,7 @@ cd /mnt/fitgridweb-offsite
 sha256sum -c fitgridweb-fitgridweb-YYYYMMDDTHHMMSSZ.dump.enc.sha256
 ```
 
-期望脚本打印 `Backup complete: fitgridweb-fitgridweb-YYYYMMDDTHHMMSSZ`，远端校验打印对应 `.dump.enc: OK`；同名 `.json` 元数据也应存在。只有这一步成功后才启用每日定时器：
+期望脚本打印 `Backup complete: fitgridweb-fitgridweb-YYYYMMDDTHHMMSSZ`，远端校验打印对应 `.dump.enc: OK`；同名 `.json` 元数据也应存在。只有这一整套检查成功后才启用每日定时器。`systemctl enable --now` 只启用并启动 timer，不会验证 `BACKUP_REMOTE_DIR`：
 
 ```bash
 sudo systemctl enable --now fitgridweb-backup.timer
@@ -238,14 +238,14 @@ systemctl list-timers fitgridweb-backup.timer --no-pager
 journalctl -u fitgridweb-backup.service --since today --no-pager
 ```
 
-timer 的计划是每天 02:30，`Persistent=true`，随机延迟最多 10 分钟。timer 只在启用时验证过挂载；`backup.sh` 自身会 `mkdir -p`，不能识别后来掉线的挂载。必须监控挂载和日志；挂载失效、只读或目标设备变回根设备时立即禁用，避免把“远端”副本写回本机根盘：
+timer 的计划是每天 02:30，`Persistent=true`，随机延迟最多 10 分钟。只有安装/升级流程会在当次流程中验证挂载；直接启用 timer 没有验证步骤，`backup.sh` 自身还会 `mkdir -p`，不能识别后来掉线的挂载。必须监控挂载和日志；挂载失效、只读或目标设备变回根设备时立即禁用，避免把“远端”副本写回本机根盘：
 
 ```bash
 sudo systemctl disable --now fitgridweb-backup.timer
 systemctl status fitgridweb-backup.timer --no-pager
 ```
 
-修复并重新执行上述 `realpath`/`test`/`findmnt`/手工备份/校验流程后，才能再次 `enable --now`。`backup.sh` 在本机保存加密 dump、`.sha256` 和 `.json`；只有远端复制及远端摘要校验成功后，才按 `BACKUP_RETENTION_DAYS`（默认 180）删除本机过期匹配文件。它不清理远端历史，远端保留/不可变策略由存储侧负责。
+修复后必须重新执行上述 `realpath`/`test`/`findmnt`/手工备份/远端 checksum 全流程，才能再次 `enable --now`；不能把直接重新启用 timer 当作验证。若通过安装器的 `--upgrade` 流程重新部署，安装器会在该次升级中执行同样的目录/设备检查并据此启用或禁用 timer，但后续每次手工重启 timer 仍不带检查。`backup.sh` 在本机保存加密 dump、`.sha256` 和 `.json`；只有远端复制及远端摘要校验成功后，才按 `BACKUP_RETENTION_DAYS`（默认 180）删除本机过期匹配文件。它不清理远端历史，远端保留/不可变策略由存储侧负责。
 
 维护执行器日常检查：
 
@@ -258,10 +258,12 @@ journalctl -u fitgridweb-backup.service --since today --no-pager
 
 ## 恢复失败、自动回滚和人工介入
 
-恢复失败后执行器只自动尝试一次回滚：
+失败处理取决于生产库是否已经进入替换路径：
 
+- 替换前失败：准备目录、权限、challenge、摘要、hard-link claim 或 `pg_restore --list` 验证失败，worker 直接返回对应 `PREPARED_*`/`CHALLENGE_*` 失败；恢复前快照的 dump、可读性、加密或解密复检失败则返回 `SNAPSHOT_FAILED`。此时生产数据库没有被替换，不执行回滚。
+- 替换路径失败：只有恢复前快照成功、维护标记建立并进入停应用/替换生产库路径后，后续 restore、migration、session 清除、启动或健康检查失败才自动尝试一次回滚，不会重试第二次。
 - 回滚成功：维护标记被清除，应用重新健康；job 状态为 `failed`、代码 `RESTORE_FAILED`、`rolledBack=true`。这表示原数据已恢复，不表示请求的备份已恢复成功。
-- 恢复与回滚都失败，或恢复在维护阶段被重启/中断，或关键 marker/status/终态记录无法可靠发布：状态为 `intervention-required`，常见代码包括 `ROLLBACK_FAILED`、`RESTORE_INTERRUPTED`、`MARKER_CLEAR_FAILED`、`STATUS_PUBLISH_FAILED` 或 `TERMINAL_STATE_WRITE_FAILED`。root 权威维护标记保持 active，worker 重启后也不会自动继续或再次回滚。
+- 恢复与这一次回滚都失败，或恢复在维护阶段被重启/中断，或关键 marker/status/终态记录无法可靠发布：状态为 `intervention-required`，常见代码包括 `ROLLBACK_FAILED`、`RESTORE_INTERRUPTED`、`MARKER_CLEAR_FAILED`、`STATUS_PUBLISH_FAILED` 或 `TERMINAL_STATE_WRITE_FAILED`。root 权威维护标记保持 active，worker 重启后也不会自动继续或再次回滚。
 
 先记录页面 request ID/job ID，并只做读取和取证：
 

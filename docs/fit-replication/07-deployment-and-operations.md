@@ -155,7 +155,7 @@ journalctl -u fitgridweb --since=-10m
 
 应用容器只获得 UID/GID 1001 的 web spool 可写挂载和便携目录只读挂载；没有 Docker socket、migration URL、服务器环境文件、backup key 或 root 状态树。`fitgridweb-maintenance.path` 监视固定 inbox，root oneshot worker 串行处理固定 schema 的 `backup`、`inspect-restore`、`restore`，审计写入 `/var/lib/fitgridweb/admin-ops/root/audit.jsonl` 并由 logrotate 保存 180 个 daily rotation。
 
-真实异机 timer 只应在 `BACKUP_REMOTE_DIR` 为安全绝对路径、非 `/`、现有非 symlink 可写目录、`realpath` 成功且 `findmnt` 设备不同于 `/` 时启用。安装器首次默认禁用；挂载后来失效时 unit 不会自动识别，必须监控并立即 `systemctl disable --now fitgridweb-backup.timer`。完整配置、checksum 和 enable/disable 命令见 [2 GiB 手册](low-memory-vps-runbook.md#配置真正的异机定时备份)。
+真实异机 timer 只应在 `BACKUP_REMOTE_DIR` 为安全绝对路径、非 `/`、现有非 symlink 可写目录、`realpath` 成功且 `findmnt` 设备不同于 `/` 时启用。该检查只由安装/升级流程执行；systemd timer/service 不执行此挂载检查，单独运行 `systemctl enable --now fitgridweb-backup.timer` 也不会验证目录。首次安装的远端路径默认为空，因此 timer 禁用；任何手工启用或重新启用之前都必须重新执行路径、可写、设备、手工备份和远端 checksum 检查。挂载后来失效时 unit 不会自动识别，必须监控并立即 `systemctl disable --now fitgridweb-backup.timer`。完整命令见 [2 GiB 手册](low-memory-vps-runbook.md#配置真正的异机定时备份)。
 
 固定检查命令：
 
@@ -172,7 +172,7 @@ journalctl -u fitgridweb-backup.service --since today --no-pager
 
 恢复执行顺序固定为：重新验证准备 dump 摘要/可读性 → 创建、加密、解密复检恢复前快照 → root 权威维护标记 → 停 `app` → 终止运行角色连接 → `pg_restore --clean --if-exists --no-owner --exit-on-error --single-transaction` → Prisma migration → 删除全部 `sessions` → 启动 `app` → 回环及公网健康。成功后所有用户重新登录，且触发恢复的临时管理员可能已不存在。
 
-任一步失败只自动回滚一次。回滚成功仍报告原 restore `failed/RESTORE_FAILED` 与 `rolledBack=true`；回滚失败、中断或关键状态发布失败进入 `intervention-required`。权威 `/var/lib/fitgridweb/admin-ops/root/maintenance.json` 保持 active，重启不会自动继续。保留目录 `/var/lib/fitgridweb/admin-ops/root/intervention/{jobId}` 含 identifier-only `job.json`，若快照已生成还含 server-key 加密的 `rollback.dump.enc`；密码、上传和明文不会作为恢复材料保留。
+准备数据的路径/权限/challenge/摘要/`pg_restore --list` 验证失败，或恢复前快照的 dump、加密、解密复检失败时，生产数据库尚未被替换；worker 直接返回 `failed`（具体预检代码或 `SNAPSHOT_FAILED`），不会执行回滚。只有快照成功、维护标记建立并进入停应用/替换生产库的恢复路径后，该路径失败才触发且只触发一次自动回滚。回滚成功仍报告原 restore `failed/RESTORE_FAILED` 与 `rolledBack=true`；恢复与回滚均失败、恢复在维护阶段中断或关键状态发布失败时进入 `intervention-required`。权威 `/var/lib/fitgridweb/admin-ops/root/maintenance.json` 保持 active，重启不会自动继续。保留目录 `/var/lib/fitgridweb/admin-ops/root/intervention/{jobId}` 含 identifier-only `job.json`，若快照已生成还含 server-key 加密的 `rollback.dump.enc`；密码、上传和明文不会作为恢复材料保留。
 
 没有通用安全的原地解除 intervention 命令。操作员应保留 job/request ID，读取 unit 状态、journal、root marker、公开 job status 和 intervention 文件权限；不得编辑 marker、删除 evidence、随意 chmod/chown、重复恢复或直接把加密文件交给 `pg_restore`。无法证明故障主机的唯一权威状态时，在新隔离主机从最后已验证备份恢复并验收。精确诊断命令和警告见 [2 GiB 手册](low-memory-vps-runbook.md#恢复失败自动回滚和人工介入)。
 
