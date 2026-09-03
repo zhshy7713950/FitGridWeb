@@ -4,6 +4,8 @@
   --detail-line: #2B3444;
   --detail-text: #E6EAF2;
   --detail-action: #2962FF;
+  --detail-medium-grid: #2962FF;
+  --detail-large-grid: #F2C94C;
   --detail-long: #22AB94;
   --detail-short: #F23645;
   --detail-buy: #F23645;
@@ -330,6 +332,32 @@
   box-shadow: inset 3px 0 0 var(--detail-action);
 }
 
+.financialTable tbody tr[data-grid-size="medium"] td {
+  background: color-mix(in srgb, var(--detail-medium-grid) 12%, var(--detail-surface));
+}
+
+.financialTable tbody tr[data-grid-size="large"] td {
+  background: color-mix(in srgb, var(--detail-large-grid) 12%, var(--detail-surface));
+}
+
+.financialTable tbody tr[data-grid-size="medium"]:hover td,
+.financialTable tbody tr[data-grid-size="medium"]:focus-within td {
+  background: color-mix(in srgb, var(--detail-medium-grid) 18%, var(--detail-surface));
+}
+
+.financialTable tbody tr[data-grid-size="large"]:hover td,
+.financialTable tbody tr[data-grid-size="large"]:focus-within td {
+  background: color-mix(in srgb, var(--detail-large-grid) 18%, var(--detail-surface));
+}
+
+.financialTable tbody tr[data-grid-size="medium"].selectedRow td {
+  background: color-mix(in srgb, var(--detail-medium-grid) 22%, var(--detail-surface));
+}
+
+.financialTable tbody tr[data-grid-size="large"].selectedRow td {
+  background: color-mix(in srgb, var(--detail-large-grid) 22%, var(--detail-surface));
+}
+
 .rowButton {
   min-width: 34px;
   min-height: 30px;
@@ -370,11 +398,11 @@
 }
 
 .gridType2 {
-  color: var(--detail-long);
+  color: var(--detail-medium-grid);
 }
 
 .gridType3 {
-  color: var(--detail-short);
+  color: var(--detail-large-grid);
 }
 
 .financialTable tfoot th,
