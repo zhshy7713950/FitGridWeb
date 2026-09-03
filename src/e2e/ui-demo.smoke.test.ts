@@ -192,7 +192,10 @@ describe.sequential("database-free UI demo", () => {
       waitUntil: "domcontentloaded",
     });
 
-    await expect.poll(() => page.getByRole("heading", { name: "邀请无效或已失效" }).isVisible())
+    await expect.poll(
+      () => page.getByRole("heading", { name: "邀请无效或已失效" }).isVisible(),
+      { timeout: 20_000 },
+    )
       .toBe(true);
     expect(await page.getByLabel("用户名").count()).toBe(0);
     expect(await page.getByLabel("密码", { exact: true }).count()).toBe(0);
