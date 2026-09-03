@@ -47,7 +47,7 @@ const items: GridItem[] = [
     sellCount: "298",
     sellAmount: "2165.268",
     profitAmount: "89.268",
-    profitRate: "4.300",
+    profitRate: "0.043",
     keepProfit: "14.532",
     keepCount: "2",
   },
@@ -62,7 +62,7 @@ const items: GridItem[] = [
     sellCount: "400",
     sellAmount: "2768.000",
     profitAmount: "415.200",
-    profitRate: "17.647",
+    profitRate: "0.1765",
     keepProfit: "0",
     keepCount: "0",
   },
@@ -77,7 +77,7 @@ const items: GridItem[] = [
     sellCount: "500",
     sellAmount: "3460.000",
     profitAmount: "1038.000",
-    profitRate: "42.857",
+    profitRate: "0.4286",
     keepProfit: "0",
     keepCount: "0",
   },
@@ -114,7 +114,7 @@ const detail: GridTradeDetail = {
     items,
     totalBuyAmount: "6850.800",
     totalProfitAmount: "1542.468",
-    totalProfitRate: "22.515",
+    totalProfitRate: "0.2252",
   },
 };
 
@@ -159,15 +159,18 @@ describe("GridDetailView", () => {
     expect(screen.getByText("小网")).toBeInTheDocument();
     expect(screen.getByText("中网")).toBeInTheDocument();
     expect(screen.getByText("大网")).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /小网/ })).toHaveTextContent("4.3%");
+    expect(screen.getByRole("row", { name: /中网/ })).toHaveTextContent("17.65%");
+    expect(screen.getByRole("row", { name: /大网/ })).toHaveTextContent("42.86%");
     const summary = screen.getByRole("row", { name: /计算汇总/ });
     expect(summary).toHaveTextContent(/买入总金额\s*6,850\.800/);
     expect(summary).toHaveTextContent(/总盈利\s*1,542\.468/);
-    expect(summary).toHaveTextContent(/总盈利率\s*22\.515%/);
+    expect(summary).toHaveTextContent(/总盈利率\s*22\.52%/);
     const summaryCells = within(summary).getAllByRole("cell");
     expect(summaryCells.map((cell) => cell.textContent)).toEqual([
       "买入总金额 6,850.800",
       "总盈利 1,542.468",
-      "总盈利率 22.515%",
+      "总盈利率 22.52%",
     ]);
     expect(summaryCells.map((cell) => cell.getAttribute("colspan"))).toEqual(["3", "3", "4"]);
   });
@@ -284,7 +287,7 @@ describe("GridDetailView", () => {
     expect(summaryCells.map((cell) => cell.textContent)).toEqual([
       "总盈利 1,542.468",
       "买入总金额 6,850.800",
-      "总盈利率 22.515%",
+      "总盈利率 22.52%",
     ]);
     expect(summaryCells.map((cell) => cell.getAttribute("colspan"))).toEqual(["3", "3", "4"]);
 

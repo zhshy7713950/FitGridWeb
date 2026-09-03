@@ -419,8 +419,16 @@ describe.sequential("database-free UI demo", () => {
     expect(mediumPalette.backgrounds[0]).not.toBe(smallPalette.backgrounds[0]);
     expect(largePalette.backgrounds[0]).not.toBe(smallPalette.backgrounds[0]);
     expect(mediumPalette.backgrounds[0]).not.toBe(largePalette.backgrounds[0]);
-    expect(mediumPalette.labelColor).toBe("rgb(41, 98, 255)");
+    expect(mediumPalette.labelColor).toBe("rgb(56, 189, 248)");
     expect(largePalette.labelColor).toBe("rgb(242, 201, 76)");
+    const mediumRow = page.locator('tbody tr[data-grid-size="medium"]');
+    const mediumDefaultBackground = mediumPalette.backgrounds[0];
+    await mediumRow.locator("td").first().click();
+    const mediumSelectedBackground = await mediumRow.locator("td").first().evaluate(
+      (cell) => window.getComputedStyle(cell).backgroundColor,
+    );
+    expect(mediumSelectedBackground).not.toBe(mediumDefaultBackground);
+    await page.getByRole("button", { name: "关闭" }).click();
     const firstCalculationRow = page.getByRole("button", { name: "查看第 1 笔明细" }).locator("xpath=ancestor::tr");
     expect(await firstCalculationRow.locator('[data-trade-side="buy"]').first().getAttribute("data-trade-side"))
       .toBe("buy");

@@ -4,7 +4,7 @@
   --detail-line: #2B3444;
   --detail-text: #E6EAF2;
   --detail-action: #2962FF;
-  --detail-medium-grid: #2962FF;
+  --detail-medium-grid: #38BDF8;
   --detail-large-grid: #F2C94C;
   --detail-long: #22AB94;
   --detail-short: #F23645;
@@ -351,7 +351,7 @@
 }
 
 .financialTable tbody tr[data-grid-size="medium"].selectedRow td {
-  background: color-mix(in srgb, var(--detail-medium-grid) 22%, var(--detail-surface));
+  background: color-mix(in srgb, var(--detail-action) 26%, var(--detail-surface));
 }
 
 .financialTable tbody tr[data-grid-size="large"].selectedRow td {

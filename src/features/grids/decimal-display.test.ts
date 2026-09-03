@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { formatDecimal } from "./decimal-display";
+import { formatDecimal, formatRatioAsPercent } from "./decimal-display";
 
 it.each([
   ["2000", "2,000"],
@@ -9,4 +9,14 @@ it.each([
   ["0.9400", "0.9400"],
 ])("formats %s without losing decimal text", (value, expected) => {
   expect(formatDecimal(value)).toBe(expected);
+});
+
+it.each([
+  ["0.218", "21.8"],
+  ["0.0502", "5.02"],
+  ["0.2252", "22.52"],
+  ["1", "100"],
+  ["-0.0125", "-1.25"],
+])("formats ratio %s as percentage points without floating-point drift", (value, expected) => {
+  expect(formatRatioAsPercent(value)).toBe(expected);
 });

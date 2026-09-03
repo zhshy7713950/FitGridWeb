@@ -7,7 +7,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ClientApiError } from "@/lib/api-client";
 import { lockDocumentForModal } from "@/lib/modal-isolation";
 
-import { formatDecimal } from "./decimal-display";
+import { formatDecimal, formatRatioAsPercent } from "./decimal-display";
 import { deleteGridTrade, getGridTrade, recalculateGridTrade } from "./grid-api";
 import { GridRowInspector } from "./grid-row-inspector";
 import type { GridItem, GridTradeDetail } from "./types";
@@ -517,7 +517,10 @@ export function GridDetailView({
                       key={column.key}
                       data-trade-side={"side" in column ? column.side : undefined}
                     >
-                      {formatDecimal(item[column.key])}{"suffix" in column ? column.suffix : ""}
+                      {column.key === "profitRate"
+                        ? formatRatioAsPercent(item[column.key])
+                        : formatDecimal(item[column.key])}
+                      {"suffix" in column ? column.suffix : ""}
                     </td>
                   ))}
                 </tr>
@@ -538,7 +541,7 @@ export function GridDetailView({
                   <td colSpan={3}>总盈利 <strong>{formatDecimal(detail.calculation.totalProfitAmount)}</strong></td>
                 </>
               )}
-              <td colSpan={4}>总盈利率 <strong>{formatDecimal(detail.calculation.totalProfitRate)}%</strong></td>
+              <td colSpan={4}>总盈利率 <strong>{formatRatioAsPercent(detail.calculation.totalProfitRate)}%</strong></td>
             </tr>
           </tfoot>
           </table>

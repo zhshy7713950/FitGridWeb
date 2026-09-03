@@ -51,7 +51,7 @@ const calculationItems: GridItem[] = [
     sellCount: "300",
     sellAmount: "2076",
     profitAmount: "103.8",
-    profitRate: "5.2632",
+    profitRate: "0.0526",
     keepProfit: "34.6",
     keepCount: "5",
   },
@@ -66,7 +66,7 @@ const calculationItems: GridItem[] = [
     sellCount: "300",
     sellAmount: "1972.2",
     profitAmount: "103.8",
-    profitRate: "5.5556",
+    profitRate: "0.0556",
     keepProfit: "34.6",
     keepCount: "5",
   },
@@ -81,7 +81,7 @@ const calculationItems: GridItem[] = [
     sellCount: "300",
     sellAmount: "1868.4",
     profitAmount: "103.8",
-    profitRate: "5.8824",
+    profitRate: "0.0588",
     keepProfit: "34.6",
     keepCount: "5",
   },
@@ -91,7 +91,7 @@ const calculationFixture: GridTradeDetail["calculation"] = {
   items: calculationItems,
   totalBuyAmount: "5605.2",
   totalProfitAmount: "311.4",
-  totalProfitRate: "5.5556",
+  totalProfitRate: "0.0556",
 };
 
 let demoRepository = new Map<string, GridTradeDetail>();

@@ -104,7 +104,7 @@ it("serves deterministic precomputed detail and recalculation fixtures in UI dem
     calculation: {
       totalBuyAmount: "5605.2",
       totalProfitAmount: "311.4",
-      totalProfitRate: "5.5556",
+      totalProfitRate: "0.0556",
     },
   });
   expect(loaded.calculation.items).toHaveLength(3);
@@ -119,7 +119,7 @@ it("serves deterministic precomputed detail and recalculation fixtures in UI dem
     sellCount: "300",
     sellAmount: "2076",
     profitAmount: "103.8",
-    profitRate: "5.2632",
+    profitRate: "0.0526",
     keepProfit: "34.6",
     keepCount: "5",
   });
