@@ -6,6 +6,7 @@ import { AdminService, PrismaAdminRepository } from "@/server/admin/admin-servic
 import { createPrismaClient } from "@/server/db/client";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
+const controlDatabaseUrl = process.env.MIGRATION_DATABASE_URL ?? databaseUrl;
 const integration = describe.skipIf(!databaseUrl);
 
 function quotedIdentifier(identifier: string): string {
@@ -23,7 +24,7 @@ function quotedGeneratedLiteral(value: string): string {
 }
 
 integration("Prisma administrator status transition", () => {
-  const control = createPrismaClient(databaseUrl!);
+  const control = createPrismaClient(controlDatabaseUrl!);
   let userIds: string[] = [];
   let serviceClients: PrismaClient[] = [];
   let failureTrigger: string | null = null;
