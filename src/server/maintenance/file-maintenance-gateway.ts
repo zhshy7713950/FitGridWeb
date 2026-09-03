@@ -61,7 +61,6 @@ const diskStatusSchema = z.strictObject({
   rolledBack: z.boolean().optional(),
   expiresAt: z.number().int().safe().optional(),
   backupCreatedAt: isoDateSchema.optional(),
-  appImage: z.string().min(1).max(255).optional(),
   postgresMajor: z.number().int().positive().max(999).optional(),
   database: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/).optional(),
   preview: previewSchema.optional(),
@@ -74,7 +73,7 @@ const diskStatusSchema = z.strictObject({
   if (!allowedStates[value.type].has(value.state as never)) {
     context.addIssue({ code: "custom", message: "invalid state for maintenance operation" });
   }
-  const previewKeys = ["expiresAt", "backupCreatedAt", "appImage", "postgresMajor", "database", "preview"] as const;
+  const previewKeys = ["expiresAt", "backupCreatedAt", "postgresMajor", "database", "preview"] as const;
   const present = previewKeys.filter((key) => value[key] !== undefined).length;
   if (
     (present !== 0 && (value.type !== "inspect-restore" || value.state !== "awaiting-confirmation" || present !== previewKeys.length))

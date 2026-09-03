@@ -186,7 +186,6 @@ maintenance_write_status() {
           rolledBack: (if $rolledBack == "true" then true elif $rolledBack == "false" then false else null end),
           expiresAt: (if $expiresAt == "" then null else ($expiresAt | tonumber) end),
           backupCreatedAt: $manifest[0].createdAt,
-          appImage: $manifest[0].appImage,
           postgresMajor: $manifest[0].postgresMajor,
           database: $manifest[0].database,
           preview: $manifest[0].counts

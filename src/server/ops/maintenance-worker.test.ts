@@ -17,6 +17,8 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { FileMaintenanceGateway } from "@/server/maintenance/file-maintenance-gateway";
+
 const projectDirectory = process.cwd();
 const worker = path.join(projectDirectory, "ops/maintenance-worker.sh");
 const ADMIN = "846b92e7-0f27-4d5e-96e2-429c120e2324";
@@ -41,7 +43,10 @@ async function readJson(file: string) {
   return JSON.parse(await readFile(file, "utf8"));
 }
 
-async function createPortableArchive(root: string) {
+async function createPortableArchive(
+  root: string,
+  appImage = "ghcr.io/example/fitgridweb:sha-2ca7f41",
+) {
   const payload = path.join(root, "portable-payload");
   await mkdir(payload);
   const dump = "verified portable custom dump";
@@ -56,7 +61,7 @@ async function createPortableArchive(root: string) {
       format: "fitgridweb-portable-backup",
       formatVersion: "1.0.0",
       createdAt: "2026-09-03T07:00:00Z",
-      appImage: "ghcr.io/example/fitgridweb:sha-2ca7f41",
+      appImage,
       postgresMajor: 17,
       database: "fitgridweb",
       counts: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0 },
@@ -323,8 +328,11 @@ exec /bin/mv "$source" "$destination"`,
     }
   }
 
-  async function enqueueInspect(id = INSPECT_JOB) {
-    const archive = await createPortableArchive(root);
+  async function enqueueInspect(
+    id = INSPECT_JOB,
+    appImage = "ghcr.io/example/fitgridweb:sha-2ca7f41",
+  ) {
+    const archive = await createPortableArchive(root, appImage);
     await writeFile(path.join(uploads, `${id}.fitgridbackup`), await readFile(archive));
     await chmod(path.join(uploads, `${id}.fitgridbackup`), 0o600);
     await enqueue(
@@ -493,6 +501,46 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect((await stat(preparedDirectory)).mode & 0o777).toBe(0o500);
     expect(await readdir(files.uploads)).toEqual([]);
     expect(await readdir(files.inbox)).toEqual([]);
+  });
+
+  it("never publishes an uploaded manifest app image into the app-readable status layer", async () => {
+    const files = await workerFixture();
+    const hostileImage = "registry-user:portable-password@/var/lib/private-host/image";
+    await files.enqueueInspect(INSPECT_JOB, hostileImage);
+
+    const result = files.runWorker();
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await readFile(path.join(files.prepared, INSPECT_JOB, "manifest.json"), "utf8"))
+      .toContain(hostileImage);
+    const rawStatus = await readFile(path.join(files.statuses, `${INSPECT_JOB}.json`), "utf8");
+    expect(rawStatus).not.toContain(hostileImage);
+    expect(rawStatus).not.toContain("portable-password");
+    expect(rawStatus).not.toContain("/var/lib/private-host");
+
+    const publicFileContents: string[] = [];
+    for (const directory of [files.inbox, files.uploads, files.statuses]) {
+      for (const name of await readdir(directory)) {
+        const candidate = path.join(directory, name);
+        if ((await stat(candidate)).isFile()) publicFileContents.push(await readFile(candidate, "utf8"));
+      }
+    }
+    expect(publicFileContents.join("\n")).not.toContain(hostileImage);
+
+    const gateway = new FileMaintenanceGateway({
+      adminOpsDirectory: files.web,
+      portableBackupDirectory: files.backups,
+      portableBackupHistoryFile: path.join(files.statuses, "backups.json"),
+      maxUploadBytes: 536_870_912,
+    });
+    const gatewaySerializations = JSON.stringify([
+      await gateway.getJob(INSPECT_JOB),
+      await gateway.getMaintenanceMode(),
+      await gateway.listBackups(),
+    ]);
+    expect(gatewaySerializations).not.toContain(hostileImage);
+    expect(gatewaySerializations).not.toContain("portable-password");
+    expect(gatewaySerializations).not.toContain("/var/lib/private-host");
   });
 
   it.each([

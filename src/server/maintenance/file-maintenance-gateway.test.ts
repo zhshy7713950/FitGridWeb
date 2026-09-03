@@ -419,7 +419,7 @@ describe("FileMaintenanceGateway", () => {
     });
   });
 
-  it("omits an untrusted manifest app image from the public status DTO", async () => {
+  it("rejects a status containing an untrusted manifest app image without echoing it", async () => {
     const files = await fixture();
     const hostile = "image:password=portable-secret@/var/lib/private-host/database";
     await writeFile(path.join(files.adminOpsDirectory, "status", `${JOB_A}.json`), JSON.stringify({
@@ -438,10 +438,17 @@ describe("FileMaintenanceGateway", () => {
       preview: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0 },
     }));
 
-    const serialized = JSON.stringify(await files.gateway.getJob(JOB_A));
-    expect(serialized).not.toContain(hostile);
-    expect(serialized).not.toContain("portable-secret");
-    expect(serialized).not.toContain("private-host");
+    let caught: unknown;
+    try {
+      await files.gateway.getJob(JOB_A);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ status: 500, code: "MAINTENANCE_STATE_INVALID" });
+    const serializedError = JSON.stringify(caught);
+    expect(serializedError).not.toContain(hostile);
+    expect(serializedError).not.toContain("portable-secret");
+    expect(serializedError).not.toContain("private-host");
   });
 
   it("rejects a status that grows beyond the read limit after its open-handle stat", async () => {
@@ -513,7 +520,6 @@ describe("FileMaintenanceGateway", () => {
       updatedAt: "2026-09-03T07:00:00Z",
       expiresAt: 2_000_000_000,
       backupCreatedAt: "2026-09-03T06:30:00Z",
-      appImage: "ghcr.io/example/fitgridweb:sha-0123456789abcdef0123456789abcdef01234567",
       postgresMajor: 17,
       database: "fitgridweb",
       preview: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0 },
