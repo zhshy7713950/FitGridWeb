@@ -956,9 +956,41 @@ maintenance_expire_prepared() {
   done
 }
 
+maintenance_purge_derived_id_artifacts() {
+  maintenance_purge_id=$1
+  maintenance_is_uuid "$maintenance_purge_id" || return 1
+  rm -f "$ADMIN_OPS_DIR/inbox/$maintenance_purge_id.secret" \
+    "$ADMIN_OPS_ROOT_DIR/claimed/$maintenance_purge_id.secret" \
+    "$ADMIN_OPS_DIR/uploads/$maintenance_purge_id.fitgridbackup"
+}
+
+maintenance_intervention_is_terminal_id() {
+  maintenance_intervention_id=$1
+  maintenance_intervention_candidate="$ADMIN_OPS_ROOT_DIR/intervention/$maintenance_intervention_id"
+  maintenance_intervention_job="$maintenance_intervention_candidate/job.json"
+  maintenance_require_root_directory "$maintenance_intervention_candidate" 700 || return 1
+  maintenance_require_root_file "$maintenance_intervention_job" 400 || return 1
+  jq -e --arg id "$maintenance_intervention_id" '
+    type == "object" and
+    .schemaVersion == 1 and
+    .id == $id and
+    (.actorId | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")) and
+    (.requestId | type == "string" and test("^[A-Za-z0-9_-]{1,64}$")) and
+    (
+      if .type == "restore" then
+        (keys | sort) == ["actorId", "id", "requestId", "restoreId", "schemaVersion", "type"] and
+        (.restoreId | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
+      elif (.type == "backup" or .type == "inspect-restore") then
+        (keys | sort) == ["actorId", "id", "requestId", "schemaVersion", "type"]
+      else false end
+    )
+  ' "$maintenance_intervention_job" >/dev/null 2>&1
+}
+
 # Publishers must make the secret/upload durable first and atomically rename the
 # JSON job into inbox last. The worker therefore purges only artifacts whose
-# UUID already has root-owned terminal state; it never races an unpublished job.
+# UUID already has root-owned completed or validated intervention state; it
+# never races an unpublished job and never uses a stored path.
 maintenance_purge_terminal_orphans() {
   for maintenance_orphan in "$ADMIN_OPS_DIR"/inbox/*.secret "$ADMIN_OPS_DIR"/uploads/*.fitgridbackup; do
     [ -e "$maintenance_orphan" ] || [ -L "$maintenance_orphan" ] || continue
@@ -968,7 +1000,14 @@ maintenance_purge_terminal_orphans() {
     maintenance_is_uuid "$maintenance_orphan_id" || continue
     maintenance_orphan_terminal="$ADMIN_OPS_ROOT_DIR/completed/$maintenance_orphan_id.json"
     [ -e "$maintenance_orphan_terminal" ] || [ -L "$maintenance_orphan_terminal" ] || continue
-    rm -f "$maintenance_orphan"
+    maintenance_purge_derived_id_artifacts "$maintenance_orphan_id" || return 1
+  done
+  for maintenance_intervention_candidate in "$ADMIN_OPS_ROOT_DIR"/intervention/*; do
+    [ -d "$maintenance_intervention_candidate" ] && [ ! -L "$maintenance_intervention_candidate" ] || continue
+    maintenance_intervention_id=$(basename "$maintenance_intervention_candidate")
+    maintenance_is_uuid "$maintenance_intervention_id" || continue
+    maintenance_intervention_is_terminal_id "$maintenance_intervention_id" || continue
+    maintenance_purge_derived_id_artifacts "$maintenance_intervention_id" || return 1
   done
 }
 

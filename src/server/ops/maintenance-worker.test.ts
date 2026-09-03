@@ -677,9 +677,20 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(await readdir(path.join(files.rootOps, "claimed"))).toEqual([]);
     expect(await readdir(path.join(files.rootOps, "work"))).toEqual([]);
 
+    const outsideSecret = path.join(files.root, "outside-secret");
+    await writeFile(outsideSecret, "must survive orphan cleanup");
+    await writeFile(path.join(files.inbox, `${RESTORE_JOB}.secret`), "late restore secret");
+    await symlink(outsideSecret, path.join(files.rootOps, "claimed", `${RESTORE_JOB}.secret`));
+    await writeFile(path.join(files.uploads, `${RESTORE_JOB}.fitgridbackup`), "late restore upload");
     const commandsBeforeReboot = await files.commandSequence();
     expect(files.runWorker().status).not.toBe(0);
     expect(await files.commandSequence()).toEqual(commandsBeforeReboot);
+    expect(await readdir(files.inbox)).toEqual([]);
+    expect(await readdir(files.uploads)).toEqual([]);
+    expect(await readdir(path.join(files.rootOps, "claimed"))).toEqual([]);
+    expect(await readFile(outsideSecret, "utf8")).toBe("must survive orphan cleanup");
+    expect((await readdir(intervention)).sort()).toEqual(["job.json", "rollback.dump.enc"]);
+    expect(await readFile(path.join(intervention, "rollback.dump.enc"), "utf8")).toBe("rollback custom dump");
   });
 
   it("removes prepared plaintext and passwords when the completed ledger cannot publish after inspection", async () => {
@@ -700,6 +711,16 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(await readdir(files.uploads)).toEqual([]);
     expect(await readdir(path.join(files.rootOps, "claimed"))).toEqual([]);
     expect(await readdir(path.join(files.rootOps, "work"))).toEqual([]);
+
+    await writeFile(path.join(files.inbox, `${INSPECT_JOB}.secret`), "late inspection secret");
+    await writeFile(path.join(files.rootOps, "claimed", `${INSPECT_JOB}.secret`), "late claimed secret");
+    await writeFile(path.join(files.uploads, `${INSPECT_JOB}.fitgridbackup`), "late inspection upload");
+    expect(files.runWorker().status).not.toBe(0);
+
+    expect(await readdir(files.inbox)).toEqual([]);
+    expect(await readdir(files.uploads)).toEqual([]);
+    expect(await readdir(path.join(files.rootOps, "claimed"))).toEqual([]);
+    expect(await readdir(path.join(files.rootOps, "intervention", INSPECT_JOB))).toEqual(["job.json"]);
   });
 
   it("uses root-owned active maintenance after the public mirror is deleted or forged inactive", async () => {

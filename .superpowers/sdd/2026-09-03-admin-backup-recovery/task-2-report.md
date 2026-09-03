@@ -298,3 +298,79 @@ The first full-suite attempt produced `595 passed`, `3 skipped`, and two Task 2 
 - The retained inspection intervention directory contains only `job.json`; its decrypted prepared data, upload, secret, and work directory are removed.
 - The public mirror remains writable by its deployment owner and therefore may temporarily lie between worker invocations. This is acceptable only because it is explicitly informational; the root worker refreshes it before admission and never branches on its contents.
 - Root marker loss by a root-capable actor is outside the UID-1001 threat boundary. Invalid existing root state fails closed, while an absent marker preserves first-install compatibility.
+
+## Fix Round 3
+
+### Summary
+
+Closed the remaining intervention-orphan gap after `89f7c30`. A worker that is blocked by authoritative maintenance now performs a safe derived-artifact purge before its early exit. A root-only intervention job record is treated as terminal only after its directory and job file pass canonical-path, ownership, mode, exact-schema, UUID, actor, request, operation, and restore-ID validation.
+
+For a validated intervention UUID, the purge unlinks only these fixed derived paths:
+
+- `${ADMIN_OPS_DIR}/inbox/{id}.secret`
+- `${ADMIN_OPS_ROOT_DIR}/claimed/{id}.secret`
+- `${ADMIN_OPS_DIR}/uploads/{id}.fitgridbackup`
+
+It never consumes a stored path, never follows an intervention or artifact symlink, never removes queued job JSON, and never modifies `intervention/{id}/job.json` or `rollback.dump.enc`. The ordinary post-drain sweep remains in place for completed jobs and same-run cleanup.
+
+### Files Changed
+
+- `ops/lib/maintenance-jobs.sh`
+  - Added strict intervention-record terminal validation and a UUID-only fixed-path artifact purge.
+  - Extended the orphan sweep to validated intervention records while preserving their evidence.
+- `ops/maintenance-worker.sh`
+  - Runs the safe orphan sweep after reboot recovery/mirror sync and before the authoritative active-maintenance admission gate.
+- `src/server/ops/maintenance-worker.test.ts`
+  - Added late inbox secret, claimed secret, and upload regressions to both restore and inspect-restore completed-ledger-failure intervention tests.
+  - Restore coverage uses a claimed-secret symlink and proves its outside target survives while intervention evidence is unchanged.
+- `.superpowers/sdd/2026-09-03-admin-backup-recovery/task-2-report.md`
+  - Recorded Fix Round 3 evidence and invariants.
+
+### TDD RED/GREEN Evidence
+
+The two late-arrival regressions were added before production changes:
+
+```text
+pnpm test src/server/ops/maintenance-worker.test.ts \
+  -t 'completed ledger cannot publish after (restore|inspection)'
+Test Files  1 failed (1)
+Tests       2 failed | 27 skipped (29)
+```
+
+Both failed at the first post-reboot assertion because the late `{id}.secret` remained in the inbox. This confirmed the active-maintenance exit occurred before the existing completed-only sweep.
+
+After adding validated intervention enumeration and moving the sweep before admission, the identical command was GREEN:
+
+```text
+Test Files  1 passed (1)
+Tests       2 passed | 27 skipped (29)
+```
+
+### Final Verification
+
+```text
+pnpm test src/server/ops/maintenance-worker.test.ts
+Test Files  1 passed (1)
+Tests       29 passed (29)
+
+pnpm test src/server/ops/portable-backup.test.ts src/server/ops/maintenance-worker.test.ts
+Test Files  2 passed (2)
+Tests       44 passed (44)
+
+pnpm test
+Test Files  65 passed | 2 skipped (67)
+Tests       597 passed | 3 skipped (600)
+
+pnpm typecheck  # exit 0
+pnpm lint       # exit 0
+sh -n ops/lib/maintenance-jobs.sh ops/maintenance-worker.sh  # exit 0
+git diff --check  # exit 0
+```
+
+### Security Considerations and Residual Risks
+
+- Intervention discovery accepts only canonical, non-symlink `0700`, UID-0 directories with a canonical, non-symlink `0400`, UID-0 `job.json` whose exact allowed schema binds its UUID to the directory name.
+- Artifact deletion is constructed solely from the validated UUID and fixed configured roots. `rm -f` removes an artifact symlink itself; the regression proves an external symlink target is preserved.
+- The pre-admission purge has no code path to `maintenance_drain_inbox`; the existing active-authority regression continues to prove queued JSON is retained and no host command executes while maintenance is active.
+- Evidence is immutable from this sweep: encrypted rollback and identifier-only intervention job records remain available for manual recovery.
+- Invalid intervention evidence is skipped rather than used as deletion authority. Authoritative maintenance still prevents job admission, leaving the invalid state for manual inspection.
