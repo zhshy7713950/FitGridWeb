@@ -35,8 +35,9 @@ jobs:
           --health-retries 5
     env:
       NEXT_BASE_PATH: /fitgrid
-      DATABASE_URL: postgresql://fitgrid_ci:fitgrid_ci_local@localhost:5432/fitgridweb_test
-      TEST_DATABASE_URL: postgresql://fitgrid_ci:fitgrid_ci_local@localhost:5432/fitgridweb_test
+      DATABASE_URL: postgresql://fitgrid_app_ci:fitgrid_app_ci_local@localhost:5432/fitgridweb_test
+      MIGRATION_DATABASE_URL: postgresql://fitgrid_ci:fitgrid_ci_local@localhost:5432/fitgridweb_test
+      TEST_DATABASE_URL: postgresql://fitgrid_app_ci:fitgrid_app_ci_local@localhost:5432/fitgridweb_test
       CURSOR_SIGNING_SECRET: fitgrid-ci-cursor-signing-secret-2026
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +47,20 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Configure restricted runtime database role
+        run: |
+          docker run --rm --network host \
+            -e PGHOST=127.0.0.1 \
+            -e PGPASSWORD=fitgrid_ci_local \
+            -e POSTGRES_DB=fitgridweb_test \
+            -e POSTGRES_USER=fitgrid_ci \
+            -e APP_DATABASE_USER=fitgrid_app_ci \
+            -e APP_DATABASE_PASSWORD=fitgrid_app_ci_local \
+            -v "$PWD/docker/postgres/init-app-role.sh:/init-app-role.sh:ro" \
+            postgres:17-alpine sh /init-app-role.sh
       - run: pnpm exec prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ env.MIGRATION_DATABASE_URL }}
       - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm lint
