@@ -6,7 +6,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ClientApiError } from "@/lib/api-client";
 
-import { DataVault, type MaintenanceApi } from "./data-vault";
+import {
+  DataVault,
+  downloadMaintenanceArchive,
+  type MaintenanceApi,
+} from "./data-vault";
 import type { MaintenanceJobStatus, PortableBackupSummary } from "./types";
 
 const JOB_ID = "00000000-0000-4000-8000-000000000031";
@@ -39,6 +43,7 @@ function api(overrides: Partial<MaintenanceApi> = {}): MaintenanceApi {
     uploadRestore: vi.fn().mockResolvedValue(queued("inspect-restore", RESTORE_ID)),
     confirmRestore: vi.fn().mockResolvedValue(queued("restore", RESTORE_ID)),
     checkHealth: vi.fn().mockResolvedValue(true),
+    download: vi.fn(),
     navigate: vi.fn(),
     clearClientSession: vi.fn(),
     ...overrides,
@@ -149,10 +154,11 @@ describe("data vault backup custody", () => {
     expect(within(history).queryByText("2026-09-01 15:00")).not.toBeInTheDocument();
   });
 
-  it("requests a token then navigates to the download without buffering", async () => {
+  it("requests a token then downloads without buffering or using login navigation", async () => {
     const issueDownload = vi.fn().mockResolvedValue("/fitgrid/api/v1/admin/backups/a/download?token=t");
+    const download = vi.fn();
     const navigate = vi.fn();
-    render(<DataVault api={api({ issueDownload, navigate })} initialBackups={[{
+    render(<DataVault api={api({ issueDownload, download, navigate })} initialBackups={[{
       id: "backup-a",
       createdAt: "2026-09-03T07:00:00.000Z",
       size: 1024,
@@ -161,7 +167,45 @@ describe("data vault backup custody", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "下载备份 2026-09-03 15:00" }));
     expect(issueDownload).toHaveBeenCalledWith("backup-a", expect.any(AbortSignal));
-    expect(navigate).toHaveBeenCalledWith("/fitgrid/api/v1/admin/backups/a/download?token=t");
+    expect(download).toHaveBeenCalledWith(
+      "/fitgrid/api/v1/admin/backups/a/download?token=t",
+      "fitgridweb-portable-backup.fitgridbackup",
+    );
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("creates, clicks, and removes a safe browser download anchor", () => {
+    let clickedAnchor: {
+      connected: boolean;
+      download: string;
+      href: string | null;
+      rel: string;
+    } | null = null;
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function click(
+      this: HTMLAnchorElement,
+    ) {
+      clickedAnchor = {
+        connected: this.isConnected,
+        download: this.download,
+        href: this.getAttribute("href"),
+        rel: this.rel,
+      };
+    });
+
+    downloadMaintenanceArchive(
+      "data:application/vnd.fitgrid.backup;base64,Rml0R3JpZA==",
+      "fitgridweb-portable-backup.fitgridbackup",
+    );
+
+    expect(clickedAnchor).not.toBeNull();
+    expect(clickedAnchor!.href).toBe(
+      "data:application/vnd.fitgrid.backup;base64,Rml0R3JpZA==",
+    );
+    expect(clickedAnchor!.download).toBe("fitgridweb-portable-backup.fitgridbackup");
+    expect(clickedAnchor!.rel).toBe("noopener noreferrer");
+    expect(clickedAnchor!.connected).toBe(true);
+    expect(document.querySelector('a[download="fitgridweb-portable-backup.fitgridbackup"]'))
+      .toBeNull();
   });
 
   it("traps focus, isolates the page, closes on Escape, and clears all backup secrets", async () => {

@@ -307,6 +307,13 @@ describe.sequential("database-free UI demo", () => {
     )
       .toContain("可以下载");
     await expect.poll(() => history.getByRole("listitem").count()).toBe(3);
+    const downloadEvent = page.waitForEvent("download", { timeout: 5_000 });
+    await history.getByRole("button", { name: /下载备份/ }).first().evaluate((button) => (
+      (button as HTMLButtonElement).click()
+    ));
+    const downloadedArchive = await downloadEvent;
+    expect(downloadedArchive.suggestedFilename()).toBe("fitgridweb-portable-backup.fitgridbackup");
+    expect(page.url()).toBe(`${baseUrl}/admin`);
 
     await page.getByRole("button", { name: "创建邀请" }).click();
     const invitationInput = page.getByLabel("新邀请链接");

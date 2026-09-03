@@ -59,9 +59,23 @@ export type MaintenanceApi = {
     signal?: AbortSignal,
   ): Promise<QueuedMaintenanceJob>;
   checkHealth(signal?: AbortSignal): Promise<boolean>;
+  download(url: string, suggestedFilename: string): void;
   navigate(path: string): void;
   clearClientSession(): void;
 };
+
+const portableBackupFilename = "fitgridweb-portable-backup.fitgridbackup";
+
+export function downloadMaintenanceArchive(url: string, suggestedFilename: string): void {
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = suggestedFilename;
+  anchor.rel = "noopener noreferrer";
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+}
 
 const defaultMaintenanceApi: MaintenanceApi = {
   listBackups: listPortableBackups,
@@ -71,6 +85,7 @@ const defaultMaintenanceApi: MaintenanceApi = {
   uploadRestore: uploadRestoreForInspection,
   confirmRestore: confirmRestoreRequest,
   checkHealth: checkMaintenanceHealth,
+  download: downloadMaintenanceArchive,
   navigate: (path) => window.location.assign(path),
   clearClientSession: () => window.sessionStorage.clear(),
 };
@@ -617,7 +632,7 @@ export function DataVault({
     setHistoryError(null);
     try {
       const url = await api.issueDownload(backupId, controller.signal);
-      if (!controller.signal.aborted) api.navigate(url);
+      if (!controller.signal.aborted) api.download(url, portableBackupFilename);
     } catch (error) {
       if (!controller.signal.aborted) setHistoryError(publicError(error, "下载备份失败，请重试"));
     } finally {
