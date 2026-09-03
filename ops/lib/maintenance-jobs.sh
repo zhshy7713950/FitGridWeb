@@ -37,6 +37,59 @@ maintenance_require_directory() {
   }
 }
 
+maintenance_file_uid() {
+  if stat -c '%u' "$1" 2>/dev/null; then
+    return
+  fi
+  stat -f '%u' "$1"
+}
+
+maintenance_file_mode() {
+  if stat -c '%a' "$1" 2>/dev/null; then
+    return
+  fi
+  stat -f '%Lp' "$1"
+}
+
+maintenance_require_root_directory() {
+  maintenance_root_directory=$1
+  maintenance_expected_mode=$2
+  case "$maintenance_root_directory" in /*) : ;; *) maintenance_fail "Root maintenance path must be absolute"; return 1 ;; esac
+  maintenance_canonical=$(realpath "$maintenance_root_directory" 2>/dev/null) || return 1
+  [ "$maintenance_canonical" = "$maintenance_root_directory" ] || {
+    maintenance_fail "Root maintenance path must be canonical"
+    return 1
+  }
+  [ -d "$maintenance_root_directory" ] && [ ! -L "$maintenance_root_directory" ] || return 1
+  [ "$(maintenance_file_uid "$maintenance_root_directory")" = 0 ] || {
+    maintenance_fail "Root maintenance path must be owned by root"
+    return 1
+  }
+  [ "$(maintenance_file_mode "$maintenance_root_directory")" = "$maintenance_expected_mode" ] || {
+    maintenance_fail "Root maintenance path permissions are unsafe"
+    return 1
+  }
+}
+
+maintenance_require_root_file() {
+  maintenance_root_file=$1
+  maintenance_expected_mode=$2
+  [ -f "$maintenance_root_file" ] && [ ! -L "$maintenance_root_file" ] || return 1
+  maintenance_file_canonical=$(realpath "$maintenance_root_file" 2>/dev/null) || return 1
+  case "$maintenance_file_canonical" in "$ADMIN_OPS_ROOT_DIR"/*) : ;; *) return 1 ;; esac
+  [ "$(maintenance_file_uid "$maintenance_root_file")" = 0 ] || return 1
+  [ "$(maintenance_file_mode "$maintenance_root_file")" = "$maintenance_expected_mode" ] || return 1
+}
+
+maintenance_ensure_root_directory() {
+  maintenance_root_child=$1
+  if [ ! -e "$maintenance_root_child" ] && [ ! -L "$maintenance_root_child" ]; then
+    umask 077
+    mkdir "$maintenance_root_child" 2>/dev/null || :
+  fi
+  maintenance_require_root_directory "$maintenance_root_child" 700
+}
+
 maintenance_prepare_directories() {
   maintenance_require_directory "$ADMIN_OPS_DIR" "ADMIN_OPS_DIR" || return 1
   maintenance_require_directory "$ADMIN_OPS_ROOT_DIR" "ADMIN_OPS_ROOT_DIR" || return 1
@@ -47,8 +100,12 @@ maintenance_prepare_directories() {
   do
     maintenance_require_directory "$maintenance_directory" "Maintenance directory" || return 1
   done
-  mkdir -p "$ADMIN_OPS_ROOT_DIR/claimed" "$ADMIN_OPS_ROOT_DIR/intervention" "$ADMIN_OPS_ROOT_DIR/work"
-  chmod 700 "$ADMIN_OPS_ROOT_DIR/claimed" "$ADMIN_OPS_ROOT_DIR/intervention" "$ADMIN_OPS_ROOT_DIR/work"
+  maintenance_require_root_directory "$ADMIN_OPS_ROOT_DIR" 700 || return 1
+  maintenance_require_root_directory "$ADMIN_OPS_ROOT_DIR/prepared" 700 || return 1
+  maintenance_ensure_root_directory "$ADMIN_OPS_ROOT_DIR/claimed" || return 1
+  maintenance_ensure_root_directory "$ADMIN_OPS_ROOT_DIR/completed" || return 1
+  maintenance_ensure_root_directory "$ADMIN_OPS_ROOT_DIR/intervention" || return 1
+  maintenance_ensure_root_directory "$ADMIN_OPS_ROOT_DIR/work" || return 1
 }
 
 maintenance_parse_job() {
@@ -158,8 +215,11 @@ maintenance_write_status() {
         } | with_entries(select(.value != null))
       ' >"$maintenance_status_tmp" || { rm -f "$maintenance_status_tmp"; return 1; }
   fi
-  chmod 640 "$maintenance_status_tmp"
-  mv "$maintenance_status_tmp" "$maintenance_status"
+  chmod 640 "$maintenance_status_tmp" || { rm -f "$maintenance_status_tmp"; return 1; }
+  if ! mv "$maintenance_status_tmp" "$maintenance_status"; then
+    rm -f "$maintenance_status_tmp"
+    return 1
+  fi
 }
 
 # Task 1 reports only a state. The worker replaces that callback so public
@@ -185,8 +245,16 @@ maintenance_write_marker() {
         updatedAt: $updatedAt
       } | with_entries(select(.value != null))
     ' >"$maintenance_marker_tmp" || { rm -f "$maintenance_marker_tmp"; return 1; }
-  chmod 640 "$maintenance_marker_tmp"
-  mv "$maintenance_marker_tmp" "$maintenance_marker"
+  chmod 640 "$maintenance_marker_tmp" || { rm -f "$maintenance_marker_tmp"; return 1; }
+  if ! mv "$maintenance_marker_tmp" "$maintenance_marker"; then
+    rm -f "$maintenance_marker_tmp"
+    return 1
+  fi
+  jq -e --arg active "$maintenance_active" --arg jobId "$maintenance_marker_job" '
+    if $active == "true" then .active == true and .jobId == $jobId
+    else .active == false and (has("jobId") | not)
+    end
+  ' "$maintenance_marker" >/dev/null 2>&1
 }
 
 maintenance_is_active_for() {
@@ -247,6 +315,43 @@ maintenance_claim_secret() {
   require_private_file "$maintenance_secret_source" "Maintenance passphrase"
   mv "$maintenance_secret_source" "$maintenance_secret_claim" || return 1
   maintenance_current_secret=$maintenance_secret_claim
+}
+
+maintenance_purge_derived_job_artifacts() {
+  rm -f "$ADMIN_OPS_DIR/inbox/$maintenance_job_id.secret" \
+    "$ADMIN_OPS_ROOT_DIR/claimed/$maintenance_job_id.secret" \
+    "$ADMIN_OPS_DIR/uploads/$maintenance_job_id.fitgridbackup"
+}
+
+maintenance_terminal_file() {
+  printf '%s/completed/%s.json\n' "$ADMIN_OPS_ROOT_DIR" "$maintenance_job_id"
+}
+
+maintenance_record_terminal() {
+  maintenance_terminal_status=$(maintenance_status_file)
+  maintenance_terminal_state=$(jq -er '.state | select(. == "ready" or . == "awaiting-confirmation" or . == "succeeded" or . == "failed" or . == "intervention-required")' "$maintenance_terminal_status" 2>/dev/null) || return 1
+  maintenance_terminal_destination=$(maintenance_terminal_file)
+  [ ! -e "$maintenance_terminal_destination" ] && [ ! -L "$maintenance_terminal_destination" ] || return 1
+  maintenance_terminal_tmp=$(mktemp "$ADMIN_OPS_ROOT_DIR/completed/.${maintenance_job_id}.XXXXXX") || return 1
+  jq -n \
+    --arg id "$maintenance_job_id" \
+    --arg type "$maintenance_job_type" \
+    --arg state "$maintenance_terminal_state" \
+    --arg finishedAt "$(maintenance_now_iso)" \
+    '{schemaVersion:1,id:$id,type:$type,state:$state,finishedAt:$finishedAt}' \
+    >"$maintenance_terminal_tmp" || { rm -f "$maintenance_terminal_tmp"; return 1; }
+  chmod 400 "$maintenance_terminal_tmp" || { rm -f "$maintenance_terminal_tmp"; return 1; }
+  if ! mv "$maintenance_terminal_tmp" "$maintenance_terminal_destination"; then
+    rm -f "$maintenance_terminal_tmp"
+    return 1
+  fi
+}
+
+maintenance_replay_exists() {
+  maintenance_replay_file=$(maintenance_terminal_file)
+  [ -e "$maintenance_replay_file" ] || [ -L "$maintenance_replay_file" ] || return 1
+  maintenance_require_root_file "$maintenance_replay_file" 400 || return 0
+  return 0
 }
 
 maintenance_cleanup_current() {
@@ -320,10 +425,7 @@ maintenance_handle_inspection() {
   maintenance_dump="$maintenance_current_prepared/database.dump"
   maintenance_dump_sha=$(sha256sum "$maintenance_dump" | awk '{print $1}') || return 1
   maintenance_now=$(maintenance_now_epoch) || return 1
-  maintenance_ttl=${MAINTENANCE_CHALLENGE_TTL_SECONDS:-600}
-  case "$maintenance_ttl" in ''|*[!0-9]*) maintenance_ttl=600 ;; esac
-  [ "$maintenance_ttl" -gt 0 ] || maintenance_ttl=600
-  maintenance_expires=$((maintenance_now + maintenance_ttl))
+  maintenance_expires=$((maintenance_now + 600))
   maintenance_challenge_tmp=$(mktemp "$maintenance_current_prepared/.challenge.XXXXXX") || return 1
   if ! jq -n \
     --arg jobId "$maintenance_job_id" \
@@ -361,6 +463,16 @@ maintenance_validate_prepared() {
   done
   [ -d "$maintenance_current_prepared" ] && [ -f "$maintenance_prepared_dump" ] \
     && [ -f "$maintenance_prepared_manifest" ] && [ -f "$maintenance_challenge" ] || return 1
+  maintenance_require_root_directory "$maintenance_current_prepared" 500 || {
+    maintenance_validation_code=PREPARED_PERMISSIONS_INVALID
+    return 1
+  }
+  for maintenance_required_file in "$maintenance_prepared_dump" "$maintenance_prepared_manifest" "$maintenance_challenge"; do
+    maintenance_require_root_file "$maintenance_required_file" 400 || {
+      maintenance_validation_code=PREPARED_PERMISSIONS_INVALID
+      return 1
+    }
+  done
   jq -e '
     type == "object" and
     (keys | sort) == ["actorId", "dumpSha256", "expiresAt", "jobId", "requestId", "schemaVersion"] and
@@ -397,18 +509,39 @@ maintenance_validate_prepared() {
     maintenance_validation_code=PREPARED_DUMP_CHANGED
     return 1
   }
-  fitgrid_compose exec -T db pg_restore --list <"$maintenance_prepared_dump" >/dev/null || {
+  if [ -z "${maintenance_current_work:-}" ]; then
+    maintenance_current_work=$(mktemp -d "$ADMIN_OPS_ROOT_DIR/work/${maintenance_job_id}.XXXXXX") || return 1
+    chmod 700 "$maintenance_current_work" || return 1
+  fi
+  maintenance_claimed_dump="$maintenance_current_work/prepared.claim.dump"
+  ln "$maintenance_prepared_dump" "$maintenance_claimed_dump" || {
+    maintenance_validation_code=PREPARED_DUMP_CHANGED
+    return 1
+  }
+  maintenance_require_root_file "$maintenance_claimed_dump" 400 || {
+    maintenance_validation_code=PREPARED_PERMISSIONS_INVALID
+    return 1
+  }
+  maintenance_claimed_sha=$(sha256sum "$maintenance_claimed_dump" | awk '{print $1}') || return 1
+  [ "$maintenance_claimed_sha" = "$maintenance_bound_sha" ] || {
+    maintenance_validation_code=PREPARED_DUMP_CHANGED
+    return 1
+  }
+  fitgrid_compose exec -T db pg_restore --list <"$maintenance_claimed_dump" >/dev/null || {
     maintenance_validation_code=PREPARED_DUMP_INVALID
     return 1
   }
+  maintenance_prepared_dump=$maintenance_claimed_dump
   maintenance_validation_code=
 }
 
 maintenance_snapshot_before_restore() {
   [ -f "$BACKUP_ENCRYPTION_KEY_FILE" ] && [ ! -L "$BACKUP_ENCRYPTION_KEY_FILE" ] || return 1
   require_private_file "$BACKUP_ENCRYPTION_KEY_FILE" "Backup encryption key"
-  maintenance_current_work=$(mktemp -d "$ADMIN_OPS_ROOT_DIR/work/${maintenance_job_id}.XXXXXX") || return 1
-  chmod 700 "$maintenance_current_work"
+  if [ -z "${maintenance_current_work:-}" ]; then
+    maintenance_current_work=$(mktemp -d "$ADMIN_OPS_ROOT_DIR/work/${maintenance_job_id}.XXXXXX") || return 1
+    chmod 700 "$maintenance_current_work" || return 1
+  fi
   maintenance_rollback_plain="$maintenance_current_work/rollback.dump"
   maintenance_rollback_encrypted="$maintenance_current_work/rollback.dump.enc"
   maintenance_rollback_verify="$maintenance_current_work/rollback.verify.dump"
@@ -471,31 +604,78 @@ maintenance_verify_health() {
   return 1
 }
 
+maintenance_retain_intervention_snapshot() {
+  maintenance_intervention_directory="$ADMIN_OPS_ROOT_DIR/intervention/$maintenance_job_id"
+  [ ! -e "$maintenance_intervention_directory" ] && [ ! -L "$maintenance_intervention_directory" ] || return 1
+  mkdir "$maintenance_intervention_directory" || return 1
+  chmod 700 "$maintenance_intervention_directory" || return 1
+  [ -f "$maintenance_rollback_encrypted" ] && [ ! -L "$maintenance_rollback_encrypted" ] || return 1
+  mv "$maintenance_rollback_encrypted" "$maintenance_intervention_directory/rollback.dump.enc" || return 1
+  chmod 400 "$maintenance_intervention_directory/rollback.dump.enc" || return 1
+  if [ -n "${maintenance_current_claim:-}" ] && [ -f "$maintenance_current_claim" ]; then
+    mv "$maintenance_current_claim" "$maintenance_intervention_directory/job.json" || return 1
+    chmod 400 "$maintenance_intervention_directory/job.json" || return 1
+    maintenance_current_claim=
+  fi
+}
+
+maintenance_enter_intervention() {
+  maintenance_intervention_code=$1
+  maintenance_write_marker true "$maintenance_job_id" || :
+  maintenance_write_status intervention-required "$maintenance_intervention_code" false || :
+  maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" intervention-required "$maintenance_intervention_code" "$maintenance_bound_sha" || :
+  if ! maintenance_retain_intervention_snapshot; then
+    maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" intervention-required INTERVENTION_PERSIST_FAILED "$maintenance_bound_sha" || :
+  fi
+  return 1
+}
+
+maintenance_finalize_restored_success() {
+  if ! maintenance_write_marker false; then
+    maintenance_enter_intervention MARKER_CLEAR_FAILED
+    return 1
+  fi
+  if ! maintenance_write_status succeeded; then
+    maintenance_enter_intervention STATUS_PUBLISH_FAILED
+    return 1
+  fi
+  maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" succeeded "" "$maintenance_bound_sha"
+}
+
+maintenance_finalize_successful_rollback() {
+  if ! maintenance_write_marker false; then
+    maintenance_enter_intervention MARKER_CLEAR_FAILED
+    return 1
+  fi
+  if ! maintenance_write_status failed RESTORE_FAILED true; then
+    maintenance_enter_intervention STATUS_PUBLISH_FAILED
+    return 1
+  fi
+  maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" failed RESTORE_FAILED "$maintenance_bound_sha"
+  maintenance_audit rollback "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" succeeded "" "$maintenance_bound_sha"
+}
+
 maintenance_attempt_rollback() {
   maintenance_write_status rollback
   maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" rollback ROLLBACK_STARTED "$maintenance_bound_sha"
   maintenance_rollback_plain="$maintenance_current_work/rollback.restore.dump"
-  if openssl enc -d -aes-256-cbc -pbkdf2 -pass "file:$BACKUP_ENCRYPTION_KEY_FILE" \
+  MAINTENANCE_RESTORE_SOURCE=rollback
+  export MAINTENANCE_RESTORE_SOURCE
+  if fitgrid_compose stop app \
+    && maintenance_terminate_runtime_connections \
+    && openssl enc -d -aes-256-cbc -pbkdf2 -pass "file:$BACKUP_ENCRYPTION_KEY_FILE" \
       -in "$maintenance_rollback_encrypted" -out "$maintenance_rollback_plain" \
     && fitgrid_compose exec -T db pg_restore --list <"$maintenance_rollback_plain" >/dev/null \
-    && MAINTENANCE_RESTORE_SOURCE=rollback maintenance_restore_dump "$maintenance_rollback_plain" \
+    && maintenance_restore_dump "$maintenance_rollback_plain" \
     && maintenance_run_migrations \
     && fitgrid_compose up --no-build -d --wait app \
     && maintenance_verify_health rollback
   then
-    maintenance_write_marker false
-    maintenance_write_status failed RESTORE_FAILED true
-    maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" failed RESTORE_FAILED "$maintenance_bound_sha"
-    maintenance_audit rollback "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" succeeded "" "$maintenance_bound_sha"
-    return 0
+    maintenance_finalize_successful_rollback
+    return $?
   fi
-  maintenance_write_status intervention-required ROLLBACK_FAILED false
-  maintenance_audit rollback "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" intervention-required ROLLBACK_FAILED "$maintenance_bound_sha"
-  if [ -n "${maintenance_current_claim:-}" ] && [ -f "$maintenance_current_claim" ]; then
-    mv "$maintenance_current_claim" "$ADMIN_OPS_ROOT_DIR/intervention/$maintenance_job_id.json" || :
-    maintenance_current_claim=
-  fi
-  return 1
+  rm -f "$maintenance_rollback_plain" "$maintenance_current_work/rollback.verify.dump" "$maintenance_current_work/rollback.dump"
+  maintenance_enter_intervention ROLLBACK_FAILED
 }
 
 maintenance_handle_restore() {
@@ -526,10 +706,8 @@ maintenance_handle_restore() {
     then
       maintenance_write_status checking
       if maintenance_verify_health restored; then
-        maintenance_write_marker false
-        maintenance_write_status succeeded
-        maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" succeeded "" "$maintenance_bound_sha"
-        return 0
+        maintenance_finalize_restored_success
+        return $?
       fi
     fi
   fi
@@ -556,6 +734,13 @@ maintenance_process_claimed_job() {
     maintenance_current_claim=
     return 1
   fi
+  if maintenance_replay_exists; then
+    maintenance_purge_derived_job_artifacts
+    maintenance_audit "$maintenance_job_type" "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" rejected REPLAYED_JOB
+    rm -f "$maintenance_current_claim"
+    maintenance_current_claim=
+    return 1
+  fi
   maintenance_write_status queued || return 1
   maintenance_job_status=0
   case "$maintenance_job_type" in
@@ -564,6 +749,10 @@ maintenance_process_claimed_job() {
     restore) maintenance_handle_restore || maintenance_job_status=$? ;;
     *) maintenance_job_status=1 ;;
   esac
+  if ! maintenance_record_terminal; then
+    maintenance_audit "$maintenance_job_type" "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" intervention-required TERMINAL_STATE_WRITE_FAILED || :
+    maintenance_job_status=1
+  fi
   maintenance_cleanup_current
   return "$maintenance_job_status"
 }
@@ -583,7 +772,21 @@ maintenance_recover_claimed_jobs() {
       if [ "$maintenance_job_type" = restore ] && maintenance_is_active_for "$maintenance_job_id"; then
         maintenance_write_status intervention-required RESTORE_INTERRUPTED false
         maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" intervention-required RESTORE_INTERRUPTED
-        mv "$maintenance_stale" "$ADMIN_OPS_ROOT_DIR/intervention/$maintenance_job_id.json"
+        maintenance_interrupted_directory="$ADMIN_OPS_ROOT_DIR/intervention/$maintenance_job_id"
+        [ ! -e "$maintenance_interrupted_directory" ] && [ ! -L "$maintenance_interrupted_directory" ] || return 1
+        mkdir "$maintenance_interrupted_directory" || return 1
+        chmod 700 "$maintenance_interrupted_directory" || return 1
+        mv "$maintenance_stale" "$maintenance_interrupted_directory/job.json" || return 1
+        chmod 400 "$maintenance_interrupted_directory/job.json" || return 1
+        for maintenance_interrupted_work in "$ADMIN_OPS_ROOT_DIR"/work/"$maintenance_job_id".*; do
+          [ -d "$maintenance_interrupted_work" ] && [ ! -L "$maintenance_interrupted_work" ] || continue
+          maintenance_interrupted_cipher="$maintenance_interrupted_work/rollback.dump.enc"
+          if [ -f "$maintenance_interrupted_cipher" ] && [ ! -L "$maintenance_interrupted_cipher" ] \
+            && [ ! -e "$maintenance_interrupted_directory/rollback.dump.enc" ]; then
+            mv "$maintenance_interrupted_cipher" "$maintenance_interrupted_directory/rollback.dump.enc" || return 1
+            chmod 400 "$maintenance_interrupted_directory/rollback.dump.enc" || return 1
+          fi
+        done
         maintenance_current_claim=
       else
         maintenance_write_status failed STALE_JOB
@@ -591,6 +794,7 @@ maintenance_recover_claimed_jobs() {
       fi
       maintenance_cleanup_current
       rm -f "$ADMIN_OPS_DIR/inbox/$maintenance_job_id.secret"
+      maintenance_record_terminal || maintenance_recovery_status=1
       for maintenance_stale_work in "$ADMIN_OPS_ROOT_DIR"/work/"$maintenance_job_id".*; do
         [ -e "$maintenance_stale_work" ] || continue
         rm -rf "$maintenance_stale_work"
@@ -637,8 +841,25 @@ maintenance_expire_prepared() {
     maintenance_request_id=$maintenance_expiry_request
     maintenance_write_status failed CHALLENGE_EXPIRED || return 1
     maintenance_audit inspect-restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" failed CHALLENGE_EXPIRED
+    maintenance_record_terminal || return 1
     chmod 700 "$maintenance_expiry_directory"
     rm -rf "$maintenance_expiry_directory"
+  done
+}
+
+# Publishers must make the secret/upload durable first and atomically rename the
+# JSON job into inbox last. The worker therefore purges only artifacts whose
+# UUID already has root-owned terminal state; it never races an unpublished job.
+maintenance_purge_terminal_orphans() {
+  for maintenance_orphan in "$ADMIN_OPS_DIR"/inbox/*.secret "$ADMIN_OPS_DIR"/uploads/*.fitgridbackup; do
+    [ -e "$maintenance_orphan" ] || [ -L "$maintenance_orphan" ] || continue
+    maintenance_orphan_name=$(basename "$maintenance_orphan")
+    maintenance_orphan_id=${maintenance_orphan_name%.secret}
+    maintenance_orphan_id=${maintenance_orphan_id%.fitgridbackup}
+    maintenance_is_uuid "$maintenance_orphan_id" || continue
+    maintenance_orphan_terminal="$ADMIN_OPS_ROOT_DIR/completed/$maintenance_orphan_id.json"
+    [ -e "$maintenance_orphan_terminal" ] || [ -L "$maintenance_orphan_terminal" ] || continue
+    rm -f "$maintenance_orphan"
   done
 }
 

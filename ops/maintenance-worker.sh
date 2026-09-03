@@ -41,4 +41,5 @@ if maintenance_any_active; then
   exit 1
 fi
 maintenance_expire_prepared || maintenance_worker_status=1
+maintenance_purge_terminal_orphans || maintenance_worker_status=1
 exit "$maintenance_worker_status"
