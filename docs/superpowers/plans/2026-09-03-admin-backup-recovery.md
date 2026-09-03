@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-03-admin-backup-recovery-design.md`
 
+> **Security amendment (2026-09-04):** The original Task 1 pseudocode below records the initial TDD plan and is superseded for portable uploads by format v3. Current portable archives contain only seven fixed canonical CSV members plus exact manifest/checksums; each CSV row is Base64 UTF-8 JSON. Creation uses static `COPY TO STDOUT`, and recovery rebuilds the reviewed schema with migrations before a single static `COPY FROM STDIN`/`INSERT` transaction. Uploaded material is never passed to `pg_restore`; v1 and v2 archives are rejected. Internal server-key rollback snapshots remain trusted custom dumps.
+
 ## Global Constraints
 
 - Only an active administrator may create, list, download, inspect, or confirm complete backups.
@@ -38,7 +40,7 @@
 **Interfaces:**
 - Consumes: `fitgrid_compose`, `POSTGRES_DB`, `POSTGRES_USER`, `APP_IMAGE`, and the host `age`, `tar`, `sha256sum`, `mktemp`, and Docker Compose commands.
 - Produces: `create_portable_backup PASSPHRASE_FILE OUTPUT_DIRECTORY HISTORY_FILE [STATUS_FILE]`, `inspect_portable_backup ARCHIVE PASSPHRASE_FILE PREPARED_DIRECTORY RESULT_FILE`, `prune_portable_backups OUTPUT_DIRECTORY HISTORY_FILE 5`, and the interactive command `ops/backup-portable.sh`.
-- Archive: age-passphrase ciphertext containing exactly `manifest.json`, `database.dump`, and `database.dump.sha256`.
+- Archive: age-passphrase ciphertext containing exactly the seven fixed application-table CSV files, `manifest.json`, and `payload.sha256` defined by format v3.
 
 - [ ] **Step 1: Write failing shell behavior tests**
 
@@ -123,7 +125,7 @@ create_portable_backup() {
 }
 ```
 
-Use the verified official `age-plugin-batchpass` with exact `age -e -j batchpass` / `age -d -j batchpass` calls. Pass the secret only through the descriptor named by `AGE_PASSPHRASE_FD`; never place it in argv, `AGE_PASSPHRASE`, or logs. `inspect_portable_backup` must reject non-regular members, links, absolute/parent paths, duplicate names, extra names, expansion beyond the upload cap, invalid checksums, legacy/unknown `formatVersion`, incompatible PostgreSQL major versions, and every TOC record outside the v2 data-only allowlist before atomically publishing `PREPARED_DIRECTORY/database.dump` with mode `0600`.
+Use the verified official `age-plugin-batchpass` with exact `age -e -j batchpass` / `age -d -j batchpass` calls. Pass the secret only through the descriptor named by `AGE_PASSPHRASE_FD`; never place it in argv, `AGE_PASSPHRASE`, or logs. The security amendment above supersedes the custom-dump pseudocode: `inspect_portable_backup` rejects non-regular members, links, traversal, duplicates/extras, expansion beyond the cap, non-exact checksums/manifest/counts, legacy/unknown versions, incompatible PostgreSQL majors, and non-canonical row framing before publishing `PREPARED_DIRECTORY/payload.tar` with mode `0600`.
 
 - [ ] **Step 4: Implement the TTY-only wrapper**
 

@@ -27,6 +27,50 @@ const JOB_B = "79fc98ea-46a7-40b7-9bb3-e25f2f4ce52d";
 const INSPECT_JOB = "ef4faf98-dc68-409c-b630-5dfbc173c99e";
 const RESTORE_JOB = "cba6002b-19c5-4753-a511-ed06c4709036";
 
+const canonicalCsvFiles = [
+  "accounts.csv",
+  "grid_trades.csv",
+  "import_previews.csv",
+  "invitations.csv",
+  "sessions.csv",
+  "users.csv",
+  "verifications.csv",
+] as const;
+
+function canonicalCsvRow(value: unknown) {
+  return `"${Buffer.from(JSON.stringify(value)).toString("base64")}"\n`;
+}
+
+function canonicalManifest(appImage = "ghcr.io/example/fitgridweb:sha-2ca7f41") {
+  return {
+    format: "fitgridweb-portable-backup",
+    formatVersion: "3.0.0",
+    dumpMode: "canonical-csv",
+    dataEncoding: "base64-json-row-v1",
+    createdAt: "2026-09-03T07:00:00Z",
+    appImage,
+    postgresMajor: 17,
+    database: "fitgridweb",
+    counts: { users: 1, gridTrades: 0, invitations: 0, importPreviews: 0 },
+  };
+}
+
+async function writeCanonicalPayload(
+  directory: string,
+  appImage = "ghcr.io/example/fitgridweb:sha-2ca7f41",
+  overrides: Partial<Record<(typeof canonicalCsvFiles)[number], string>> = {},
+) {
+  await mkdir(directory, { recursive: true });
+  for (const file of canonicalCsvFiles) {
+    await writeFile(path.join(directory, file), overrides[file] ?? "");
+  }
+  await writeFile(path.join(directory, "manifest.json"), JSON.stringify(canonicalManifest(appImage)));
+  const checksums = canonicalCsvFiles.map((file) => (
+    `${createHash("sha256").update(overrides[file] ?? "").digest("hex")}  ${file}`
+  )).join("\n") + "\n";
+  await writeFile(path.join(directory, "payload.sha256"), checksums);
+}
+
 type WorkerOptions = {
   restoredHealth?: boolean;
   rollbackHealth?: boolean;
@@ -48,30 +92,25 @@ async function createPortableArchive(
   appImage = "ghcr.io/example/fitgridweb:sha-2ca7f41",
 ) {
   const payload = path.join(root, "portable-payload");
-  await mkdir(payload);
-  const dump = "verified portable custom dump";
-  await writeFile(path.join(payload, "database.dump"), dump);
-  await writeFile(
-    path.join(payload, "database.dump.sha256"),
-    `${createHash("sha256").update(dump).digest("hex")}  database.dump\n`,
-  );
-  await writeFile(
-    path.join(payload, "manifest.json"),
-    JSON.stringify({
-      format: "fitgridweb-portable-backup",
-      formatVersion: "2.0.0",
-      dumpMode: "data-only",
-      createdAt: "2026-09-03T07:00:00Z",
-      appImage,
-      postgresMajor: 17,
-      database: "fitgridweb",
-      counts: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0 },
+  await writeCanonicalPayload(payload, appImage, {
+    "users.csv": canonicalCsvRow({
+      id: ADMIN,
+      name: "管理员, \"测试\"\n第二行",
+      email: "admin@example.com",
+      email_verified: true,
+      image: null,
+      username: "admin",
+      role: "admin",
+      status: "active",
+      created_at: "2026-09-03T07:00:00.000Z",
+      updated_at: "2026-09-03T07:00:00.000Z",
+      literal: "\\.\nDROP TABLE users;",
     }),
-  );
+  });
   const archive = path.join(root, "upload.fitgridbackup");
   const result = spawnSync(
     "tar",
-    ["-cf", archive, "manifest.json", "database.dump", "database.dump.sha256"],
+    ["-cf", archive, ...canonicalCsvFiles, "manifest.json", "payload.sha256"],
     { cwd: payload, encoding: "utf8" },
   );
   if (result.status !== 0) throw new Error(result.stderr);
@@ -165,6 +204,27 @@ case "$*" in
   *"pg_database_size"*) printf '1024\n' ;;
   *"server_version_num"*) printf '170006\n' ;;
   *"COUNT(*)"*) printf '2|24|1|0\n' ;;
+  *"psql --no-psqlrc --quiet"*)
+    portable_sql=$(cat)
+    if [ "\${MAINTENANCE_RESTORE_SOURCE:-}" = upload ]; then
+      printf '%s\n' "$portable_sql" >"$RESTORE_SQL_LOG"
+      case "$portable_sql" in
+        *"COPY pg_temp.portable_rows (payload) FROM STDIN WITH (FORMAT csv);"*"INSERT INTO public.users"*) : ;;
+        *) exit 17 ;;
+      esac
+      printf 'restore-upload\n' >>"$COMMAND_LOG"
+    else
+      printf '%s\n' "$portable_sql" >"$EXPORT_SQL_LOG"
+      printf '%s\n' \
+        '__FITGRID_PORTABLE_V3_ACCOUNTS__' \
+        '__FITGRID_PORTABLE_V3_GRID_TRADES__' \
+        '__FITGRID_PORTABLE_V3_IMPORT_PREVIEWS__' \
+        '__FITGRID_PORTABLE_V3_INVITATIONS__' \
+        '__FITGRID_PORTABLE_V3_SESSIONS__' \
+        '__FITGRID_PORTABLE_V3_USERS__' '"e30="' \
+        '__FITGRID_PORTABLE_V3_VERIFICATIONS__' \
+        '__FITGRID_PORTABLE_V3_END__'
+    fi ;;
   *"pg_dump"*)
     if [ "\${MAINTENANCE_OPERATION:-}" = restore ]; then
       printf 'rollback-snapshot\n' >>"$COMMAND_LOG"
@@ -178,14 +238,9 @@ case "$*" in
     printf 'stop-app\n' >>"$COMMAND_LOG"
     if [ "\${MAINTENANCE_RESTORE_SOURCE:-}" = rollback ] && [ "$FAIL_ROLLBACK_QUIESCE" = true ]; then exit 9; fi ;;
   *"pg_terminate_backend"*) printf 'terminate-app-connections\n' >>"$COMMAND_LOG" ;;
-  *"pg_restore --data-only"*)
-    restored_payload=$(cat)
-    if [ -n "$EXPECTED_UPLOAD_CONTENT" ] && [ "$restored_payload" != "$EXPECTED_UPLOAD_CONTENT" ]; then exit 17; fi
-    printf 'restore-upload\\n' >>"$COMMAND_LOG" ;;
+  *"pg_restore --data-only"*) exit 71 ;;
   *"pg_restore --clean"*)
     restored_payload=$(cat)
-    if [ "\${MAINTENANCE_RESTORE_SOURCE:-}" = upload ] && [ -n "$EXPECTED_UPLOAD_CONTENT" ] \
-      && [ "$restored_payload" != "$EXPECTED_UPLOAD_CONTENT" ]; then exit 17; fi
     if [ "\${MAINTENANCE_RESTORE_SOURCE:-}" = rollback ]; then
       printf 'restore-rollback\n' >>"$COMMAND_LOG"
     else
@@ -216,6 +271,7 @@ case "$*" in *"https://"*) printf 'health-ok\n' >>"$COMMAND_LOG" ;; esac`,
   );
   await executable(bin, "age", "cat");
   await executable(bin, "sync", ":");
+  await executable(bin, "chown", ":");
   await executable(
     bin,
     "stat",
@@ -284,7 +340,7 @@ esac
 case "$destination" in
   "$STATUS_DIRECTORY"/*.json)
     case "$destination" in
-      */maintenance.json) : ;;
+      */maintenance.json|*/backups.json) : ;;
       *)
         /usr/bin/jq -er '.state | strings' "$source" >>"$TRANSITIONS_DIRECTORY/$(basename "$destination")"
         mode=$(/usr/bin/stat -f '%Lp' "$source")
@@ -318,6 +374,8 @@ exec /bin/mv "$source" "$destination"`,
     ROLLBACK_HEALTH: String(options.rollbackHealth ?? true),
     FAIL_ROLLBACK_QUIESCE: String(options.failRollbackQuiesce ?? false),
     EXPECTED_UPLOAD_CONTENT: "",
+    EXPORT_SQL_LOG: path.join(root, "export.sql"),
+    RESTORE_SQL_LOG: path.join(root, "restore.sql"),
     DOCKER_ARGS_LOG: dockerArgsLog,
     FAKE_ROOT_OWNER: "0",
     RACE_PREPARED_REPLACEMENT: "false",
@@ -352,24 +410,33 @@ exec /bin/mv "$source" "$destination"`,
     );
   }
 
-  async function prepareRestore(overrides: { expiresAt?: number; dump?: string } = {}) {
+  async function prepareRestore(overrides: { expiresAt?: number; users?: string } = {}) {
     const directory = path.join(prepared, INSPECT_JOB);
     await mkdir(directory);
-    const dump = overrides.dump ?? "verified prepared custom dump";
-    await writeFile(path.join(directory, "database.dump"), dump);
-    await writeFile(
-      path.join(directory, "manifest.json"),
-      JSON.stringify({
-        format: "fitgridweb-portable-backup",
-        formatVersion: "2.0.0",
-        dumpMode: "data-only",
-        createdAt: "2026-09-03T07:00:00Z",
-        appImage: "ghcr.io/example/fitgridweb:sha-2ca7f41",
-        postgresMajor: 17,
-        database: "fitgridweb",
-        counts: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0 },
-      }),
+    const payloadSource = path.join(root, `prepared-source-${randomUUID()}`);
+    const users = overrides.users ?? canonicalCsvRow({
+      id: ADMIN,
+      name: "管理员, \"测试\"\n第二行",
+      email: "admin@example.com",
+      email_verified: true,
+      image: null,
+      username: "admin",
+      role: "admin",
+      status: "active",
+      created_at: "2026-09-03T07:00:00.000Z",
+      updated_at: "2026-09-03T07:00:00.000Z",
+      literal: "\\.\nDROP TABLE users;",
+    });
+    await writeCanonicalPayload(payloadSource, undefined, { "users.csv": users });
+    const payload = path.join(directory, "payload.tar");
+    const tar = spawnSync(
+      "tar",
+      ["-cf", payload, ...canonicalCsvFiles, "manifest.json", "payload.sha256"],
+      { cwd: payloadSource, encoding: "utf8" },
     );
+    if (tar.status !== 0) throw new Error(tar.stderr);
+    await writeFile(path.join(directory, "manifest.json"), JSON.stringify(canonicalManifest()));
+    const payloadBytes = await readFile(payload);
     await writeFile(
       path.join(directory, "challenge.json"),
       JSON.stringify({
@@ -377,12 +444,12 @@ exec /bin/mv "$source" "$destination"`,
         jobId: INSPECT_JOB,
         actorId: ADMIN,
         requestId: "01JUPLOAD",
-        dumpSha256: createHash("sha256").update(dump).digest("hex"),
+        dumpSha256: createHash("sha256").update(payloadBytes).digest("hex"),
         expiresAt: overrides.expiresAt ?? 1788423000,
       }),
     );
     await Promise.all([
-      chmod(path.join(directory, "database.dump"), 0o400),
+      chmod(path.join(directory, "payload.tar"), 0o400),
       chmod(path.join(directory, "manifest.json"), 0o400),
       chmod(path.join(directory, "challenge.json"), 0o400),
     ]);
@@ -506,10 +573,10 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
       requestId: "01JUPLOAD",
       state: "awaiting-confirmation",
       expiresAt: 1788423000,
-      preview: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0 },
+      preview: { users: 1, gridTrades: 0, invitations: 0, importPreviews: 0 },
     });
     const preparedDirectory = path.join(files.prepared, INSPECT_JOB);
-    expect((await stat(path.join(preparedDirectory, "database.dump"))).mode & 0o777).toBe(0o400);
+    expect((await stat(path.join(preparedDirectory, "payload.tar"))).mode & 0o777).toBe(0o400);
     expect((await stat(path.join(preparedDirectory, "manifest.json"))).mode & 0o777).toBe(0o400);
     expect((await stat(path.join(preparedDirectory, "challenge.json"))).mode & 0o777).toBe(0o400);
     expect((await stat(preparedDirectory)).mode & 0o777).toBe(0o500);
@@ -598,7 +665,6 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
 
     const result = files.runWorker({
       RACE_PREPARED_REPLACEMENT: "true",
-      EXPECTED_UPLOAD_CONTENT: "verified prepared custom dump",
     });
 
     expect(result.status, result.stderr).toBe(0);
@@ -611,7 +677,7 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     await files.prepareRestore();
     await files.enqueueRestore();
 
-    const result = files.runWorker({ EXPECTED_UPLOAD_CONTENT: "verified prepared custom dump" });
+    const result = files.runWorker();
 
     expect(result.status, result.stderr).toBe(0);
     expect(await files.commandSequence()).toEqual([
@@ -626,9 +692,29 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
       "health-ok",
     ]);
     const commands = await files.dockerCommands();
-    const portableRestore = commands.find((command) => command.includes("pg_restore --data-only"));
-    expect(portableRestore).toContain("--no-owner --no-privileges --exit-on-error --single-transaction");
-    expect(portableRestore).not.toContain("--clean");
+    const portableRestore = commands.find((command) => command.includes("psql --no-psqlrc --quiet"));
+    expect(portableRestore).toContain("--set=ON_ERROR_STOP=1");
+    expect(commands.some((command) => command.includes("pg_restore --data-only"))).toBe(false);
+    const restoreSql = await readFile(path.join(files.root, "restore.sql"), "utf8");
+    expect(restoreSql).toContain("COPY pg_temp.portable_rows (payload) FROM STDIN WITH (FORMAT csv);");
+    expect(restoreSql).toContain("INSERT INTO public.users");
+    expect(restoreSql).toContain("INSERT INTO public.sessions");
+    expect(restoreSql.match(/COPY pg_temp\.portable_rows/g)).toHaveLength(7);
+    expect(restoreSql).not.toContain("DROP TABLE users");
+    expect(restoreSql).not.toContain("管理员");
+    expect(restoreSql).toContain(canonicalCsvRow({
+      id: ADMIN,
+      name: "管理员, \"测试\"\n第二行",
+      email: "admin@example.com",
+      email_verified: true,
+      image: null,
+      username: "admin",
+      role: "admin",
+      status: "active",
+      created_at: "2026-09-03T07:00:00.000Z",
+      updated_at: "2026-09-03T07:00:00.000Z",
+      literal: "\\.\nDROP TABLE users;",
+    }).trim());
   });
 
   it("rolls production back exactly once when restored application health fails", async () => {
@@ -881,13 +967,13 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(await readFile(files.audit, "utf8")).toContain('"code":"INVALID_JOB"');
   });
 
-  it("rejects a replaced prepared dump before snapshotting or stopping the app", async () => {
+  it("rejects a replaced prepared payload before snapshotting or stopping the app", async () => {
     const files = await workerFixture();
     const directory = await files.prepareRestore();
     await chmod(directory, 0o700);
-    await chmod(path.join(directory, "database.dump"), 0o600);
-    await writeFile(path.join(directory, "database.dump"), "attacker replacement");
-    await chmod(path.join(directory, "database.dump"), 0o400);
+    await chmod(path.join(directory, "payload.tar"), 0o600);
+    await writeFile(path.join(directory, "payload.tar"), "attacker replacement");
+    await chmod(path.join(directory, "payload.tar"), 0o400);
     await chmod(directory, 0o500);
     await files.enqueueRestore();
 

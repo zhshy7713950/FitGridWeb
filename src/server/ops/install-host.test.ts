@@ -172,6 +172,17 @@ describe("boot recovery", () => {
 });
 
 describe("maintenance installation", () => {
+  const validHistory = JSON.stringify({
+    entries: [{
+      id: ".id.ABC123",
+      filename: "fitgridweb-20260903T070000Z.fitgridbackup",
+      createdAt: "2026-09-03T07:00:00Z",
+      size: 12345,
+      sha256: "a".repeat(64),
+      status: "ready",
+    }],
+  }) + "\n";
+
   async function maintenanceFixture(backupRemoteDir = "") {
     const files = await fixture();
     const web = path.join(files.root, "admin-ops/web");
@@ -256,14 +267,18 @@ describe("maintenance installation", () => {
     const files = await maintenanceFixture();
     await mkdir(path.join(files.web, "status"), { recursive: true });
     await mkdir(path.join(files.rootOps, "prepared/existing"), { recursive: true });
-    await writeFile(path.join(files.web, "status/backups.json"), '{"entries":[{"id":"keep"}]}\n');
+    const history = path.join(files.web, "status/backups.json");
+    await writeFile(history, validHistory);
+    await chmod(history, 0o600);
     await writeFile(path.join(files.rootOps, "prepared/existing/database.dump"), "prepared-data");
     await writeFile(path.join(files.rootOps, "maintenance.json"), '{"schemaVersion":1,"active":true}\n');
     const command = `install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}"`;
 
     expect(run(command, files).status).toBe(0);
     expect(run(command, files).status).toBe(0);
-    expect(await readFile(path.join(files.web, "status/backups.json"), "utf8")).toContain('"id":"keep"');
+    expect(await readFile(history, "utf8")).toContain('"id":".id.ABC123"');
+    expect((await stat(history)).mode & 0o777).toBe(0o640);
+    expect(await readFile(files.log, "utf8")).toContain(`chown root:1001 ${history}`);
     expect(await readFile(path.join(files.rootOps, "prepared/existing/database.dump"), "utf8")).toBe("prepared-data");
     expect(await readFile(path.join(files.rootOps, "maintenance.json"), "utf8")).toContain('"active":true');
   });
@@ -330,4 +345,31 @@ describe("maintenance installation", () => {
     expect((await stat(archive)).mode & 0o777).toBe(0o640);
     expect(await readFile(outside, "utf8")).toBe("outside");
   });
+
+  it.each(["symlink", "directory", "invalid-json"])(
+    "rejects an unsafe existing backups.json (%s)",
+    async (kind) => {
+      const files = await maintenanceFixture();
+      const statusDirectory = path.join(files.web, "status");
+      const history = path.join(statusDirectory, "backups.json");
+      await mkdir(statusDirectory, { recursive: true });
+      if (kind === "symlink") {
+        const outside = path.join(files.root, "outside-history.json");
+        await writeFile(outside, validHistory);
+        await symlink(outside, history);
+      } else if (kind === "directory") {
+        await mkdir(history);
+      } else {
+        await writeFile(history, '{"entries":[{"id":"unsafe"}]}\n');
+      }
+
+      const result = run(
+        `install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}"`,
+        files,
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("便携备份历史文件");
+    },
+  );
 });

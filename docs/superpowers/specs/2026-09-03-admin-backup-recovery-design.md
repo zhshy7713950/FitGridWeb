@@ -20,7 +20,7 @@ FitGridWeb 已有 `ops/backup.sh` 和 `ops/restore.sh`，能够使用服务器�
 - 邀请、网格产品和导入预检记录；
 - 由当前已审核版本的 Prisma migrations 重建 PostgreSQL schema、RLS 策略和迁移记录；便携文件本身不携带可执行 DDL。
 
-这里的“完整”指可以恢复全部应用数据与认证数据，不表示接受上传文件中的任意数据库结构。无人值守 server-key 备份与恢复前回滚快照仍是受信任的完整 custom dump；浏览器可上传的便携备份从格式 v2 起严格为 data-only。
+这里的“完整”指可以恢复全部应用数据与认证数据，不表示接受上传文件中的任意数据库结构。无人值守 server-key 备份与恢复前回滚快照仍是受信任的完整 custom dump；浏览器可上传的便携备份从格式 v3 起只包含固定表的规范化数据行，不能携带 PostgreSQL archive 或 SQL。
 
 备份不包含 VPS root 密码、nginx、sing-box、TLS 私钥、系统日志、Docker 镜像、`/etc/fitgridweb/fitgridweb.env` 或服务器备份密钥。换 VPS 时应用秘密和基础设施配置仍按运维手册单独迁移或重建。
 
@@ -76,7 +76,7 @@ FitGridWeb 已有 `ops/backup.sh` 和 `ops/restore.sh`，能够使用服务器�
 1. 管理员选择 `.fitgridbackup`，输入独立备份密码并上传；
 2. 系统在隔离暂存目录中流式落盘、解密和预检，不修改生产数据库。
 
-默认上传上限为 512 MiB，通过环境变量 `PORTABLE_BACKUP_MAX_BYTES` 调整。nginx 和应用端同时执行上限；应用使用流式写入，不调用会把整个文件读入内存的 `request.formData()`。文件超过限制、扩展名错误、摘要不匹配、密码错误、归档路径穿越、manifest 不兼容或 `pg_restore --list` 失败时，删除暂存文件并保持生产服务不变。
+默认上传上限为 512 MiB，通过环境变量 `PORTABLE_BACKUP_MAX_BYTES` 调整。nginx 和应用端同时执行上限；应用使用流式写入，不调用会把整个文件读入内存的 `request.formData()`。文件超过限制、扩展名错误、摘要不匹配、密码错误、归档路径穿越、manifest 不兼容、成员/checksum 不精确或规范数据行 framing 不合法时，删除暂存文件并保持生产服务不变。
 
 预检成功后，执行器把已验证的明文转储移入 root-only 短期准备区，并立即销毁上传副本、解密密码和归档临时文件。页面展示备份时间、应用镜像版本、PostgreSQL 主版本、文件大小、用户数、产品数、邀请数和完整性结果。预检结果生成一个 10 分钟有效、绑定管理员 ID、准备区转储摘要和请求 ID 的恢复挑战；不能替换挑战对应的转储。挑战到期、取消或恢复结束时，执行器销毁准备区明文。
 
@@ -86,13 +86,13 @@ FitGridWeb 已有 `ops/backup.sh` 和 `ops/restore.sh`，能够使用服务器�
 
 执行器按以下顺序工作：
 
-1. 再次校验挑战绑定的准备区转储摘要，并逐条检查 `pg_restore --list`，只允许已知业务表的 `TABLE DATA` 和安全的 `SEQUENCE SET`；
+1. 再次校验挑战绑定的准备区 tar 摘要，并重新验证固定成员、manifest、checksum、计数和规范数据行 framing；
 2. 使用服务器 `backup.key` 生成仅用于本次操作的恢复前本地回滚快照；
 3. 写入维护状态，停止 app 容器但保持 db 容器运行；
 4. 终止数据库中的应用角色连接；
 5. 使用迁移角色删除并重新创建 `public` schema；
 6. 使用已部署、已审核的应用镜像执行 Prisma migrations，建立 schema、RLS 和 migration ledger；
-7. 使用 `pg_restore --data-only --no-owner --no-privileges --exit-on-error --single-transaction` 导入便携数据，再删除全部 Better Auth session，使所有用户必须重新登录；
+7. 通过一段仓库内固定、无动态标识符的 `psql` 事务，以固定外键顺序将 Base64 JSON CSV 行导入七张应用表；上传内容只进入 `COPY ... FROM STDIN` 数据段，随后删除全部 Better Auth session，使所有用户必须重新登录；
 8. 启动 app 并等待容器健康，再检查本地与公网健康端点；
 9. 删除上传文件、密码秘密文件和临时明文；保留不含秘密的任务结果。
 
@@ -105,18 +105,25 @@ FitGridWeb 已有 `ops/backup.sh` 和 `ops/restore.sh`，能够使用服务器�
 文件名为 `fitgridweb-YYYYMMDDTHHMMSSZ.fitgridbackup`。格式使用官方 `age-plugin-batchpass` 完成 age 认证加密；密码仅通过 `AGE_PASSPHRASE_FD` 指向的受限文件描述符传入，禁止进入 argv、普通环境变量或日志。明文载荷是确定结构的 tar archive：
 
 ```text
+accounts.csv
+grid_trades.csv
+import_previews.csv
+invitations.csv
+sessions.csv
+users.csv
+verifications.csv
 manifest.json
-database.dump
-database.dump.sha256
+payload.sha256
 ```
 
-`manifest.json` 不含用户名、密码、会话 token 或应用秘密，至少包含：
+`manifest.json` 不含用户名、密码、会话 token 或应用秘密，字段集合固定为：
 
 ```json
 {
   "format": "fitgridweb-portable-backup",
-  "formatVersion": "2.0.0",
-  "dumpMode": "data-only",
+  "formatVersion": "3.0.0",
+  "dumpMode": "canonical-csv",
+  "dataEncoding": "base64-json-row-v1",
   "createdAt": "2026-09-03T06:30:00Z",
   "appImage": "ghcr.io/zhshy7713950/fitgridweb:sha-...",
   "postgresMajor": 17,
@@ -130,7 +137,11 @@ database.dump.sha256
 }
 ```
 
-创建端执行 `pg_dump --format=custom --data-only --no-owner --no-privileges`，排除 `_prisma_migrations` 数据；先验证 TOC 只含固定业务表的 `TABLE DATA` 和安全 `SEQUENCE SET`，再写入 SHA-256、归档并加密。恢复端先由 age + batchpass 完成认证解密，再拒绝软链接、绝对路径、`..` 路径、额外文件、重复文件和超限解压，随后验证 dump 摘要并再次逐条执行同一 TOC allowlist。v1 完整转储及任何未识别的 major formatVersion 都必须拒绝，不能猜测兼容。
+创建端在一个只读、可重复读事务中，对七张固定应用表执行仓库内静态列清单的 `COPY (SELECT ...) TO STDOUT`。每个物理 CSV 行只允许一个双引号包围的 Base64 字段，其内容是 UTF-8 JSON 对象，因此逗号、引号、换行、`\.` 和 SQL 文本都只能作为数据存在。归档成员必须精确匹配上述集合，`payload.sha256` 按固定文件名逐项校验，manifest 的计数必须与 CSV 行数一致。
+
+恢复端先由 age + batchpass 完成认证解密，再拒绝链接、路径穿越、额外/重复/非普通成员、超限解密或解压、非精确 manifest/checksum 及非规范 CSV framing。恢复时先由当前已审核版本 migrations 重建 schema，再使用仓库内固定 `COPY FROM STDIN` + `INSERT` 事务导入；上传材料永远不会交给 `pg_restore`。v1 完整转储、v2 custom data-only 转储及任何未识别的 major formatVersion 都必须拒绝，不能猜测兼容。
+
+创建前按 `4 × PORTABLE_BACKUP_MAX_BYTES + 256 MiB` 预留同文件系统峰值空间，导出流本身也受上限约束；预检前按上传大小、最大展开载荷和 256 MiB 余量再次准入。完成文件与父目录使用 Ubuntu `sync -f` 的文件系统级屏障；屏障失败即不发布 ready/history，并在当前进程中移除新归档或恢复旧历史。同步失败意味着断电持久性无法证明，不能报告成功。
 
 安装器仅在 Ubuntu 24.04 amd64 安装经过固定 SHA-256 校验的官方 age v1.3.2 发布包，并同时验证 `age` 与 `age-plugin-batchpass` 的版本；两者版本已匹配时幂等跳过下载。
 

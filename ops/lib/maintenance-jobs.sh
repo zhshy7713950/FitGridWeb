@@ -517,8 +517,8 @@ maintenance_handle_inspection() {
     maintenance_audit inspect-restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" failed INSPECTION_FAILED
     return 1
   fi
-  maintenance_dump="$maintenance_current_prepared/database.dump"
-  maintenance_dump_sha=$(sha256sum "$maintenance_dump" | awk '{print $1}') || return 1
+  maintenance_payload="$maintenance_current_prepared/payload.tar"
+  maintenance_dump_sha=$(sha256sum "$maintenance_payload" | awk '{print $1}') || return 1
   maintenance_now=$(maintenance_now_epoch) || return 1
   maintenance_expires=$((maintenance_now + 600))
   maintenance_challenge_tmp=$(mktemp "$maintenance_current_prepared/.challenge.XXXXXX") || return 1
@@ -535,7 +535,7 @@ maintenance_handle_inspection() {
   fi
   mv "$maintenance_manifest_result" "$maintenance_current_prepared/manifest.json" || return 1
   mv "$maintenance_challenge_tmp" "$maintenance_current_prepared/challenge.json" || return 1
-  chmod 400 "$maintenance_dump" "$maintenance_current_prepared/manifest.json" "$maintenance_current_prepared/challenge.json" || return 1
+  chmod 400 "$maintenance_payload" "$maintenance_current_prepared/manifest.json" "$maintenance_current_prepared/challenge.json" || return 1
   chmod 500 "$maintenance_current_prepared" || return 1
   maintenance_write_status awaiting-confirmation "" "" "$maintenance_expires" "$maintenance_current_prepared/manifest.json" || return 1
   maintenance_audit inspect-restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" awaiting-confirmation "" "$maintenance_dump_sha"
@@ -547,22 +547,22 @@ maintenance_validate_prepared() {
   maintenance_validation_code=PREPARED_INVALID
   maintenance_current_prepared="$ADMIN_OPS_ROOT_DIR/prepared/$maintenance_restore_id"
   maintenance_cleanup_prepared=true
-  maintenance_prepared_dump="$maintenance_current_prepared/database.dump"
+  maintenance_prepared_payload="$maintenance_current_prepared/payload.tar"
   maintenance_prepared_manifest="$maintenance_current_prepared/manifest.json"
   maintenance_challenge="$maintenance_current_prepared/challenge.json"
-  for maintenance_required in "$maintenance_current_prepared" "$maintenance_prepared_dump" "$maintenance_prepared_manifest" "$maintenance_challenge"; do
+  for maintenance_required in "$maintenance_current_prepared" "$maintenance_prepared_payload" "$maintenance_prepared_manifest" "$maintenance_challenge"; do
     [ -e "$maintenance_required" ] && [ ! -L "$maintenance_required" ] || {
       maintenance_validation_code=PREPARED_NOT_FOUND
       return 1
     }
   done
-  [ -d "$maintenance_current_prepared" ] && [ -f "$maintenance_prepared_dump" ] \
+  [ -d "$maintenance_current_prepared" ] && [ -f "$maintenance_prepared_payload" ] \
     && [ -f "$maintenance_prepared_manifest" ] && [ -f "$maintenance_challenge" ] || return 1
   maintenance_require_root_directory "$maintenance_current_prepared" 500 || {
     maintenance_validation_code=PREPARED_PERMISSIONS_INVALID
     return 1
   }
-  for maintenance_required_file in "$maintenance_prepared_dump" "$maintenance_prepared_manifest" "$maintenance_challenge"; do
+  for maintenance_required_file in "$maintenance_prepared_payload" "$maintenance_prepared_manifest" "$maintenance_challenge"; do
     maintenance_require_root_file "$maintenance_required_file" 400 || {
       maintenance_validation_code=PREPARED_PERMISSIONS_INVALID
       return 1
@@ -599,7 +599,7 @@ maintenance_validate_prepared() {
     maintenance_validation_code=CHALLENGE_EXPIRED
     return 1
   }
-  maintenance_actual_sha=$(sha256sum "$maintenance_prepared_dump" | awk '{print $1}') || return 1
+  maintenance_actual_sha=$(sha256sum "$maintenance_prepared_payload" | awk '{print $1}') || return 1
   [ "$maintenance_actual_sha" = "$maintenance_bound_sha" ] || {
     maintenance_validation_code=PREPARED_DUMP_CHANGED
     return 1
@@ -608,25 +608,31 @@ maintenance_validate_prepared() {
     maintenance_current_work=$(mktemp -d "$ADMIN_OPS_ROOT_DIR/work/${maintenance_job_id}.XXXXXX") || return 1
     chmod 700 "$maintenance_current_work" || return 1
   fi
-  maintenance_claimed_dump="$maintenance_current_work/prepared.claim.dump"
-  ln "$maintenance_prepared_dump" "$maintenance_claimed_dump" || {
+  maintenance_claimed_payload="$maintenance_current_work/prepared.claim.tar"
+  ln "$maintenance_prepared_payload" "$maintenance_claimed_payload" || {
     maintenance_validation_code=PREPARED_DUMP_CHANGED
     return 1
   }
-  maintenance_require_root_file "$maintenance_claimed_dump" 400 || {
+  maintenance_require_root_file "$maintenance_claimed_payload" 400 || {
     maintenance_validation_code=PREPARED_PERMISSIONS_INVALID
     return 1
   }
-  maintenance_claimed_sha=$(sha256sum "$maintenance_claimed_dump" | awk '{print $1}') || return 1
+  maintenance_claimed_sha=$(sha256sum "$maintenance_claimed_payload" | awk '{print $1}') || return 1
   [ "$maintenance_claimed_sha" = "$maintenance_bound_sha" ] || {
     maintenance_validation_code=PREPARED_DUMP_CHANGED
     return 1
   }
-  portable_validate_data_only_dump "$maintenance_claimed_dump" "$maintenance_current_work" || {
+  maintenance_prepared_data="$maintenance_current_work/prepared-data"
+  mkdir "$maintenance_prepared_data" || return 1
+  chmod 700 "$maintenance_prepared_data" || return 1
+  portable_validate_plain_archive "$maintenance_claimed_payload" "$maintenance_prepared_data" || {
     maintenance_validation_code=PREPARED_DUMP_INVALID
     return 1
   }
-  maintenance_prepared_dump=$maintenance_claimed_dump
+  cmp "$maintenance_prepared_manifest" "$maintenance_prepared_data/manifest.json" >/dev/null 2>&1 || {
+    maintenance_validation_code=PREPARED_DUMP_CHANGED
+    return 1
+  }
   maintenance_validation_code=
 }
 
@@ -680,9 +686,8 @@ EOSQL
 }
 
 maintenance_restore_portable_data() {
-  maintenance_restore_input=$1
-  fitgrid_compose exec -T db pg_restore --data-only --no-owner --no-privileges --exit-on-error --single-transaction \
-    --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" <"$maintenance_restore_input"
+  maintenance_restore_directory=$1
+  portable_restore_canonical_data "$maintenance_restore_directory"
 }
 
 maintenance_run_migrations() {
@@ -823,7 +828,7 @@ maintenance_handle_restore() {
     if maintenance_run_migrations
     then
       maintenance_write_status restoring
-      if maintenance_restore_portable_data "$maintenance_prepared_dump" \
+      if maintenance_restore_portable_data "$maintenance_prepared_data" \
         && maintenance_delete_all_sessions \
         && fitgrid_compose up --no-build -d --wait app
       then

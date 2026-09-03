@@ -211,6 +211,38 @@ normalize_portable_backup_permissions() {
   done
 }
 
+normalize_portable_backup_history_permissions() {
+  portable_history_file=$1
+  portable_reader_gid_value=$2
+  [ -e "$portable_history_file" ] || [ -L "$portable_history_file" ] || return 0
+  if [ ! -f "$portable_history_file" ] || [ -L "$portable_history_file" ]; then
+    fitgrid_error "维护组件安装失败：便携备份历史文件不是安全的常规文件"
+    return 1
+  fi
+  if ! jq -e '
+    type == "object" and
+    (keys == ["entries"]) and
+    (.entries | type == "array" and length <= 5) and
+    all(.entries[];
+      type == "object" and
+      (keys | sort) == ["createdAt", "filename", "id", "sha256", "size", "status"] and
+      (.id | type == "string" and test("^\\.id\\.[A-Za-z0-9]{6}$")) and
+      (.filename | type == "string" and test("^fitgridweb-[0-9]{8}T[0-9]{6}Z\\.fitgridbackup$")) and
+      (.createdAt | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+      (.size | type == "number" and floor == . and . >= 0) and
+      (.sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+      .status == "ready"
+    )
+  ' "$portable_history_file" >/dev/null 2>&1; then
+    fitgrid_error "维护组件安装失败：便携备份历史文件内容无效"
+    return 1
+  fi
+  chown "root:$portable_reader_gid_value" "$portable_history_file" \
+    || { fitgrid_error "维护组件安装失败：便携备份历史文件所有权"; return 1; }
+  chmod 0640 "$portable_history_file" \
+    || { fitgrid_error "维护组件安装失败：便携备份历史文件权限"; return 1; }
+}
+
 install_atomic_host_file() {
   host_source=$1
   host_destination=$2
@@ -292,6 +324,7 @@ install_maintenance_components() {
   install -d -m 0750 -o root -g "$maintenance_reader_gid" "$maintenance_portable" \
     || { fitgrid_error "维护组件安装失败：便携备份目录"; return 1; }
   normalize_portable_backup_permissions "$maintenance_portable" "$maintenance_reader_gid" || return 1
+  normalize_portable_backup_history_permissions "$maintenance_history" "$maintenance_reader_gid" || return 1
 
   mkdir -p "$maintenance_systemd_directory"
   if ! render_maintenance_host_file \

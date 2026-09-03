@@ -146,12 +146,14 @@ journalctl -u fitgridweb --since=-10m
 
 ## 9. 完整备份策略与权限边界
 
-用户 JSON 导出是单账号迁移文件，不替代完整灾难恢复。便携备份 v2 覆盖 Better Auth 用户/密码哈希/会话、角色与状态、邀请、网格产品和导入预检数据；schema、RLS 与 Prisma 迁移记录由目标机上相同已审核版本的 migrations 重建，上传文件不能携带 DDL。server-key 异机备份和恢复前回滚快照仍保存受信任的完整 custom dump。各类备份都不包含 nginx、TLS 私钥、系统日志、Docker 镜像、`fitgridweb.env`、VPS 凭据或应用秘密。
+用户 JSON 导出是单账号迁移文件，不替代完整灾难恢复。便携备份 v3 覆盖 Better Auth 用户/密码哈希/会话、角色与状态、邀请、网格产品和导入预检数据；schema、RLS 与 Prisma 迁移记录由目标机上相同已审核版本的 migrations 重建，上传文件不能携带 DDL 或 PostgreSQL archive。server-key 异机备份和恢复前回滚快照仍保存受信任的完整 custom dump。各类备份都不包含 nginx、TLS 私钥、系统日志、Docker 镜像、`fitgridweb.env`、VPS 凭据或应用秘密。
 
 实现提供两条不同路径：
 
-- 便携路径：管理员页面或 root TTY 运行 `sudo /opt/fitgridweb/ops/backup-portable.sh`，使用独立 12–128 字符 passphrase 的 age 文件 `fitgridweb-YYYYMMDDTHHMMSSZ.fitgridbackup`。安装器固定并校验官方 age v1.3.2，同时安装 `age-plugin-batchpass`；密码只经 `AGE_PASSPHRASE_FD` 传递，不进入 argv、普通环境变量或日志。v2 明文 tar 只含 `manifest.json`、data-only `database.dump`、`database.dump.sha256`，manifest 明确含 `formatVersion: 2.0.0` 与 `dumpMode: data-only`。文件通过严格 TOC allowlist、内部 checksum、加密后解密复检、reader 权限和文件系统同步屏障后，才加入 `/var/lib/fitgridweb/portable-backups` 与共享网页历史；成功历史最多 5 条。旧 v1 完整转储会在预检阶段拒绝，不能上传恢复。
+- 便携路径：管理员页面或 root TTY 运行 `sudo /opt/fitgridweb/ops/backup-portable.sh`，使用独立 12–128 字符 passphrase 的 age 文件 `fitgridweb-YYYYMMDDTHHMMSSZ.fitgridbackup`。安装器固定并校验官方 age v1.3.2，同时安装 `age-plugin-batchpass`；密码只经 `AGE_PASSPHRASE_FD` 传递，不进入 argv、普通环境变量或日志。v3 明文 tar 精确包含七张固定应用表的 CSV、`manifest.json` 和 `payload.sha256`，每个 CSV 物理行是双引号包围的 Base64 UTF-8 JSON。文件通过固定成员、manifest、计数、checksum、行 framing、加密后解密复检、reader 权限和文件系统同步屏障后，才加入 `/var/lib/fitgridweb/portable-backups` 与共享网页历史；成功历史最多 5 条。创建空间按配置上限保守准入并对导出流限额，预检在解密前独立准入。旧 v1 完整转储和 v2 custom data-only 转储都会拒绝。
 - 无人值守路径：`/opt/fitgridweb/ops/backup.sh` 使用 root-only `/etc/fitgridweb/backup.key` 做 AES-256-CBC/PBKDF2 加密，生成 `.dump.enc`、`.dump.enc.sha256`、`.json` 并复制到真实 `BACKUP_REMOTE_DIR`。timer 每天 02:30、persistent、最多随机延迟 10 分钟。该路径不写网页历史，也不受 5 份限制；本机默认 180 天清理只发生在远端复制及远端 checksum 成功之后，远端保留由存储侧负责。
+
+便携归档和历史索引只有在 GNU `sync -f` 文件系统屏障完成后才能发布；屏障失败不产生 `ready`，并在当前进程中删除新归档或恢复旧历史。安装/升级会先拒绝 symlink、目录或 schema 非法的既有 `backups.json`，验证后再统一为 `root:<PORTABLE_BACKUP_READER_GID>`、`0640`。
 
 应用容器只获得 UID/GID 1001 的 web spool 可写挂载和便携目录只读挂载；没有 Docker socket、migration URL、服务器环境文件、backup key 或 root 状态树。`fitgridweb-maintenance.path` 监视固定 inbox，root oneshot worker 串行处理固定 schema 的 `backup`、`inspect-restore`、`restore`，审计写入 `/var/lib/fitgridweb/admin-ops/root/audit.jsonl` 并由 logrotate 保存 180 个 daily rotation。
 
@@ -170,9 +172,9 @@ journalctl -u fitgridweb-backup.service --since today --no-pager
 
 管理员在 `/fitgrid/admin` 的“数据保险库”完成：当前密码重新验证并创建便携备份 → 最近 5 份中申请 60 秒、单次、绑定管理员/备份的下载 → 上传 `.fitgridbackup` 与独立密码 → 隔离预检 → 在固定 10 分钟挑战内再次输入当前密码和准确短语 `恢复全部数据`。预检成功只公开备份时间、PostgreSQL 主版本、数据库和四项计数；manifest 内的 app image 与浏览器文件大小不作为公开服务器证明。
 
-恢复执行顺序固定为：重新验证准备 dump 摘要及 data-only TOC allowlist → 创建、加密、解密复检受信任的恢复前完整快照 → root 权威维护标记 → 停 `app` → 终止运行角色连接 → 删除并重建 `public` schema → 从已部署的已审核镜像执行 Prisma migration → `pg_restore --data-only --no-owner --no-privileges --exit-on-error --single-transaction` → 删除全部 `sessions` → 启动 `app` → 回环及公网健康。上传转储只允许固定业务表的 `TABLE DATA` 和安全 `SEQUENCE SET`，任何 PRE-DATA、POST-DATA、FUNCTION、ACL 或其他 DDL 记录都在替换生产库前拒绝。成功后所有用户重新登录，且触发恢复的临时管理员可能已不存在。自动回滚仍只使用主机刚生成、受服务器密钥保护的完整快照，并可执行受信任的 `--clean` 恢复。
+恢复执行顺序固定为：重新验证准备 tar 摘要、固定成员/checksum/manifest/计数/行 framing → 创建、加密、解密复检受信任的恢复前完整快照 → root 权威维护标记 → 停 `app` → 终止运行角色连接 → 删除并重建 `public` schema → 从已部署的已审核镜像执行 Prisma migration → 通过仓库内固定 `psql` 事务按外键顺序执行 `COPY FROM STDIN` 与静态 `INSERT` → 删除全部 `sessions` → 启动 `app` → 回环及公网健康。CSV 只允许 Base64 数据字段，上传内容不会成为 SQL、标识符或 `pg_restore` 输入。成功后所有用户重新登录，且触发恢复的临时管理员可能已不存在。自动回滚仍只使用主机刚生成、受服务器密钥保护的完整 custom dump，并可执行受信任的 `--clean` 恢复。
 
-准备数据的路径/权限/challenge/摘要/`pg_restore --list` 验证失败，或恢复前快照的 dump、加密、解密复检失败时，生产数据库尚未被替换；worker 直接返回 `failed`（具体预检代码或 `SNAPSHOT_FAILED`），不会执行回滚。只有快照成功、维护标记建立并进入停应用/替换生产库的恢复路径后，该路径失败才触发且只触发一次自动回滚。回滚成功仍报告原 restore `failed/RESTORE_FAILED` 与 `rolledBack=true`；恢复与回滚均失败、恢复在维护阶段中断或关键状态发布失败时进入 `intervention-required`。权威 `/var/lib/fitgridweb/admin-ops/root/maintenance.json` 保持 active，重启不会自动继续。保留目录 `/var/lib/fitgridweb/admin-ops/root/intervention/{jobId}` 含 identifier-only `job.json`，若快照已生成还含 server-key 加密的 `rollback.dump.enc`；密码、上传和明文不会作为恢复材料保留。
+准备数据的路径/权限/challenge/摘要或 canonical payload 复检失败，或恢复前快照的 dump、加密、解密复检失败时，生产数据库尚未被替换；worker 直接返回 `failed`（具体预检代码或 `SNAPSHOT_FAILED`），不会执行回滚。只有快照成功、维护标记建立并进入停应用/替换生产库的恢复路径后，该路径失败才触发且只触发一次自动回滚。回滚成功仍报告原 restore `failed/RESTORE_FAILED` 与 `rolledBack=true`；恢复与回滚均失败、恢复在维护阶段中断或关键状态发布失败时进入 `intervention-required`。权威 `/var/lib/fitgridweb/admin-ops/root/maintenance.json` 保持 active，重启不会自动继续。保留目录 `/var/lib/fitgridweb/admin-ops/root/intervention/{jobId}` 含 identifier-only `job.json`，若快照已生成还含 server-key 加密的 `rollback.dump.enc`；密码、上传和明文不会作为恢复材料保留。
 
 没有通用安全的原地解除 intervention 命令。操作员应保留 job/request ID，读取 unit 状态、journal、root marker、公开 job status 和 intervention 文件权限；不得编辑 marker、删除 evidence、随意 chmod/chown、重复恢复或直接把加密文件交给 `pg_restore`。无法证明故障主机的唯一权威状态时，在新隔离主机从最后已验证备份恢复并验收。精确诊断命令和警告见 [2 GiB 手册](low-memory-vps-runbook.md#恢复失败自动回滚和人工介入)。
 

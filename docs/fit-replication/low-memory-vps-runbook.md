@@ -177,13 +177,13 @@ sudo systemctl reload nginx
 
 1. 以 `active admin` 登录 `https://你的域名[:非标准HTTPS端口]/fitgrid/admin`，进入“数据保险库”。普通用户、匿名用户和 disabled admin 均不能调用维护接口。
 2. 点击“创建备份”，输入当前管理员密码、独立备份密码和再次确认。独立密码必须为 12–128 个 Unicode 字符且两次相同。页面不会把密码写入浏览器存储；提交后字段会清空。
-3. 等待状态依次经过“正在生成 → 正在加密 → 可以下载”。主机先检查可用空间至少为数据库估算值的四倍再加 256 MiB，以覆盖 dump、密文、解密校验 tar 与解出的校验 dump 同时存在的峰值。v2 只生成 data-only custom dump，排除 `_prisma_migrations`，并逐条限制 TOC；内部 SHA-256、age + batchpass 加密、解密复检、reader 权限与归档/父目录文件系统同步屏障全部成功后才发布历史和 `ready`。同步使用 Ubuntu GNU `sync -f` 的文件系统级屏障，不是逐文件 `fsync`；任一同步失败即任务失败。
+3. 等待状态依次经过“正在生成 → 正在加密 → 可以下载”。主机按 `4 × PORTABLE_BACKUP_MAX_BYTES + 256 MiB` 检查可用空间，并在导出时再次限制总数据量。v3 只生成七张固定应用表的规范 Base64 JSON CSV 数据；固定成员、manifest/计数、内部 SHA-256、行 framing、age + batchpass 加密、解密复检、reader 权限与归档/父目录文件系统同步屏障全部成功后才发布历史和 `ready`。同步使用 Ubuntu GNU `sync -f` 的文件系统级屏障，不是逐文件 `fsync`；任一同步失败即任务失败，并在当前进程中删除刚发布的归档或恢复旧历史，不能报告成功。
 4. “历史备份”只显示成功且文件仍存在、大小匹配的最近 5 份，按时间倒序显示 Asia/Shanghai 时间、IEC 大小、SHA-256 前 12 位和下载按钮。第 6 份通过全部检查后才删除最旧一份；失败文件不占名额。网页和 CLI 创建的便携备份共用这 5 个名额。
 5. 点击“下载”。页面先申请绑定当前管理员与该备份的 60 秒单次令牌，再由浏览器直接流式下载；重放、过期、换管理员或换备份均返回 404。下载不会删除服务器副本。下载后运行 `sha256sum /安全路径/fitgridweb-YYYYMMDDTHHMMSSZ.fitgridbackup`，与历史行完整 SHA-256 的悬停提示逐字比较；前 12 位只用于快速识别。
-6. 恢复时选择文件名形如 `fitgridweb-YYYYMMDDTHHMMSSZ.fitgridbackup` 的文件，输入该文件的独立备份密码，点击“上传并检查”。默认上传上限为 536870912 字节（512 MiB），nginx 与应用都限制大小；上传和解密采用流式处理。
-7. 预检在生产替换前完成。错误密码、损坏密文、非法/额外/重复 tar 成员、路径穿越、内部摘要不匹配、旧 v1/未知格式、PostgreSQL 主版本不匹配、不可读 dump，或 TOC 含 PRE-DATA、POST-DATA、FUNCTION、ACL、DDL、迁移记录及任何 allowlist 外对象，都会以失败结束，不修改生产数据库。成功页面只显示服务端公开并验证的备份时间、PostgreSQL 主版本、数据库名、用户/网格产品/邀请/导入预检数和完整性结果；当前公开状态不会显示 manifest 的应用镜像或服务器验证的归档大小。
-8. 预检挑战固定 10 分钟有效并绑定管理员、请求与已验证 dump 摘要。页面打开不等于无限续期；超时后重新上传预检。点击“恢复全部数据”，再次输入当前管理员密码，并逐字输入 `恢复全部数据`。服务器接受后对话框锁定，预计会短暂离线，页面显示“服务器正在恢复数据，请勿关闭页面”。
-9. 执行器重新校验准备区 data-only TOC，先用服务器 `backup.key` 创建并验证本次恢复前受信任完整快照，之后才停止 `app`、终止运行角色连接、删除并重建 `public` schema、运行已审核版本的 Prisma migrations，再以 `pg_restore --data-only --no-owner --no-privileges --exit-on-error --single-transaction` 导入业务数据，删除全部 `sessions`、启动应用并检查回环与公网健康。恢复成功会清除所有登录状态并转到 `/fitgrid/login`；临时管理员可能已被备份数据库替换，必须用备份中的管理员登录。若失败，自动回滚仍使用刚创建的受信任完整快照，而不是放宽上传文件 allowlist。
+6. 恢复时选择文件名形如 `fitgridweb-YYYYMMDDTHHMMSSZ.fitgridbackup` 的文件，输入该文件的独立备份密码，点击“上传并检查”。默认上传上限为 536870912 字节（512 MiB），nginx 与应用都限制大小；上传采用流式处理。执行器在解密前还会按上传大小、配置上限和 256 MiB 余量检查准备区文件系统空间。
+7. 预检在生产替换前完成。错误密码、损坏密文、非法/额外/重复/非普通 tar 成员、路径穿越、内部摘要或计数不匹配、旧 v1、v2 custom dump、未知格式、PostgreSQL 主版本不匹配或非规范 CSV framing，都会以失败结束，不修改生产数据库。成功页面只显示服务端公开并验证的备份时间、PostgreSQL 主版本、数据库名、用户/网格产品/邀请/导入预检数和完整性结果；当前公开状态不会显示 manifest 的应用镜像或服务器验证的归档大小。
+8. 预检挑战固定 10 分钟有效并绑定管理员、请求与已验证 payload tar 摘要。页面打开不等于无限续期；超时后重新上传预检。点击“恢复全部数据”，再次输入当前管理员密码，并逐字输入 `恢复全部数据`。服务器接受后对话框锁定，预计会短暂离线，页面显示“服务器正在恢复数据，请勿关闭页面”。
+9. 执行器通过 hard-link 固定并重新校验准备区 payload，先用服务器 `backup.key` 创建并验证本次恢复前受信任完整快照，之后才停止 `app`、终止运行角色连接、删除并重建 `public` schema、运行已审核版本的 Prisma migrations。导入只使用仓库内固定的单个 `psql` 事务，上传的 Base64 行只进入 `COPY FROM STDIN` 数据段，再由静态 `INSERT` 按外键顺序写入七张固定表；上传材料永远不会交给 `pg_restore`。最后删除全部 `sessions`、启动应用并检查回环与公网健康。恢复成功会清除所有登录状态并转到 `/fitgrid/login`；临时管理员可能已被备份数据库替换，必须用备份中的管理员登录。若失败，自动回滚仍使用刚创建的受信任完整 custom dump。
 
 当前恢复执行器的公网健康地址固定为 `https://$DOMAIN/fitgrid/api/v1/health`，没有拼接 `PUBLIC_HTTPS_PORT`。因此网页生产恢复目前只支持公网 443 上可访问该地址的部署；若 FitGridWeb 只在非标准 HTTPS 端口提供服务，不要开始生产恢复，应先修正并重新验收执行器。
 
@@ -205,7 +205,7 @@ systemctl status fitgridweb-maintenance.path --no-pager
 journalctl -u fitgridweb-maintenance.service --since today --no-pager
 ```
 
-CLI 与网页使用相同的 v2 data-only 格式、目录、历史索引和最近 5 份规则。它只生成同机便携副本，不会复制到 `BACKUP_REMOTE_DIR`。底层官方 batchpass 插件只从受限文件描述符读取密码；不要把密码放入管道、普通环境变量或命令行，也不要尝试从无 TTY 的 cron/systemd 调用该脚本。
+CLI 与网页使用相同的 v3 canonical CSV 格式、目录、历史索引和最近 5 份规则。它只生成同机便携副本，不会复制到 `BACKUP_REMOTE_DIR`。底层官方 batchpass 插件只从受限文件描述符读取密码；不要把密码放入管道、普通环境变量或命令行，也不要尝试从无 TTY 的 cron/systemd 调用该脚本。
 
 ## 配置真正的异机定时备份
 
@@ -260,7 +260,7 @@ journalctl -u fitgridweb-backup.service --since today --no-pager
 
 失败处理取决于生产库是否已经进入替换路径：
 
-- 替换前失败：准备目录、权限、challenge、摘要、hard-link claim 或 `pg_restore --list` 验证失败，worker 直接返回对应 `PREPARED_*`/`CHALLENGE_*` 失败；恢复前快照的 dump、可读性、加密或解密复检失败则返回 `SNAPSHOT_FAILED`。此时生产数据库没有被替换，不执行回滚。
+- 替换前失败：准备目录、权限、challenge、摘要、hard-link claim 或 canonical payload 复检失败，worker 直接返回对应 `PREPARED_*`/`CHALLENGE_*` 失败；恢复前快照的 dump、可读性、加密或解密复检失败则返回 `SNAPSHOT_FAILED`。此时生产数据库没有被替换，不执行回滚。
 - 替换路径失败：只有恢复前快照成功、维护标记建立并进入停应用/替换生产库路径后，后续 restore、migration、session 清除、启动或健康检查失败才自动尝试一次回滚，不会重试第二次。
 - 回滚成功：维护标记被清除，应用重新健康；job 状态为 `failed`、代码 `RESTORE_FAILED`、`rolledBack=true`。这表示原数据已恢复，不表示请求的备份已恢复成功。
 - 恢复与这一次回滚都失败，或恢复在维护阶段被重启/中断，或关键 marker/status/终态记录无法可靠发布：状态为 `intervention-required`，常见代码包括 `ROLLBACK_FAILED`、`RESTORE_INTERRUPTED`、`MARKER_CLEAR_FAILED`、`STATUS_PUBLISH_FAILED` 或 `TERMINAL_STATE_WRITE_FAILED`。root 权威维护标记保持 active，worker 重启后也不会自动继续或再次回滚。

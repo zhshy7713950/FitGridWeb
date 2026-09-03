@@ -1,6 +1,6 @@
 import { chmod, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -13,10 +13,27 @@ type PortableFixtureOptions = {
   availableKilobytes?: number;
   databaseBytes?: number;
   existingBackups?: number;
+  exportUserRow?: string;
+  maxBytes?: number;
   publishChownExit?: number;
   publishChmodExit?: number;
+  psqlExit?: number;
   syncExit?: number;
 };
+
+const canonicalCsvFiles = [
+  "accounts.csv",
+  "grid_trades.csv",
+  "import_previews.csv",
+  "invitations.csv",
+  "sessions.csv",
+  "users.csv",
+  "verifications.csv",
+] as const;
+
+function canonicalCsvRow(value: unknown) {
+  return `"${Buffer.from(JSON.stringify(value)).toString("base64")}"\n`;
+}
 
 async function executable(directory: string, name: string, source: string) {
   const file = path.join(directory, name);
@@ -55,6 +72,33 @@ async function createTar(root: string, name: string, manifest: string, dump = "v
   return archive;
 }
 
+async function createCanonicalTar(
+  root: string,
+  name: string,
+  manifest: string,
+  overrides: Partial<Record<(typeof canonicalCsvFiles)[number], string>> = {},
+) {
+  const payload = path.join(root, `${name}-payload`);
+  await mkdir(payload);
+  await writeFile(path.join(payload, "manifest.json"), manifest);
+  for (const file of canonicalCsvFiles) {
+    await writeFile(path.join(payload, file), overrides[file] ?? "");
+  }
+  const checksums = canonicalCsvFiles.map((file) => {
+    const contents = overrides[file] ?? "";
+    return `${createHash("sha256").update(contents).digest("hex")}  ${file}`;
+  }).join("\n") + "\n";
+  await writeFile(path.join(payload, "payload.sha256"), checksums);
+  const archive = path.join(root, name);
+  const tar = spawnSync(
+    "tar",
+    ["-cf", archive, ...canonicalCsvFiles, "manifest.json", "payload.sha256"],
+    { cwd: payload, encoding: "utf8" },
+  );
+  if (tar.status !== 0) throw new Error(tar.stderr);
+  return archive;
+}
+
 async function portableFixture(options: PortableFixtureOptions = {}) {
   const root = path.join(tmpdir(), `fitgrid-portable-${randomUUID()}`);
   const bin = path.join(root, "bin");
@@ -84,7 +128,7 @@ async function portableFixture(options: PortableFixtureOptions = {}) {
     "OWNER_REF_SECRET=owner-secret-at-least-thirty-two-characters",
     `PORTABLE_BACKUP_DIR=${backups}`,
     `PORTABLE_BACKUP_HISTORY_FILE=${history}`,
-    "PORTABLE_BACKUP_MAX_BYTES=536870912",
+    `PORTABLE_BACKUP_MAX_BYTES=${options.maxBytes ?? 536870912}`,
   ].join("\n"));
   await chmod(environmentFile, 0o600);
   await writeFile(history, JSON.stringify({ entries: [] }));
@@ -97,6 +141,21 @@ async function portableFixture(options: PortableFixtureOptions = {}) {
   await executable(bin, "docker", `
 printf 'docker %s\\n' "$*" >>"$COMMAND_LOG"
 case "$*" in
+  *"psql --no-psqlrc --quiet"*)
+    portable_export_sql=$(cat)
+    printf '%s\n' "$portable_export_sql" >>"$COMMAND_LOG"
+    printf '%s\n' \
+      '__FITGRID_PORTABLE_V3_ACCOUNTS__' '"e30="' \
+      '__FITGRID_PORTABLE_V3_GRID_TRADES__' '"e30="' \
+      '__FITGRID_PORTABLE_V3_IMPORT_PREVIEWS__' '"e30="' \
+      '__FITGRID_PORTABLE_V3_INVITATIONS__' '"e30="' \
+      '__FITGRID_PORTABLE_V3_SESSIONS__' '"e30="' \
+      '__FITGRID_PORTABLE_V3_USERS__'
+    printf '%s\n' "\${EXPORT_USER_ROW:-\"e30=\"}"
+    printf '%s\n' \
+      '__FITGRID_PORTABLE_V3_VERIFICATIONS__' '"e30="' \
+      '__FITGRID_PORTABLE_V3_END__'
+    [ "\${PSQL_EXIT:-0}" = 0 ] || exit "$PSQL_EXIT" ;;
   *"pg_dump"*) printf 'valid custom dump' ;;
   *"pg_restore --list"*)
     portable_fake_dump=$(cat)
@@ -156,6 +215,7 @@ printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n'
 printf 'fitgrid 999999999 0 %s 0%% /\\n' "$AVAILABLE_KILOBYTES"`);
   await executable(bin, "sync", `
 printf 'sync %s\\n' "$*" >>"$COMMAND_LOG"
+[ -z "\${SYNC_FAIL_TARGET:-}" ] || [ "\${2:-}" != "$SYNC_FAIL_TARGET" ] || exit 73
 [ "\${SYNC_EXIT:-0}" = 0 ] || exit "$SYNC_EXIT"`);
 
   return {
@@ -163,8 +223,10 @@ printf 'sync %s\\n' "$*" >>"$COMMAND_LOG"
     ageExit: options.ageExit ?? 0,
     availableKilobytes: options.availableKilobytes ?? 10 * 1024 * 1024,
     databaseBytes: options.databaseBytes ?? 1024,
+    exportUserRow: options.exportUserRow ?? '"e30="',
     publishChownExit: options.publishChownExit ?? 0,
     publishChmodExit: options.publishChmodExit ?? 0,
+    psqlExit: options.psqlExit ?? 0,
     syncExit: options.syncExit ?? 0,
   };
 }
@@ -178,8 +240,10 @@ function testEnvironment(files: Awaited<ReturnType<typeof portableFixture>>, ext
     AGE_EXIT: String(files.ageExit),
     AVAILABLE_KILOBYTES: String(files.availableKilobytes),
     DATABASE_BYTES: String(files.databaseBytes),
+    EXPORT_USER_ROW: files.exportUserRow,
     PUBLISH_CHOWN_EXIT: String(files.publishChownExit),
     PUBLISH_CHMOD_EXIT: String(files.publishChmodExit),
+    PSQL_EXIT: String(files.psqlExit),
     SYNC_EXIT: String(files.syncExit),
     FITGRID_BACKUP_TIMESTAMP: "20260903T070000Z",
     TMPDIR: files.root,
@@ -219,42 +283,57 @@ function runPortableInspect(files: Awaited<ReturnType<typeof portableFixture>>, 
   });
 }
 
+function runCanonicalRestoreWithEmitterFailure(files: Awaited<ReturnType<typeof portableFixture>>) {
+  return spawnSync("sh", ["-c", `. "${path.join(projectDirectory, "ops/lib/portable-backup.sh")}"; . "${path.join(projectDirectory, "ops/env.sh")}"; load_fitgrid_environment; portable_emit_restore_sql() { return 37; }; portable_restore_canonical_data "$PREPARED_DIRECTORY"`], {
+    cwd: projectDirectory,
+    encoding: "utf8",
+    env: testEnvironment(files, { PREPARED_DIRECTORY: files.prepared }),
+  });
+}
+
 async function portableInspectFixture(caseName: string) {
   const files = await portableFixture();
-  const manifest = JSON.stringify({
+  const manifestValue: Record<string, unknown> = {
     format: "fitgridweb-portable-backup",
-    formatVersion: caseName === "unknown format" ? "9.0.0" : caseName === "legacy full format" ? "1.0.0" : "2.0.0",
-    dumpMode: "data-only",
+    formatVersion: caseName === "unknown format" ? "9.0.0" : caseName === "legacy full format" ? "1.0.0" : "3.0.0",
+    dumpMode: "canonical-csv",
+    dataEncoding: "base64-json-row-v1",
     createdAt: "2026-09-03T07:00:00Z",
     appImage: "ghcr.io/example/fitgridweb:sha-2ca7f41",
     postgresMajor: 17,
     database: "fitgridweb",
-    counts: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0 },
-  });
-  const archive = await createTar(
+    counts: { users: caseName === "count mismatch" ? 2 : 1, gridTrades: 0, invitations: 0, importPreviews: 0 },
+  };
+  if (caseName === "extra manifest field") manifestValue.command = "DROP TABLE users";
+  const manifest = JSON.stringify(manifestValue);
+  const archive = await createCanonicalTar(
     files.root,
     "upload.fitgridbackup",
     manifest,
-    caseName === "tampered archive"
-      ? "tampered"
-      : caseName.startsWith("unsafe ") || caseName === "valid sequence"
-        ? caseName
-        : "valid custom dump",
+    { "users.csv": canonicalCsvRow({ id: "user-1", value: "valid canonical row" }) },
   );
   if (caseName === "tampered archive") {
-    const payload = path.join(files.root, "upload.fitgridbackup-payload", "database.dump.sha256");
-    await writeFile(payload, "0000000000000000000000000000000000000000000000000000000000000000  database.dump\n");
-    const tar = spawnSync("tar", ["-cf", archive, "manifest.json", "database.dump", "database.dump.sha256"], { cwd: path.dirname(payload), encoding: "utf8" });
+    const payload = path.join(files.root, "upload.fitgridbackup-payload", "users.csv");
+    await writeFile(payload, canonicalCsvRow({ id: "tampered" }));
+    const tar = spawnSync(
+      "tar",
+      ["-cf", archive, ...canonicalCsvFiles, "manifest.json", "payload.sha256"],
+      { cwd: path.dirname(payload), encoding: "utf8" },
+    );
     if (tar.status !== 0) throw new Error(tar.stderr);
   }
   if (caseName === "wrong password") files.ageExit = 1;
   if (caseName === "hostile checksum filename" || caseName === "multiple checksum records") {
     const checksum = caseName === "hostile checksum filename"
       ? "0000000000000000000000000000000000000000000000000000000000000000  /etc/passwd\\n"
-      : "0000000000000000000000000000000000000000000000000000000000000000  database.dump\\n0000000000000000000000000000000000000000000000000000000000000000  /etc/passwd\\n";
-    const payload = path.join(files.root, "upload.fitgridbackup-payload", "database.dump.sha256");
+      : "0000000000000000000000000000000000000000000000000000000000000000  users.csv\\n0000000000000000000000000000000000000000000000000000000000000000  /etc/passwd\\n";
+    const payload = path.join(files.root, "upload.fitgridbackup-payload", "payload.sha256");
     await writeFile(payload, checksum);
-    const tar = spawnSync("tar", ["-cf", archive, "manifest.json", "database.dump", "database.dump.sha256"], { cwd: path.dirname(payload), encoding: "utf8" });
+    const tar = spawnSync(
+      "tar",
+      ["-cf", archive, ...canonicalCsvFiles, "manifest.json", "payload.sha256"],
+      { cwd: path.dirname(payload), encoding: "utf8" },
+    );
     if (tar.status !== 0) throw new Error(tar.stderr);
     await executable(files.bin, "sha256sum", `
 if [ "$1" = -c ]; then
@@ -270,13 +349,21 @@ case "$1" in
   *) exec /usr/bin/tar "$@" ;;
 esac`);
   }
+  if (caseName === "tar extraction failure") {
+    await executable(files.bin, "tar", `
+case "$1" in
+  -xOf) /usr/bin/tar "$@"; exit 66 ;;
+  *) exec /usr/bin/tar "$@" ;;
+esac`);
+  }
   return { ...files, archive };
 }
 
 describe("portable backups", () => {
-  it("reserves space for the dump, ciphertext, decrypted tar, and extracted verification dump", async () => {
+  it("reserves peak creation space from the configured payload limit rather than database estimates", async () => {
     const files = await portableFixture({
-      databaseBytes: 100 * 1024 * 1024,
+      databaseBytes: 1,
+      maxBytes: 100 * 1024 * 1024,
       availableKilobytes: 600 * 1024,
     });
 
@@ -284,22 +371,62 @@ describe("portable backups", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("Insufficient free space");
-    expect(await readFile(files.commandLog, "utf8")).not.toContain("pg_dump");
+    await expect(readFile(files.commandLog, "utf8")).rejects.toThrow();
   });
 
-  it("creates a versioned data-only dump without migration-ledger rows", async () => {
+  it("creates a v3 canonical per-table payload without pg_dump or pg_restore", async () => {
     const files = await portableFixture();
     const result = runPortableCreate(files);
     expect(result.status, result.stderr).toBe(0);
 
     const commandLog = await readFile(files.commandLog, "utf8");
-    expect(commandLog).toContain(
-      "pg_dump --format=custom --data-only --no-owner --no-privileges --exclude-table-data=public._prisma_migrations",
-    );
+    expect(commandLog).not.toContain("pg_dump");
+    expect(commandLog).not.toContain("pg_restore");
+    expect(commandLog).toContain("COPY (");
+    expect(commandLog).toContain("jsonb_build_object");
+    expect(commandLog).toContain("ORDER BY id");
     const archive = path.join(files.backups, "fitgridweb-20260903T070000Z.fitgridbackup");
     const manifest = spawnSync("tar", ["-xOf", archive, "manifest.json"], { encoding: "utf8" });
     expect(manifest.status, manifest.stderr).toBe(0);
-    expect(JSON.parse(manifest.stdout)).toMatchObject({ formatVersion: "2.0.0", dumpMode: "data-only" });
+    expect(JSON.parse(manifest.stdout)).toMatchObject({
+      formatVersion: "3.0.0",
+      dumpMode: "canonical-csv",
+      dataEncoding: "base64-json-row-v1",
+    });
+  });
+
+  it("stops canonical export before rows can exceed the configured payload bound", async () => {
+    const files = await portableFixture({
+      maxBytes: 64,
+      exportUserRow: `"${"A".repeat(80)}"`,
+      availableKilobytes: 300 * 1024,
+    });
+
+    const result = runPortableCreate(files);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Portable canonical export exceeds the configured limit");
+    expect(await successfulPortableNames(files.backups)).toEqual([]);
+  });
+
+  it("does not mask a psql failure after complete section framing", async () => {
+    const files = await portableFixture({ psqlExit: 29 });
+
+    const result = runPortableCreate(files);
+
+    expect(result.status).toBe(29);
+    expect(await successfulPortableNames(files.backups)).toEqual([]);
+  });
+
+  it("does not invoke psql or mask failure while materializing fixed restore SQL", async () => {
+    const files = await portableFixture();
+    await Promise.all(canonicalCsvFiles.map((file) => writeFile(path.join(files.prepared, file), "")));
+
+    const result = runCanonicalRestoreWithEmitterFailure(files);
+
+    expect(result.status).toBe(37);
+    await expect(readFile(files.commandLog, "utf8")).rejects.toThrow();
+    expect((await readdir(files.prepared)).filter((file) => file.startsWith(".restore."))).toEqual([]);
   });
 
   it("publishes one inspected age archive and only then prunes the sixth backup", async () => {
@@ -340,6 +467,30 @@ describe("portable backups", () => {
     expect(result.status).toBe(73);
     expect(await successfulPortableNames(files.backups)).toEqual([]);
     expect(await readJson(files.history)).toEqual({ entries: [] });
+    expect(await readJson(files.statusFile)).not.toEqual({ state: "ready" });
+  });
+
+  it("removes an archive when its post-rename durability barrier fails", async () => {
+    const files = await portableFixture();
+    const archive = path.join(files.backups, "fitgridweb-20260903T070000Z.fitgridbackup");
+
+    const result = runPortableCreate(files, { SYNC_FAIL_TARGET: archive });
+
+    expect(result.status).toBe(73);
+    expect(await successfulPortableNames(files.backups)).toEqual([]);
+    expect(await readJson(files.history)).toEqual({ entries: [] });
+    expect(await readJson(files.statusFile)).not.toEqual({ state: "ready" });
+  });
+
+  it("rolls back history and removes the archive when history post-rename sync fails", async () => {
+    const files = await portableFixture();
+    const originalHistory = await readFile(files.history, "utf8");
+
+    const result = runPortableCreate(files, { SYNC_FAIL_TARGET: files.history });
+
+    expect(result.status).toBe(73);
+    expect(await successfulPortableNames(files.backups)).toEqual([]);
+    expect(await readFile(files.history, "utf8")).toBe(originalHistory);
     expect(await readJson(files.statusFile)).not.toEqual({ state: "ready" });
   });
 
@@ -395,7 +546,16 @@ describe("portable backups", () => {
     expect(await readJson(files.history)).toEqual({ entries: [] });
   });
 
-  it.each(["wrong password", "tampered archive", "../escape", "unknown format", "legacy full format"])(
+  it.each([
+    "wrong password",
+    "tampered archive",
+    "../escape",
+    "tar extraction failure",
+    "unknown format",
+    "legacy full format",
+    "extra manifest field",
+    "count mismatch",
+  ])(
     "rejects %s before publishing a prepared dump",
     async (caseName) => {
       const files = await portableInspectFixture(caseName);
@@ -404,30 +564,88 @@ describe("portable backups", () => {
     },
   );
 
-  it.each([
-    "unsafe function",
-    "unsafe acl",
-    "unsafe pre-data",
-    "unsafe post-data",
-    "unsafe ddl",
-    "unsafe prisma migrations",
-  ])(
-    "rejects a data archive containing %s TOC records",
-    async (caseName) => {
-      const files = await portableInspectFixture(caseName);
-      const result = runPortableInspect(files, files.archive);
+  it("accepts only a v3 canonical archive and preserves tricky JSON, CSV punctuation, and newlines as data", async () => {
+    const files = await portableFixture();
+    const manifest = JSON.stringify({
+      format: "fitgridweb-portable-backup",
+      formatVersion: "3.0.0",
+      dumpMode: "canonical-csv",
+      dataEncoding: "base64-json-row-v1",
+      createdAt: "2026-09-03T07:00:00Z",
+      appImage: "ghcr.io/example/fitgridweb:sha-2ca7f41",
+      postgresMajor: 17,
+      database: "fitgridweb",
+      counts: { users: 1, gridTrades: 0, invitations: 0, importPreviews: 0 },
+    });
+    const tricky = { name: "逗号, 引号\"\n\\.\n不是 SQL; DROP TABLE users;", payload: { nested: "line\nline" } };
+    const archive = await createCanonicalTar(files.root, "canonical.fitgridbackup", manifest, {
+      "users.csv": canonicalCsvRow(tricky),
+    });
+
+    const result = runPortableInspect(files, archive);
+
+    expect(result.status, result.stderr).toBe(0);
+    const preparedTar = path.join(files.prepared, "payload.tar");
+    expect((await stat(preparedTar)).mode & 0o777).toBe(0o600);
+    const users = spawnSync("tar", ["-xOf", preparedTar, "users.csv"], { encoding: "utf8" });
+    expect(users.status, users.stderr).toBe(0);
+    expect(users.stdout).toBe(canonicalCsvRow(tricky));
+  });
+
+  it("rejects the previous v2 custom-dump portable format", async () => {
+    const files = await portableFixture();
+    const manifest = JSON.stringify({
+      format: "fitgridweb-portable-backup",
+      formatVersion: "2.0.0",
+      dumpMode: "data-only",
+      createdAt: "2026-09-03T07:00:00Z",
+      appImage: "ghcr.io/example/fitgridweb:sha-2ca7f41",
+      postgresMajor: 17,
+      database: "fitgridweb",
+      counts: { users: 1, gridTrades: 0, invitations: 0, importPreviews: 0 },
+    });
+    const archive = await createTar(files.root, "v2.fitgridbackup", manifest, "custom archive with hidden copyStmt");
+
+    expect(runPortableInspect(files, archive).status).not.toBe(0);
+    expect(await recursiveNames(files.prepared)).toEqual([]);
+  });
+
+  it("admits inspection disk space before allocating decrypted plaintext", async () => {
+    const files = await portableFixture({ maxBytes: 100 * 1024 * 1024, availableKilobytes: 300 * 1024 });
+    const archive = path.join(files.root, "space.fitgridbackup");
+    await writeFile(archive, "encrypted input");
+
+    const result = runPortableInspect(files, archive);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Insufficient free space for portable backup inspection");
+    await expect(readFile(files.commandLog, "utf8")).rejects.toThrow();
+  });
+
+  it.each(["\\.\nDROP TABLE users;\n", '"not-base64!"\n', '"e30="\nSELECT 1;\n'])(
+    "rejects non-canonical CSV framing before preparing uploaded data",
+    async (usersCsv) => {
+      const files = await portableFixture();
+      const manifest = JSON.stringify({
+        format: "fitgridweb-portable-backup",
+        formatVersion: "3.0.0",
+        dumpMode: "canonical-csv",
+        dataEncoding: "base64-json-row-v1",
+        createdAt: "2026-09-03T07:00:00Z",
+        appImage: "ghcr.io/example/fitgridweb:sha-2ca7f41",
+        postgresMajor: 17,
+        database: "fitgridweb",
+        counts: { users: 1, gridTrades: 0, invitations: 0, importPreviews: 0 },
+      });
+      const archive = await createCanonicalTar(files.root, "invalid.fitgridbackup", manifest, { "users.csv": usersCsv });
+
+      const result = runPortableInspect(files, archive);
+
       expect(result.status).not.toBe(0);
-      expect(result.stderr).toContain("data-only allowlist");
+      expect(result.stderr).toContain("invalid canonical CSV rows");
       expect(await recursiveNames(files.prepared)).toEqual([]);
     },
   );
-
-  it("accepts data-only table rows and sequence values", async () => {
-    const files = await portableInspectFixture("valid sequence");
-    const result = runPortableInspect(files, files.archive);
-    expect(result.status, result.stderr).toBe(0);
-    expect(await readFile(path.join(files.prepared, "database.dump"), "utf8")).toBe("valid sequence");
-  });
 
   it.each(["hostile checksum filename", "multiple checksum records"])(
     "rejects %s before invoking sha256sum or publishing a prepared dump",
@@ -439,15 +657,15 @@ describe("portable backups", () => {
     },
   );
 
-  it("atomically publishes a verified custom dump with private permissions", async () => {
+  it("atomically publishes a verified canonical payload with private permissions", async () => {
     const files = await portableInspectFixture("valid archive");
     const result = runPortableInspect(files, files.archive);
     expect(result.status, result.stderr).toBe(0);
-    expect(await readFile(path.join(files.prepared, "database.dump"), "utf8")).toBe("valid custom dump");
-    expect((await stat(path.join(files.prepared, "database.dump"))).mode & 0o777).toBe(0o600);
+    expect((await stat(path.join(files.prepared, "payload.tar"))).mode & 0o777).toBe(0o600);
     expect(await readJson(path.join(files.root, "result.json"))).toMatchObject({
-      formatVersion: "2.0.0",
-      dumpMode: "data-only",
+      formatVersion: "3.0.0",
+      dumpMode: "canonical-csv",
+      dataEncoding: "base64-json-row-v1",
       postgresMajor: 17,
     });
   });
