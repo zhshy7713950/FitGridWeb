@@ -299,6 +299,12 @@ prune_portable_backups() {
   portable_prune_history=$2
   portable_keep=$3
   case "$portable_keep" in ''|*[!0-9]*) portable_fail "Portable backup retention must be an integer"; return 1 ;; esac
+  if [ -f "$portable_prune_history" ]; then
+    jq -e 'type == "object" and ((.entries // []) | type == "array")' "$portable_prune_history" >/dev/null || {
+      portable_fail "Portable backup history is invalid"
+      return 1
+    }
+  fi
   portable_old=$(find "$portable_prune_directory" -maxdepth 1 -type f -name 'fitgridweb-*.fitgridbackup' -print | LC_ALL=C sort -r | awk -v keep="$portable_keep" 'NR > keep')
   if [ -n "$portable_old" ]; then
     printf '%s\n' "$portable_old" | while IFS= read -r portable_old_file; do rm -f "$portable_old_file"; done

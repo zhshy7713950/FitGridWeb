@@ -138,6 +138,14 @@ function runPortableCreate(files: Awaited<ReturnType<typeof portableFixture>>) {
   });
 }
 
+function runPortablePrune(files: Awaited<ReturnType<typeof portableFixture>>) {
+  return spawnSync("sh", ["-c", `. "${path.join(projectDirectory, "ops/lib/portable-backup.sh")}"; prune_portable_backups "$BACKUPS" "$HISTORY" 5`], {
+    cwd: projectDirectory,
+    encoding: "utf8",
+    env: testEnvironment(files, { BACKUPS: files.backups, HISTORY: files.history }),
+  });
+}
+
 function runPortableInspect(files: Awaited<ReturnType<typeof portableFixture>>, archive: string, resultFile = path.join(files.root, "result.json")) {
   return spawnSync("sh", ["-c", `. \"${path.join(projectDirectory, "ops/lib/portable-backup.sh")}\"; . \"${path.join(projectDirectory, "ops/env.sh")}\"; load_fitgrid_environment; inspect_portable_backup \"$ARCHIVE\" \"$PASSPHRASE_FILE\" \"$PREPARED_DIRECTORY\" \"$RESULT_FILE\"`], {
     cwd: projectDirectory,
@@ -226,6 +234,14 @@ describe("portable backups", () => {
     const entries = (await readJson(files.history)).entries;
     expect(entries).toHaveLength(5);
     expect(new Set(entries.map((entry: { filename: string }) => entry.filename)).size).toBe(5);
+  });
+
+  it("rejects malformed history without replacing the source file", async () => {
+    const files = await portableFixture({ existingBackups: 1 });
+    const malformed = "{not valid json\n";
+    await writeFile(files.history, malformed);
+    expect(runPortablePrune(files).status).not.toBe(0);
+    expect(await readFile(files.history, "utf8")).toBe(malformed);
   });
 
   it("keeps all five old backups when encryption fails", async () => {
