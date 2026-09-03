@@ -104,6 +104,30 @@ it("reports a transient disconnect and resumes polling the restore job", async (
   expect(result.current.disconnected).toBe(false);
 });
 
+it("advances recovery generation for each offline or revoked-session probe episode", async () => {
+  vi.useFakeTimers();
+  const restoring = { ...status("restoring"), type: "restore" as const };
+  const request = vi.fn()
+    .mockRejectedValueOnce(new TypeError("first disconnect"))
+    .mockResolvedValueOnce(restoring)
+    .mockRejectedValueOnce(new ClientApiError(
+      401,
+      "SESSION_REVOKED",
+      "会话已失效",
+      "01REVOKED",
+    ));
+  const { result } = renderHook(() => useMaintenanceJob(JOB_ID, request));
+
+  await act(async () => {});
+  expect(result.current.recoveryGeneration).toBe(1);
+  await act(async () => vi.advanceTimersByTimeAsync(1_000));
+  expect(result.current.disconnected).toBe(false);
+  expect(result.current.recoveryGeneration).toBe(1);
+  await act(async () => vi.advanceTimersByTimeAsync(1_000));
+  expect(result.current.error?.status).toBe(401);
+  expect(result.current.recoveryGeneration).toBe(2);
+});
+
 it("aborts stale generations on ID change and unmount without rerender-triggered loops", async () => {
   vi.useFakeTimers();
   const signals: AbortSignal[] = [];

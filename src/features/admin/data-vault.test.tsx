@@ -247,8 +247,10 @@ describe("data vault destructive recovery", () => {
     expect(screen.getByLabelText("备份密码")).toHaveValue("");
     expect(screen.getByText("24 个网格产品")).toBeInTheDocument();
     expect(screen.getByText("2 个用户")).toBeInTheDocument();
-    expect(screen.getByText("4.0 KiB")).toBeInTheDocument();
     expect(screen.getByText("完整性检查通过")).toBeInTheDocument();
+    const verifiedPreview = screen.getByRole("region", { name: "恢复预检已通过" });
+    expect(within(verifiedPreview).queryByText("4.0 KiB")).not.toBeInTheDocument();
+    expect(within(verifiedPreview).queryByText(/应用镜像/)).not.toBeInTheDocument();
     const restore = screen.getByRole("button", { name: "恢复全部数据" });
     expect(restore).toBeEnabled();
     fireEvent.click(restore);
@@ -376,4 +378,63 @@ describe("data vault destructive recovery", () => {
     expect(clearClientSession).toHaveBeenCalledTimes(1);
     expect(navigate).toHaveBeenCalledWith("/login");
   });
+
+  it("does not reuse a prior healthy probe during a later disconnect", async () => {
+    vi.useFakeTimers();
+    const secondHealth = deferred<boolean>();
+    const checkHealth = vi.fn()
+      .mockResolvedValueOnce(true)
+      .mockImplementationOnce(() => secondHealth.promise);
+    const preview = {
+      ...status("awaiting-confirmation", "inspect-restore", RESTORE_ID),
+      backupCreatedAt: "2026-09-03T06:30:00.000Z",
+      postgresMajor: 17,
+      database: "fitgridweb",
+      expiresAt: 1_788_418_200,
+      preview: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0 },
+    };
+    const restoring = { ...status("restoring", "restore", RESTORE_ID) };
+    const getJob = vi.fn()
+      .mockResolvedValueOnce(preview)
+      .mockResolvedValueOnce(restoring)
+      .mockRejectedValueOnce(new TypeError("first disconnect"))
+      .mockResolvedValueOnce(restoring)
+      .mockRejectedValueOnce(new TypeError("second disconnect"));
+    render(<DataVault api={api({ getJob, checkHealth })} initialBackups={[]} />);
+    fireEvent.change(screen.getByLabelText("选择便携备份文件"), {
+      target: { files: [archiveFile()] },
+    });
+    fireEvent.change(screen.getByLabelText("备份密码"), { target: { value: "portable-password" } });
+    fireEvent.submit(screen.getByRole("button", { name: "上传并检查" }).closest("form")!);
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("button", { name: "恢复全部数据" }));
+    fireEvent.change(screen.getByLabelText("当前密码"), { target: { value: "current-password" } });
+    fireEvent.change(screen.getByLabelText("输入“恢复全部数据”以确认"), {
+      target: { value: "恢复全部数据" },
+    });
+    fireEvent.submit(screen.getByRole("button", { name: "确认替换全部数据" }).closest("form")!);
+    await act(async () => {});
+
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+    expect(screen.getByText("服务已恢复，正在读取最终结果…")).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+    expect(screen.queryByText("服务已恢复，正在读取最终结果…")).not.toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+    expect(checkHealth).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("服务已恢复，正在读取最终结果…")).not.toBeInTheDocument();
+    expect(screen.getByText("服务短暂离线，正在检查健康状态…")).toBeInTheDocument();
+
+    await act(async () => secondHealth.resolve(true));
+    expect(screen.getByText("服务已恢复，正在读取最终结果…")).toBeInTheDocument();
+  });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}

@@ -40,11 +40,6 @@ type PublicError = {
   retryAfterSeconds?: number;
 };
 
-type InspectedArchive = {
-  name: string;
-  size: number;
-};
-
 export type MaintenanceApi = {
   listBackups(signal?: AbortSignal): Promise<PortableBackupList>;
   createBackup(
@@ -458,12 +453,11 @@ export function DataVault({
   const [uploadPassword, setUploadPassword] = useState("");
   const [uploadPending, setUploadPending] = useState(false);
   const [uploadError, setUploadError] = useState<PublicError | null>(null);
-  const [inspectedArchive, setInspectedArchive] = useState<InspectedArchive | null>(null);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [restorePending, setRestorePending] = useState(false);
   const [restoreAccepted, setRestoreAccepted] = useState(false);
   const [restoreError, setRestoreError] = useState<PublicError | null>(null);
-  const [healthRecovered, setHealthRecovered] = useState(false);
+  const [healthProbe, setHealthProbe] = useState({ generation: 0, recovered: false });
   const mounted = useRef(false);
   const backupLock = useRef(false);
   const uploadLock = useRef(false);
@@ -542,11 +536,12 @@ export function DataVault({
     let active = true;
     let timer: number | null = null;
     let controller: AbortController | null = null;
+    const generation = jobController.recoveryGeneration;
     const probe = async () => {
       controller = new AbortController();
       const healthy = await api.checkHealth(controller.signal).catch(() => false);
       if (!active) return;
-      setHealthRecovered(healthy);
+      setHealthProbe({ generation, recovered: healthy });
       if (!healthy) timer = window.setTimeout(() => void probe(), 5_000);
     };
     void probe();
@@ -555,7 +550,16 @@ export function DataVault({
       if (timer !== null) window.clearTimeout(timer);
       controller?.abort();
     };
-  }, [api, jobController.disconnected, jobController.error?.status, restoreAccepted]);
+  }, [
+    api,
+    jobController.recoveryGeneration,
+    jobController.disconnected,
+    jobController.error?.status,
+    restoreAccepted,
+  ]);
+
+  const healthRecovered = healthProbe.generation === jobController.recoveryGeneration
+    && healthProbe.recovered;
 
   useEffect(() => {
     if (
@@ -637,7 +641,6 @@ export function DataVault({
     maintenanceLock.current = true;
     setUploadPending(true);
     setUploadError(null);
-    setInspectedArchive(null);
     const file = selectedFile;
     const passphrase = uploadPassword;
     const controller = new AbortController();
@@ -645,7 +648,6 @@ export function DataVault({
     try {
       const queued = await api.uploadRestore(file, passphrase, controller.signal);
       if (!mounted.current || controller.signal.aborted) return;
-      setInspectedArchive({ name: file.name, size: file.size });
       setActiveOperation("inspection");
       setActiveJobId(queued.id);
       setPollGeneration((value) => value + 1);
@@ -680,7 +682,7 @@ export function DataVault({
       if (!mounted.current || controller.signal.aborted) return;
       accepted = true;
       setRestoreAccepted(true);
-      setHealthRecovered(false);
+      setHealthProbe({ generation: 0, recovered: false });
       setActiveOperation("restore");
       setActiveJobId(queued.id);
       setPollGeneration((value) => value + 1);
@@ -794,7 +796,7 @@ export function DataVault({
         </section>
       </div>
 
-      {preview && inspectedArchive ? (
+      {preview ? (
         <section className={styles.restorePreview} aria-labelledby="restore-preview-title">
           <header>
             <div>
@@ -805,7 +807,6 @@ export function DataVault({
           </header>
           <dl>
             <div><dt>备份时间</dt><dd>{formatTimestamp(inspectionPreview.backupCreatedAt)}</dd></div>
-            <div><dt>文件大小</dt><dd>{formatIecSize(inspectedArchive.size)}</dd></div>
             <div><dt>PostgreSQL</dt><dd>主版本 {inspectionPreview.postgresMajor ?? "—"}</dd></div>
             <div><dt>数据库</dt><dd>{inspectionPreview.database ?? "—"}</dd></div>
             <div><dt>账号</dt><dd>{preview.users} 个用户</dd></div>

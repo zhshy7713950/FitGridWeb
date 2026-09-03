@@ -35,10 +35,12 @@ export function useMaintenanceJob(
   job: MaintenanceJobStatus | null;
   error: MaintenanceJobError | null;
   disconnected: boolean;
+  recoveryGeneration: number;
 } {
   const [job, setJob] = useState<MaintenanceJobStatus | null>(null);
   const [error, setError] = useState<MaintenanceJobError | null>(null);
   const [disconnected, setDisconnected] = useState(false);
+  const [recoveryGeneration, setRecoveryGeneration] = useState(0);
   const [resultKey, setResultKey] = useState("");
   const requestRef = useRef(request);
   const currentKey = jobId ? `${jobId}:${generation}` : "";
@@ -92,11 +94,13 @@ export function useMaintenanceJob(
             retryAfterSeconds: caught.retryAfterSeconds,
           });
           setDisconnected(false);
+          if (caught.status === 401) setRecoveryGeneration((value) => value + 1);
           schedule((caught.retryAfterSeconds ?? 1) * 1_000);
         } else if (caught instanceof TypeError) {
           setResultKey(currentKey);
           setError({ message: "与服务器的连接暂时中断" });
           setDisconnected(true);
+          setRecoveryGeneration((value) => value + 1);
           schedule();
         } else {
           setResultKey(currentKey);
@@ -124,6 +128,6 @@ export function useMaintenanceJob(
   }, [currentKey, jobId]);
 
   return resultKey === currentKey
-    ? { job, error, disconnected }
-    : { job: null, error: null, disconnected: false };
+    ? { job, error, disconnected, recoveryGeneration }
+    : { job: null, error: null, disconnected: false, recoveryGeneration: 0 };
 }
