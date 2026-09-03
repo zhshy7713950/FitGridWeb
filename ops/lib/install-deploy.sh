@@ -110,6 +110,62 @@ create_initial_admin() {
     app node_modules/.bin/tsx src/server/cli/create-admin.ts
 }
 
+cleanup_old_app_images() {
+  environment_file=$1
+  current_image=$(awk -F= '$1 == "APP_IMAGE" { sub(/^[^=]*=/, ""); print; exit }' "$environment_file")
+  current_tag=${current_image##*:}
+  current_repository=${current_image%:*}
+  current_sha=${current_tag#sha-}
+
+  if [ -z "$current_repository" ] || [ "$current_repository" = "$current_image" ] \
+    || [ "$current_tag" = "$current_sha" ] || [ "${#current_sha}" -ne 40 ]; then
+    printf '警告：APP_IMAGE 不是可识别的 SHA 镜像，跳过旧镜像清理。\n' >&2
+    return 1
+  fi
+  case $current_sha in
+    *[!a-fA-F0-9]*)
+      printf '警告：APP_IMAGE 的 SHA 格式无效，跳过旧镜像清理。\n' >&2
+      return 1
+      ;;
+  esac
+
+  local_images=$(docker image ls \
+    --filter "reference=$current_repository:sha-*" \
+    --format '{{.Repository}}:{{.Tag}}') || {
+      printf '警告：无法列出本地应用镜像。\n' >&2
+      return 1
+    }
+
+  cleanup_status=0
+  removed_count=0
+  while IFS= read -r candidate_image; do
+    [ -n "$candidate_image" ] || continue
+    [ "$candidate_image" != "$current_image" ] || continue
+    case $candidate_image in
+      "$current_repository":sha-*) : ;;
+      *) continue ;;
+    esac
+    candidate_tag=${candidate_image##*:}
+    candidate_sha=${candidate_tag#sha-}
+    [ "${#candidate_sha}" -eq 40 ] || continue
+    case $candidate_sha in *[!a-fA-F0-9]*) continue ;; esac
+
+    if docker image rm "$candidate_image" >/dev/null; then
+      removed_count=$((removed_count + 1))
+    else
+      printf '警告：旧镜像仍被占用或无法删除：%s\n' "$candidate_image" >&2
+      cleanup_status=1
+    fi
+  done <<EOF
+$local_images
+EOF
+
+  if [ "$removed_count" -gt 0 ]; then
+    printf '已清理 %s 个旧应用镜像。\n' "$removed_count"
+  fi
+  return "$cleanup_status"
+}
+
 fitgrid_install_main() {
   domain=$1
   app_port=$2
@@ -178,6 +234,10 @@ fitgrid_install_main() {
 
   if [ "$admin_choice" = yes ]; then
     create_initial_admin "$project_directory" "$environment_file"
+  fi
+
+  if ! cleanup_old_app_images "$environment_file"; then
+    printf '警告：旧镜像清理失败；部署保持成功，请稍后手动检查 Docker 磁盘占用。\n' >&2
   fi
 
   printf '\nFitGridWeb 部署完成：https://%s%s/fitgrid/\n' "$domain" "$public_suffix"

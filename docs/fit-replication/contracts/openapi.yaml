@@ -116,6 +116,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /invitations/{token}:
     parameters:
@@ -134,6 +136,8 @@ paths:
                 $ref: '#/components/schemas/InvitationStatusResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
         '429':
           $ref: '#/components/responses/RateLimited'
 
@@ -191,6 +195,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /admin/users:
     get:
@@ -243,6 +249,12 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /grid-trades:
     get:
@@ -421,10 +433,15 @@ paths:
                 $ref: '#/components/schemas/ImportCommitResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: IMPORT_PREVIEW_NOT_FOUND：导入预检不存在、已过期或已使用
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /grid-trades/export:
     get:
@@ -594,7 +611,7 @@ components:
     InvitationStatusResponse:
       type: object
       additionalProperties: false
-      required: [status]
+      required: [status, expiresAt]
       properties:
         status: {type: string, enum: [valid, used, expired]}
         expiresAt: {type: [string, 'null'], format: date-time}
@@ -604,7 +621,10 @@ components:
       required: [id, inviteUrl, expiresAt]
       properties:
         id: {type: string, format: uuid}
-        inviteUrl: {type: string, format: uri}
+        inviteUrl:
+          type: string
+          format: uri
+          description: 与请求同源的公开注册链接，路径为 /invite/{token}，部署在子路径时包含 /fitgrid 前缀。
         expiresAt: {type: string, format: date-time}
 
     UserResponse:

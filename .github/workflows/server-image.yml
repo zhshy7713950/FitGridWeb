@@ -19,8 +19,24 @@ env:
 jobs:
   verify:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: fitgridweb_test
+          POSTGRES_USER: fitgrid_ci
+          POSTGRES_PASSWORD: fitgrid_ci_local
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U fitgrid_ci -d fitgridweb_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       NEXT_BASE_PATH: /fitgrid
+      DATABASE_URL: postgresql://fitgrid_ci:fitgrid_ci_local@localhost:5432/fitgridweb_test
+      TEST_DATABASE_URL: postgresql://fitgrid_ci:fitgrid_ci_local@localhost:5432/fitgridweb_test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -29,6 +45,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma migrate deploy
       - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm lint

@@ -35,7 +35,11 @@ export function safeReturnPath(value: string | null | undefined): AppRoute {
 
   const parsed = new URL(value, "https://fitgrid.invalid");
   if (parsed.origin !== "https://fitgrid.invalid") return DEFAULT_ROUTE;
-  if (parsed.pathname !== "/grids" && !parsed.pathname.startsWith("/grids/")) return DEFAULT_ROUTE;
+  const isAllowedPath = parsed.pathname === "/grids"
+    || parsed.pathname.startsWith("/grids/")
+    || parsed.pathname === "/settings/security"
+    || parsed.pathname === "/admin";
+  if (!isAllowedPath) return DEFAULT_ROUTE;
 
   return `${parsed.pathname}${parsed.search}${parsed.hash}` as AppRoute;
 }

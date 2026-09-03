@@ -1,0 +1,520 @@
+.workspace {
+  --canvas: #080d12;
+  --surface: #111722;
+  --surface-raised: #1e2633;
+  --line: #2b3444;
+  --action: #2962ff;
+  --positive: #22ab94;
+  --negative: #f23645;
+
+  width: min(1180px, 100%);
+  min-width: 0;
+  margin: 0 auto;
+  color: var(--text);
+}
+
+.heading {
+  min-height: 82px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 10px 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.heading p,
+.invitationIntro > span,
+.invitationResult > div > span,
+.ledgerHeading div > span,
+.dialog form > span {
+  margin: 0;
+  color: var(--text-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.heading h1 {
+  margin: 6px 0 0;
+  font-size: clamp(28px, 4vw, 38px);
+  line-height: 1;
+  letter-spacing: -0.045em;
+}
+
+.authority {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid var(--positive);
+  border-radius: 4px;
+  color: var(--positive);
+  background: var(--surface);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.authority::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--positive);
+}
+
+.invitationStrip {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(360px, 1.2fr);
+  gap: clamp(28px, 6vw, 76px);
+  padding: 24px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.invitationIntro h2,
+.invitationResult h2,
+.ledgerHeading h2,
+.dialog h2 {
+  margin: 5px 0 0;
+  font-size: 18px;
+  letter-spacing: -0.025em;
+}
+
+.invitationIntro p,
+.dialog p {
+  margin: 9px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.invitationForm {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.invitationForm label,
+.copyArea label {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.invitationControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.invitationControls input,
+.copyArea input {
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--canvas);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.invitationControls input[aria-invalid="true"] {
+  border-color: var(--negative);
+}
+
+.invitationControls button,
+.copyArea button,
+.listError button,
+.pagination button,
+.actionCell button,
+.dialogActions button {
+  min-height: 40px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--surface-raised);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.invitationControls button {
+  border-color: var(--action);
+  background: var(--action);
+}
+
+.invitationControls button:disabled,
+.copyArea button:disabled,
+.listError button:disabled,
+.pagination button:disabled,
+.actionCell button:disabled,
+.dialogActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.invitationForm > small,
+.copyArea > small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.fieldError {
+  color: var(--negative);
+  font-size: 11px;
+}
+
+.error {
+  display: grid;
+  gap: 3px;
+  margin: 4px 0 0;
+  padding: 9px 11px;
+  border-left: 3px solid var(--negative);
+  color: var(--negative);
+  background: var(--canvas);
+  font-size: 11px;
+}
+
+.error small {
+  color: var(--text-muted);
+}
+
+.invitationResult {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.55fr) minmax(360px, 1.45fr);
+  gap: 28px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.copyArea {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 8px;
+}
+
+.copyArea label,
+.copyArea small,
+.copyArea p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.copyArea p[role="status"] {
+  color: var(--positive);
+  font-size: 11px;
+}
+
+.copyArea p[role="alert"] {
+  color: var(--negative);
+  font-size: 11px;
+}
+
+.ledger {
+  padding-top: 24px;
+}
+
+.ledgerHeading {
+  min-height: 46px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 10px;
+}
+
+.ledgerHeading > span {
+  color: var(--text-muted);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+}
+
+.tableViewport {
+  max-height: calc(100dvh - 390px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.userTable {
+  width: 100%;
+  min-width: 720px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.userTable th,
+.userTable td {
+  height: 46px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.userTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.userTable th:first-child,
+.userTable td:first-child {
+  width: 28%;
+}
+
+.userTable th:nth-child(2),
+.userTable td:nth-child(2),
+.userTable th:nth-child(3),
+.userTable td:nth-child(3) {
+  width: 14%;
+}
+
+.userTable th:nth-child(4),
+.userTable td:nth-child(4) {
+  width: 25%;
+}
+
+.userTable th:last-child,
+.userTable td:last-child {
+  width: 19%;
+  text-align: right;
+}
+
+.activeRow {
+  box-shadow: inset 3px 0 0 var(--positive);
+}
+
+.disabledRow {
+  box-shadow: inset 3px 0 0 var(--negative);
+}
+
+.username,
+.timestamp,
+.adminRole,
+.memberRole,
+.activeStatus,
+.disabledStatus {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.username {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.adminRole {
+  color: var(--action);
+}
+
+.memberRole,
+.timestamp {
+  color: var(--text-muted);
+}
+
+.activeStatus {
+  color: var(--positive);
+  font-weight: 700;
+}
+
+.disabledStatus {
+  color: var(--negative);
+  font-weight: 700;
+}
+
+.actionCell {
+  white-space: nowrap;
+}
+
+.actionCell button {
+  min-height: 32px;
+  padding-inline: 10px;
+  background: transparent;
+}
+
+.disabledRow .actionCell button {
+  border-color: var(--positive);
+  color: var(--positive);
+}
+
+.activeRow .actionCell button:not(:disabled) {
+  border-color: var(--negative);
+  color: var(--negative);
+}
+
+.selfLabel {
+  margin-right: 9px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.loading,
+.empty {
+  min-height: 160px;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  text-align: center;
+}
+
+.empty p,
+.empty span {
+  margin: 0;
+}
+
+.empty span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.listError,
+.pagination > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--negative);
+  color: var(--negative);
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.pagination {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.modalLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: rgb(8 13 18 / 78%);
+}
+
+.dialog {
+  position: relative;
+  width: min(460px, 100%);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--negative);
+  border-radius: 5px;
+  background: var(--surface);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 42%);
+}
+
+.dialog form {
+  padding: 24px;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.dialogActions .danger {
+  border-color: var(--negative);
+  background: var(--negative);
+}
+
+.dialogActions .enable {
+  border-color: var(--positive);
+  background: var(--positive);
+}
+
+@media (max-width: 767px) {
+  .heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .invitationStrip,
+  .invitationResult {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+
+  .invitationControls,
+  .copyArea {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .copyArea label,
+  .copyArea small,
+  .copyArea p {
+    grid-column: 1;
+  }
+
+  .invitationControls button,
+  .copyArea button,
+  .pagination button,
+  .dialogActions button {
+    min-height: 44px;
+  }
+
+  .tableViewport {
+    max-height: calc(100dvh - 320px);
+  }
+
+  .userTable th:first-child,
+  .userTable td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--surface);
+  }
+
+  .userTable th:first-child {
+    z-index: 2;
+    background: var(--surface-raised);
+  }
+
+  .modalLayer {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .dialog {
+    width: 100%;
+  }
+}

@@ -1,4 +1,13 @@
 .workspace {
+  --canvas: #080D12;
+  --surface: #111722;
+  --surface-raised: color-mix(in srgb, #E6EAF2 5%, #111722);
+  --line: #2B3444;
+  --text: #E6EAF2;
+  --action: #2962FF;
+  --positive: #22AB94;
+  --negative: #F23645;
+
   min-width: 0;
 }
 
@@ -24,22 +33,56 @@
 }
 
 .heading button,
+.heading a,
 .searchBar button,
 .pagination button,
-.errorBanner button {
+.errorBanner button,
+.emptyActions button,
+.emptyActions a {
   min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: 5px;
   color: var(--text);
   background: var(--surface);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.headingActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.headingActions > :not(.primaryAction) {
+  background: transparent;
+}
+
+.heading .primaryAction,
+.emptyActions .primaryAction {
+  border-color: var(--action);
+  background: var(--action);
+}
+
+.heading button:disabled,
+.errorBanner button:disabled {
+  cursor: wait;
+  opacity: 0.58;
 }
 
 .heading button:focus-visible,
+.heading a:focus-visible,
 .searchBar button:focus-visible,
 .searchBar input:focus-visible,
 .pagination button:focus-visible,
-.errorBanner button:focus-visible {
+.errorBanner button:focus-visible,
+.emptyActions button:focus-visible,
+.emptyActions a:focus-visible,
+.productName a:focus-visible {
   outline: 2px solid var(--action);
   outline-offset: 2px;
 }
@@ -92,30 +135,65 @@
   background: var(--surface);
 }
 
-.desktopTable {
+.productTable {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
 }
 
-.desktopTable th,
-.desktopTable td {
+.productTable th,
+.productTable td {
   min-height: 44px;
   padding: 13px 14px;
   border-bottom: 1px solid var(--line);
   text-align: left;
+  overflow-wrap: anywhere;
 }
 
-.desktopTable th {
+.productTable th {
   position: sticky;
   top: 0;
+  z-index: 1;
   color: var(--text);
   background: var(--surface-raised);
   font-size: 11px;
 }
 
-.desktopTable th:not(:first-child),
-.desktopTable td:not(:first-child) {
+.productTable th:not(:first-child),
+.productTable td:not(:first-child) {
   text-align: right;
+}
+
+.productNameColumn {
+  width: 27%;
+}
+
+.productCodeColumn {
+  width: 14%;
+}
+
+.priceColumn {
+  width: 13%;
+}
+
+.shareColumn {
+  width: 14%;
+}
+
+.productName {
+  font-weight: 650;
+}
+
+.productName a {
+  display: inline-block;
+  color: var(--text);
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+}
+
+.productName a:hover {
+  color: var(--action);
+  text-decoration-color: currentColor;
 }
 
 .numeric {
@@ -123,8 +201,63 @@
   font-variant-numeric: tabular-nums;
 }
 
-.mobileCards {
-  display: none;
+.long,
+.short {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.long {
+  color: var(--positive);
+}
+
+.short {
+  color: var(--negative);
+}
+
+.refreshOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--canvas) 38%, transparent);
+  backdrop-filter: blur(1px);
+}
+
+.refreshIndicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 156px;
+  min-height: 52px;
+  justify-content: center;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface-raised);
+  box-shadow: 0 14px 36px color-mix(in srgb, #080D12 32%, transparent);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.spinner {
+  width: 17px;
+  height: 17px;
+  border: 2px solid color-mix(in srgb, var(--action) 25%, var(--line));
+  border-top-color: var(--action);
+  border-radius: 50%;
+  animation: refresh-spin 0.7s linear infinite;
+}
+
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .pagination {
@@ -145,6 +278,18 @@
   text-align: center;
 }
 
+.empty p {
+  margin: 0;
+}
+
+.emptyActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
 .srOnly {
   position: absolute;
   width: 1px;
@@ -156,64 +301,57 @@
 
 @media (max-width: 767px) {
   .heading {
-    align-items: center;
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .desktopTable {
-    display: none;
+  .headingActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .headingActions > * {
+    min-width: 0;
   }
 
   .listViewport {
     max-height: calc(100dvh - 270px);
     overflow: auto;
-    border: 0;
-    background: transparent;
   }
 
-  .mobileCards {
-    display: grid;
-    gap: 12px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
+  .productTable th,
+  .productTable td {
+    padding: 10px 7px;
+    font-size: 10px;
+    line-height: 1.35;
   }
 
-  .mobileCards li {
-    padding: 16px;
-    border: 1px solid var(--line);
-    border-radius: 6px;
+  .productTable th:first-child,
+  .productTable td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
     background: var(--surface);
   }
 
-  .mobileCards h2 {
-    margin: 0 0 14px;
-    font-size: 16px;
-    overflow-wrap: anywhere;
+  .productTable th:first-child {
+    z-index: 2;
+    background: var(--surface-raised);
   }
 
-  .mobileCards dl {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-    margin: 0;
+  .productNameColumn {
+    width: 34%;
   }
 
-  .mobileCards dl div {
-    min-width: 0;
+  .productCodeColumn,
+  .priceColumn,
+  .shareColumn {
+    width: 22%;
   }
+}
 
-  .mobileCards dt {
-    color: var(--text);
-    font-size: 11px;
-  }
-
-  .mobileCards dd {
-    margin: 5px 0 0;
-    font-family: "SFMono-Regular", Consolas, monospace;
-    font-size: 12px;
-    line-height: 1.5;
-    overflow-wrap: anywhere;
-    white-space: normal;
-    font-variant-numeric: tabular-nums;
+@media (max-width: 1023px) {
+  .desktopOnly {
+    display: none;
   }
 }

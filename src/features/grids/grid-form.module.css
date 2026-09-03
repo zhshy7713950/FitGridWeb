@@ -1,0 +1,327 @@
+.form {
+  width: min(100%, 980px);
+  margin-inline: auto;
+}
+
+.heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 28px;
+  margin-bottom: 18px;
+}
+
+.heading h1 {
+  margin: 5px 0 0;
+  font-family: "Arial Narrow", "Aptos Narrow", "PingFang SC", sans-serif;
+  font-size: clamp(26px, 3vw, 34px);
+  font-stretch: condensed;
+  letter-spacing: -0.045em;
+}
+
+.heading p {
+  max-width: 350px;
+  margin: 0 0 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: right;
+}
+
+.eyebrow {
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.panel {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.ladderSpine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 20px;
+  width: 16px;
+  border-left: 2px solid var(--action);
+  pointer-events: none;
+}
+
+.ladderSpine span {
+  position: absolute;
+  left: -1px;
+  width: 15px;
+  height: 2px;
+  background: var(--action);
+}
+
+.ladderSpine span:nth-child(1) { top: 16%; }
+.ladderSpine span:nth-child(2) { top: 49%; }
+.ladderSpine span:nth-child(3) { top: 82%; }
+
+.fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 22px 24px 24px 58px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.fieldset:last-child {
+  border-bottom: 0;
+}
+
+.fieldset legend {
+  float: left;
+  width: 100%;
+  margin: 0 0 5px;
+  padding: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 720;
+  letter-spacing: 0.015em;
+}
+
+.fieldset > p {
+  clear: both;
+  margin: 0 0 18px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 17px 22px;
+}
+
+.field {
+  min-width: 0;
+}
+
+.field label,
+.directionField > span {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.inputFrame {
+  position: relative;
+}
+
+.inputFrame input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 40px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--canvas);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.inputFrame input::placeholder {
+  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+  font-family: Inter, "PingFang SC", system-ui, sans-serif;
+}
+
+.inputFrame input:hover {
+  border-color: color-mix(in srgb, var(--action) 42%, var(--line));
+}
+
+.inputFrame input[aria-invalid="true"] {
+  border-color: var(--negative);
+}
+
+.inputFrame span {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  color: var(--text-muted);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  transform: translateY(-50%);
+}
+
+.codeField input {
+  letter-spacing: 0.035em;
+}
+
+.fieldError {
+  margin: 6px 0 0;
+  color: var(--negative);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.directionField {
+  margin-bottom: 17px;
+}
+
+.direction {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 150px));
+  gap: 8px;
+}
+
+.direction button {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: var(--canvas);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.longButton[aria-pressed="true"] {
+  border-color: var(--positive);
+  color: var(--positive);
+  background: color-mix(in srgb, var(--positive) 10%, var(--canvas));
+}
+
+.shortButton[aria-pressed="true"] {
+  border-color: var(--negative);
+  color: var(--negative);
+  background: color-mix(in srgb, var(--negative) 10%, var(--canvas));
+}
+
+.formError,
+.loadError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--negative) 52%, var(--line));
+  border-radius: 5px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--negative) 8%, var(--surface));
+  font-size: 12px;
+}
+
+.loadErrorMessage {
+  display: grid;
+  gap: 4px;
+}
+
+.loadErrorMessage small {
+  color: var(--text-muted);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 14px 0 4px;
+  background: color-mix(in srgb, var(--canvas) 94%, transparent);
+}
+
+.actions a,
+.actions button,
+.loadError button {
+  display: inline-flex;
+  min-width: 108px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--surface);
+  cursor: pointer;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.actions button {
+  border-color: var(--action);
+  color: white;
+  background: var(--action);
+}
+
+.actions button:disabled {
+  cursor: wait;
+  opacity: 0.64;
+}
+
+.pageStatus,
+.loadError {
+  width: min(100%, 980px);
+  margin-inline: auto;
+}
+
+.pageStatus {
+  padding: 72px 20px;
+  border: 1px solid var(--line);
+  color: var(--text-muted);
+  background: var(--surface);
+  text-align: center;
+}
+
+@media (max-width: 767px) {
+  .heading {
+    display: block;
+    margin-bottom: 14px;
+  }
+
+  .heading h1 {
+    font-size: 27px;
+  }
+
+  .heading p {
+    margin-top: 9px;
+    text-align: left;
+  }
+
+  .ladderSpine {
+    left: 13px;
+  }
+
+  .fieldset {
+    padding: 19px 14px 21px 42px;
+  }
+
+  .fields {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .direction {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .actions {
+    padding-top: 10px;
+  }
+
+  .actions a,
+  .actions button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inputFrame input {
+    transition: none;
+  }
+}

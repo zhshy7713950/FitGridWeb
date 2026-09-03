@@ -10,6 +10,7 @@ node_modules/
 .next/
 coverage/
 .superpowers/
+.worktrees/
 *.tsbuildinfo
 *.log
 .DS_Store

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ClientApiError } from "@/lib/api-client";
@@ -10,9 +10,24 @@ const session = {
   expiresAt: "2026-09-08T00:00:00.000Z",
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 describe("LoginForm", () => {
+  it("shows the local credentials when UI demo mode is enabled", () => {
+    vi.stubEnv("NEXT_PUBLIC_UI_DEMO_MODE", "1");
+    vi.stubEnv("NODE_ENV", "development");
+    render(<LoginForm returnTo="/grids" request={vi.fn()} navigate={vi.fn()} />);
+
+    expect(screen.getByRole("note")).toHaveTextContent("demo");
+    expect(screen.getByRole("note")).toHaveTextContent("fitgrid-demo");
+
+  });
+
   it("logs in and replaces the page with the safe return route", async () => {
     const request = vi.fn().mockResolvedValue(session);
     const navigate = vi.fn();
@@ -24,13 +39,86 @@ describe("LoginForm", () => {
     expect(navigate).toHaveBeenCalledWith("/grids?q=gold");
   });
 
+  it("prefills the canonical username from the previous successful login", async () => {
+    const first = render(
+      <LoginForm
+        returnTo="/grids"
+        request={vi.fn().mockResolvedValue(session)}
+        navigate={vi.fn()}
+      />,
+    );
+    await userEvent.type(screen.getByLabelText("用户名"), "AdminAlias");
+    await userEvent.type(screen.getByLabelText("密码"), "long-password");
+    await userEvent.click(screen.getByRole("button", { name: "登录工作台" }));
+    first.unmount();
+
+    render(<LoginForm returnTo="/grids" request={vi.fn()} navigate={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByLabelText("用户名")).toHaveValue("admin"));
+    expect(screen.getByLabelText("密码")).toHaveValue("");
+  });
+
+  it("does not replace the remembered username after a failed login", async () => {
+    const first = render(
+      <LoginForm
+        returnTo="/grids"
+        request={vi.fn().mockResolvedValue(session)}
+        navigate={vi.fn()}
+      />,
+    );
+    await userEvent.type(screen.getByLabelText("用户名"), "admin");
+    await userEvent.type(screen.getByLabelText("密码"), "long-password");
+    await userEvent.click(screen.getByRole("button", { name: "登录工作台" }));
+    first.unmount();
+
+    const failed = render(
+      <LoginForm
+        returnTo="/grids"
+        request={vi.fn().mockRejectedValue(new ClientApiError(401, "UNAUTHORIZED", "用户名或密码错误"))}
+        navigate={vi.fn()}
+      />,
+    );
+    const username = screen.getByLabelText("用户名");
+    await waitFor(() => expect(username).toHaveValue("admin"));
+    await userEvent.clear(username);
+    await userEvent.type(username, "wrong-user");
+    await userEvent.type(screen.getByLabelText("密码"), "wrong-password");
+    await userEvent.click(screen.getByRole("button", { name: "登录工作台" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("用户名或密码错误");
+    failed.unmount();
+
+    render(<LoginForm returnTo="/grids" request={vi.fn()} navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getByLabelText("用户名")).toHaveValue("admin"));
+  });
+
+  it("continues a successful login when browser storage is unavailable", async () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Storage disabled", "SecurityError");
+    });
+    const navigate = vi.fn();
+    render(
+      <LoginForm
+        returnTo="/grids"
+        request={vi.fn().mockResolvedValue(session)}
+        navigate={navigate}
+      />,
+    );
+    await userEvent.type(screen.getByLabelText("用户名"), "admin");
+    await userEvent.type(screen.getByLabelText("密码"), "long-password");
+    await userEvent.click(screen.getByRole("button", { name: "登录工作台" }));
+
+    expect(navigate).toHaveBeenCalledWith("/grids");
+  });
+
   it("uses one generic message for a 401 and retains only the username", async () => {
     const request = vi.fn().mockRejectedValue(new ClientApiError(401, "UNAUTHORIZED", "用户名或密码错误"));
     render(<LoginForm returnTo="/grids" request={request} navigate={vi.fn()} />);
     await userEvent.type(screen.getByLabelText("用户名"), "admin");
     await userEvent.type(screen.getByLabelText("密码"), "wrong-password");
     await userEvent.click(screen.getByRole("button", { name: "登录工作台" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("用户名或密码错误");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("登录失败");
+    expect(alert).toHaveTextContent("用户名或密码错误");
     expect(screen.getByLabelText("用户名")).toHaveValue("admin");
     expect(screen.getByLabelText("密码")).toHaveValue("");
   });

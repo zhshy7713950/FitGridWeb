@@ -3,13 +3,14 @@ import { redirect } from "next/navigation";
 import { LoginBrand } from "@/features/auth/login-brand";
 import { LoginForm } from "@/features/auth/login-form";
 import { safeReturnPath } from "@/lib/app-paths";
+import { isUiDemoMode } from "@/lib/ui-demo";
 import { getOptionalSession } from "@/server/auth/session";
 import styles from "@/features/auth/login.module.css";
 
 export default async function LoginPage({ searchParams }: {
   searchParams: Promise<{ returnTo?: string | string[] }>;
 }) {
-  const user = await getOptionalSession(await headers());
+  const user = isUiDemoMode() ? null : await getOptionalSession(await headers());
   if (user) redirect("/grids");
 
   const raw = (await searchParams).returnTo;

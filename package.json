@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "dev:ui": "NEXT_PUBLIC_UI_DEMO_MODE=1 next dev --hostname 127.0.0.1",
     "build": "next build",
     "start": "node ops/start-standalone.mjs",
     "test": "vitest run",
@@ -47,6 +48,7 @@
     "eslint": "9.34.0",
     "eslint-config-next": "16.3.4",
     "jsdom": "^30.0.1",
+    "playwright-core": "1.62.1",
     "prisma": "7.10.0",
     "tsx": "4.20.5",
     "typescript": "5.9.2",

@@ -16,23 +16,7 @@ export class ClientApiError extends Error {
   }
 }
 
-export async function requestJson<T>(
-  path: ApiRoute,
-  init: RequestInit = {},
-  onUnauthorized: () => void = browserUnauthorizedRedirect,
-): Promise<T> {
-  const response = await fetch(apiPath(path), {
-    ...init,
-    credentials: "same-origin",
-    headers: { Accept: "application/json", ...init.headers },
-  });
-
-  if (response.ok) {
-    return (response.status === 204 ? undefined : await response.json()) as T;
-  }
-
-  if (response.status === 401 && path !== "/auth/login") onUnauthorized();
-
+async function clientApiError(response: Response): Promise<ClientApiError> {
   const parsedBody: unknown = await response.json().catch(() => ({}));
   const body = (
     parsedBody !== null && typeof parsedBody === "object" && !Array.isArray(parsedBody)
@@ -46,7 +30,7 @@ export async function requestJson<T>(
   }>;
   const retry = Number.parseInt(response.headers.get("Retry-After") ?? "", 10);
 
-  throw new ClientApiError(
+  return new ClientApiError(
     response.status,
     body.code ?? "REQUEST_FAILED",
     body.message ?? "请求失败",
@@ -54,4 +38,34 @@ export async function requestJson<T>(
     body.fieldErrors,
     Number.isFinite(retry) && retry > 0 ? retry : undefined,
   );
+}
+
+export async function requestResponse(
+  path: ApiRoute,
+  init: RequestInit = {},
+  onUnauthorized: () => void = browserUnauthorizedRedirect,
+): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (!headers.has("Accept")) headers.set("Accept", "application/json");
+
+  const response = await fetch(apiPath(path), {
+    ...init,
+    credentials: "same-origin",
+    headers,
+  });
+
+  if (response.ok) return response;
+
+  if (response.status === 401 && path !== "/auth/login") onUnauthorized();
+
+  throw await clientApiError(response);
+}
+
+export async function requestJson<T>(
+  path: ApiRoute,
+  init: RequestInit = {},
+  onUnauthorized: () => void = browserUnauthorizedRedirect,
+): Promise<T> {
+  const response = await requestResponse(path, init, onUnauthorized);
+  return (response.status === 204 ? undefined : await response.json()) as T;
 }

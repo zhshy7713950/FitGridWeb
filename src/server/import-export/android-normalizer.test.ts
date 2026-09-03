@@ -3,7 +3,45 @@ import { describe, expect, it } from "vitest";
 import { normalizeImportDocument } from "@/server/import-export/android-normalizer";
 import { parseStrictJsonBytes } from "@/server/import-export/strict-json";
 
+import sanitizedAndroidImport from "./fixtures/android-import-sanitized.json";
+
 describe("Android import normalization", () => {
+  it("accepts the fully fictionalized 18-key Android shape and ignores its derived row", () => {
+    expect(Object.keys(sanitizedAndroidImport[0])).toEqual([
+      "productName",
+      "productCode",
+      "maxPrice",
+      "perShare",
+      "gearAmplitude",
+      "keepShare",
+      "increaseAmplitude",
+      "mediumAmplitude",
+      "bigAmplitude",
+      "maxAmplitude",
+      "minTradeQuantity",
+      "category",
+      "sortOrder",
+      "totalBuyAmount",
+      "totalProfitAmount",
+      "totalProfitRate",
+      "gridItems",
+      "isShort",
+    ]);
+    expect(sanitizedAndroidImport[0].gridItems).toHaveLength(1);
+
+    const [item] = normalizeImportDocument(
+      parseStrictJsonBytes(Buffer.from(JSON.stringify(sanitizedAndroidImport))),
+    );
+
+    expect(item).toMatchObject({
+      index: 0,
+      productCode: "SYNTH-AURORA-9173",
+      input: { productCode: "SYNTH-AURORA-9173" },
+    });
+    expect(item.fieldErrors).toBeUndefined();
+    expect(item.warnings).toContain("已忽略并重算 Android 派生字段");
+  });
+
   it("fills v2 defaults, trims text, and ignores derived fields", () => {
     const parsed = parseStrictJsonBytes(
       Buffer.from(

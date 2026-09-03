@@ -55,6 +55,29 @@ it("loads the first unfiltered page on mount", async () => {
   expect(result.current.initialLoading).toBe(false);
 });
 
+it("does not restart the initial load when its caller rerenders", async () => {
+  const pending = deferred<GridTradePage>();
+  const upstream = vi.fn((input?: { q?: string; cursor?: string; signal?: AbortSignal }) => {
+    void input;
+    return pending.promise;
+  });
+  const { rerender, unmount } = renderHook(
+    ({ renderNumber }) => {
+      void renderNumber;
+      return useGridTrades({ request: (input) => upstream(input) });
+    },
+    { initialProps: { renderNumber: 0 } },
+  );
+
+  expect(upstream).toHaveBeenCalledTimes(1);
+
+  rerender({ renderNumber: 1 });
+  expect(upstream).toHaveBeenCalledTimes(1);
+
+  unmount();
+  pending.resolve({ items: [], nextCursor: null });
+});
+
 it("waits 250ms for search and ignores an aborted older response", async () => {
   vi.useFakeTimers();
   const requests = new Map<string, Deferred<GridTradePage>>();

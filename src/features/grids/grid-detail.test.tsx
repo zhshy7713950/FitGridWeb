@@ -1,0 +1,662 @@
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import Link from "next/link";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { ClientApiError } from "@/lib/api-client";
+
+import type { GridItem, GridTradeDetail } from "./types";
+
+const api = vi.hoisted(() => ({
+  getGridTrade: vi.fn(),
+  recalculateGridTrade: vi.fn(),
+  deleteGridTrade: vi.fn(),
+}));
+
+const navigation = vi.hoisted(() => ({
+  replace: vi.fn(),
+}));
+
+vi.mock("./grid-api", () => api);
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+
+import { GridDetail, GridDetailView } from "./grid-detail";
+import styles from "./grid-detail.module.css";
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+const items: GridItem[] = [
+  {
+    sequence: 1,
+    gridType: 1,
+    gear: "100",
+    buyPrice: "6.920",
+    buyCount: "300",
+    buyAmount: "2076.000",
+    sellPrice: "7.266",
+    sellCount: "298",
+    sellAmount: "2165.268",
+    profitAmount: "89.268",
+    profitRate: "4.300",
+    keepProfit: "14.532",
+    keepCount: "2",
+  },
+  {
+    sequence: 2,
+    gridType: 2,
+    gear: "85",
+    buyPrice: "5.882",
+    buyCount: "400",
+    buyAmount: "2352.800",
+    sellPrice: "6.920",
+    sellCount: "400",
+    sellAmount: "2768.000",
+    profitAmount: "415.200",
+    profitRate: "17.647",
+    keepProfit: "0",
+    keepCount: "0",
+  },
+  {
+    sequence: 3,
+    gridType: 3,
+    gear: "70",
+    buyPrice: "4.844",
+    buyCount: "500",
+    buyAmount: "2422.000",
+    sellPrice: "6.920",
+    sellCount: "500",
+    sellAmount: "3460.000",
+    profitAmount: "1038.000",
+    profitRate: "42.857",
+    keepProfit: "0",
+    keepCount: "0",
+  },
+];
+
+const detail: GridTradeDetail = {
+  id: "11111111-1111-4111-8111-111111111111",
+  productName: "黄金 ETF",
+  productCode: "518880",
+  maxPrice: "6.92",
+  perShare: "2000",
+  isShort: false,
+  algorithmVersion: "android-v2.1.0",
+  createdAt: "2026-09-01T00:00:00.000Z",
+  updatedAt: "2026-09-02T00:00:00.000Z",
+  input: {
+    productName: "黄金 ETF",
+    productCode: "518880",
+    maxPrice: "6.92",
+    minTradeQuantity: "100",
+    gearAmplitude: "5",
+    perShare: "2000",
+    keepShare: 2,
+    increaseAmplitude: 5,
+    mediumAmplitude: 15,
+    bigAmplitude: 30,
+    maxAmplitude: 60,
+    isShort: false,
+    category: "ETF",
+    sortOrder: 0,
+    algorithmVersion: "android-v2.1.0",
+  },
+  calculation: {
+    items,
+    totalBuyAmount: "6850.800",
+    totalProfitAmount: "1542.468",
+    totalProfitRate: "22.515",
+  },
+};
+
+afterEach(() => {
+  cleanup();
+  document.body.style.removeProperty("overflow");
+});
+
+beforeEach(() => {
+  api.getGridTrade.mockReset();
+  api.recalculateGridTrade.mockReset();
+  api.deleteGridTrade.mockReset();
+  navigation.replace.mockReset();
+});
+
+describe("GridDetailView", () => {
+  it("keeps the internal algorithm version out of the product interface", () => {
+    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
+
+    expect(screen.queryByText(/android-v2\.1\.0/i)).not.toBeInTheDocument();
+  });
+
+  it("renders every financial column, semantic grid labels, and calculation totals", () => {
+    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
+
+    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
+    expect(headers).toEqual([
+      "序号",
+      "种类",
+      "档位",
+      "买入价格",
+      "买入数量",
+      "买入金额",
+      "卖出价格",
+      "卖出数量",
+      "卖出金额",
+      "盈利金额",
+      "盈利比例",
+      "本期留存利润",
+      "本期留存数量",
+    ]);
+    expect(screen.getByText("小网")).toBeInTheDocument();
+    expect(screen.getByText("中网")).toBeInTheDocument();
+    expect(screen.getByText("大网")).toBeInTheDocument();
+    const summary = screen.getByRole("row", { name: /计算汇总/ });
+    expect(summary).toHaveTextContent(/买入总金额\s*6,850\.800/);
+    expect(summary).toHaveTextContent(/总盈利\s*1,542\.468/);
+    expect(summary).toHaveTextContent(/总盈利率\s*22\.515%/);
+    const summaryCells = within(summary).getAllByRole("cell");
+    expect(summaryCells.map((cell) => cell.textContent)).toEqual([
+      "买入总金额 6,850.800",
+      "总盈利 1,542.468",
+      "总盈利率 22.515%",
+    ]);
+    expect(summaryCells.map((cell) => cell.getAttribute("colspan"))).toEqual(["3", "3", "4"]);
+  });
+
+  it("opens a row and moves through calculation items with bounded controls", async () => {
+    const user = userEvent.setup();
+    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: "查看第 1 笔明细" }));
+    let dialog = screen.getByRole("dialog", { name: "网格行明细" });
+    expect(dialog).toHaveTextContent("1 / 3");
+    expect(within(dialog).getByRole("button", { name: "上一笔" })).toBeDisabled();
+
+    await user.click(within(dialog).getByRole("button", { name: "下一笔" }));
+    dialog = screen.getByRole("dialog", { name: "网格行明细" });
+    expect(dialog).toHaveTextContent("2 / 3");
+    expect(screen.getByRole("button", { name: "查看第 2 笔明细", hidden: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "下一笔" }));
+    expect(dialog).toHaveTextContent("3 / 3");
+    expect(within(dialog).getByRole("button", { name: "下一笔" })).toBeDisabled();
+  });
+
+  it("shows sell columns and inspector values before buy values for short products", async () => {
+    const user = userEvent.setup();
+    render(
+      <GridDetailView
+        detail={{ ...detail, isShort: true, input: { ...detail.input, isShort: true } }}
+        onRecalculate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
+    expect(headers).toEqual([
+      "序号",
+      "种类",
+      "档位",
+      "卖出价格",
+      "卖出数量",
+      "卖出金额",
+      "买入价格",
+      "买入数量",
+      "买入金额",
+      "盈利金额",
+      "盈利比例",
+      "本期留存利润",
+      "本期留存数量",
+    ]);
+
+    const summary = screen.getByRole("row", { name: /计算汇总/ });
+    const summaryCells = within(summary).getAllByRole("cell");
+    expect(summaryCells.map((cell) => cell.textContent)).toEqual([
+      "总盈利 1,542.468",
+      "买入总金额 6,850.800",
+      "总盈利率 22.515%",
+    ]);
+    expect(summaryCells.map((cell) => cell.getAttribute("colspan"))).toEqual(["3", "3", "4"]);
+
+    await user.click(screen.getByRole("button", { name: "查看第 1 笔明细" }));
+    const dialog = screen.getByRole("dialog", { name: "网格行明细" });
+    expect(within(dialog).getAllByRole("term").map((node) => node.textContent)).toEqual([
+      "卖出价格",
+      "卖出数量",
+      "买入价格",
+      "买入数量",
+    ]);
+    expect(dialog).toHaveTextContent("7.266");
+    expect(dialog).toHaveTextContent("6.920");
+  });
+
+  it("traps modal focus, isolates the background, and restores the row trigger", async () => {
+    const user = userEvent.setup();
+    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
+
+    const trigger = screen.getByRole("button", { name: "查看第 1 笔明细" });
+    const background = screen.getByRole("group", { name: "产品详情内容" });
+    await user.click(trigger);
+
+    const dialog = screen.getByRole("dialog", { name: "网格行明细" });
+    const close = within(dialog).getByRole("button", { name: "关闭" });
+    const next = within(dialog).getByRole("button", { name: "下一笔" });
+    expect(background).toHaveAttribute("aria-hidden", "true");
+    expect(background).toHaveAttribute("inert");
+    expect(close).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(next).toHaveFocus();
+    await user.tab();
+    expect(close).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "网格行明细" })).not.toBeInTheDocument();
+    expect(background).not.toHaveAttribute("aria-hidden");
+    expect(background).not.toHaveAttribute("inert");
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it("isolates the complete AppShell-like document and restores prior state after inspector close", async () => {
+    const user = userEvent.setup();
+    document.body.style.overflow = "clip";
+    render(
+      <>
+        <div data-testid="shell">
+          <header data-testid="account-bar" aria-hidden="false">账户栏</header>
+          <nav data-testid="rail" inert={true}>导航栏</nav>
+          <main>
+            <GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />
+          </main>
+        </div>
+        <footer data-testid="outside-footer" aria-hidden="false" inert={true}>站点页脚</footer>
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "查看第 1 笔明细" }));
+
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(screen.getByTestId("account-bar")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByTestId("account-bar")).toHaveAttribute("inert");
+    expect(screen.getByTestId("rail")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByTestId("rail")).toHaveAttribute("inert");
+    expect(screen.getByTestId("outside-footer")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByTestId("outside-footer")).toHaveAttribute("inert");
+
+    await user.click(within(screen.getByRole("dialog", { name: "网格行明细" })).getByRole(
+      "button",
+      { name: "关闭" },
+    ));
+
+    expect(document.body.style.overflow).toBe("clip");
+    expect(screen.getByTestId("account-bar")).toHaveAttribute("aria-hidden", "false");
+    expect(screen.getByTestId("account-bar")).not.toHaveAttribute("inert");
+    expect(screen.getByTestId("rail")).not.toHaveAttribute("aria-hidden");
+    expect(screen.getByTestId("rail")).toHaveAttribute("inert");
+    expect(screen.getByTestId("outside-footer")).toHaveAttribute("aria-hidden", "false");
+    expect(screen.getByTestId("outside-footer")).toHaveAttribute("inert");
+  });
+
+  it("restores document isolation and scrolling when an open inspector unmounts", async () => {
+    document.body.style.overflow = "scroll";
+    const rendered = render(
+      <>
+        <nav data-testid="outer-navigation" aria-hidden="false">导航栏</nav>
+        <GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />
+      </>,
+    );
+    const navigation = screen.getByTestId("outer-navigation");
+    await userEvent.click(screen.getByRole("button", { name: "查看第 1 笔明细" }));
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(navigation).toHaveAttribute("aria-hidden", "true");
+
+    rendered.unmount();
+
+    expect(document.body.style.overflow).toBe("scroll");
+    expect(navigation).toHaveAttribute("aria-hidden", "false");
+    expect(navigation).not.toHaveAttribute("inert");
+  });
+
+  it("deletes only after the exact product code is entered and keeps success locked", async () => {
+    const user = userEvent.setup();
+    const request = deferred<void>();
+    const onDelete = vi.fn().mockReturnValue(request.promise);
+    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={onDelete} />);
+
+    await user.click(screen.getByRole("button", { name: "删除产品" }));
+    const dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    expect(dialog).toHaveTextContent("黄金 ETF");
+    expect(dialog).toHaveTextContent("518880");
+    expect(dialog).toHaveTextContent("此操作不可撤销");
+
+    const input = within(dialog).getByRole("textbox", { name: "输入产品代码确认" });
+    const confirm = within(dialog).getByRole("button", { name: "确认永久删除" });
+    expect(confirm).toBeDisabled();
+    await user.type(input, "51888");
+    expect(confirm).toBeDisabled();
+    await user.type(input, "0");
+
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(within(dialog).getByRole("button", { name: "正在删除…" })).toBeDisabled();
+
+    request.resolve();
+    await waitFor(() => {
+      expect(within(dialog).getByRole("button", { name: "正在删除…" })).toBeDisabled();
+    });
+  });
+
+  it("keeps unresolved deletion focus inside the dialog and isolates outer navigation", async () => {
+    const user = userEvent.setup();
+    const request = deferred<void>();
+    const navigate = vi.fn();
+    render(
+      <>
+        <nav aria-label="主导航">
+          <Link href="/grids" onClick={navigate}>网格产品</Link>
+        </nav>
+        <GridDetailView
+          detail={detail}
+          onRecalculate={vi.fn()}
+          onDelete={() => request.promise}
+        />
+      </>,
+    );
+    const navigation = screen.getByRole("navigation", { name: "主导航" });
+
+    await user.click(screen.getByRole("button", { name: "删除产品" }));
+    const dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    const input = within(dialog).getByRole("textbox", { name: "输入产品代码确认" });
+    await user.type(input, detail.productCode);
+    await user.click(within(dialog).getByRole("button", { name: "确认永久删除" }));
+
+    await waitFor(() => expect(dialog).toHaveFocus());
+    expect(navigation).toHaveAttribute("inert");
+    expect(navigation).toHaveAttribute("aria-hidden", "true");
+    expect(input).toBeDisabled();
+    for (const button of within(dialog).getAllByRole("button")) {
+      expect(button).toBeDisabled();
+    }
+
+    await user.tab();
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    await user.tab({ shift: true });
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    await user.keyboard("{Enter}");
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("keeps successful deletion focus locked until route departure", async () => {
+    const user = userEvent.setup();
+    let deletionResolved = false;
+    render(
+      <>
+        <nav aria-label="主导航"><Link href="/grids">网格产品</Link></nav>
+        <GridDetailView
+          detail={detail}
+          onRecalculate={vi.fn()}
+          onDelete={async () => {
+            deletionResolved = true;
+          }}
+        />
+      </>,
+    );
+    const navigation = screen.getByRole("navigation", { name: "主导航" });
+
+    await user.click(screen.getByRole("button", { name: "删除产品" }));
+    const dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "输入产品代码确认" }),
+      detail.productCode,
+    );
+    await user.click(within(dialog).getByRole("button", { name: "确认永久删除" }));
+
+    await waitFor(() => expect(deletionResolved).toBe(true));
+    expect(within(dialog).getByRole("button", { name: "正在删除…" })).toBeDisabled();
+    expect(within(dialog).getByRole("textbox", { name: "输入产品代码确认" })).toBeDisabled();
+    for (const button of within(dialog).getAllByRole("button")) {
+      expect(button).toBeDisabled();
+    }
+    expect(navigation).toHaveAttribute("inert");
+    await waitFor(() => expect(dialog).toHaveFocus());
+
+    await user.tab();
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    await user.tab({ shift: true });
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it("retains the delete dialog and typed code while showing the public failure details", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn().mockRejectedValue(
+      new ClientApiError(404, "NOT_FOUND", "该产品已被其他操作删除", "req-delete-5"),
+    );
+    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={onDelete} />);
+
+    await user.click(screen.getByRole("button", { name: "删除产品" }));
+    const dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    const input = within(dialog).getByRole("textbox", { name: "输入产品代码确认" });
+    await user.type(input, detail.productCode);
+    await user.click(within(dialog).getByRole("button", { name: "确认永久删除" }));
+
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert).toHaveTextContent("该产品已被其他操作删除");
+    expect(alert).toHaveTextContent("请求 ID：req-delete-5");
+    expect(input).toHaveValue(detail.productCode);
+    expect(within(dialog).getByRole("button", { name: "确认永久删除" })).toBeEnabled();
+  });
+
+  it("routes both Tab directions from the dialog anchor after deletion failure", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <nav aria-label="主导航"><Link href="/grids">网格产品</Link></nav>
+        <GridDetailView
+          detail={detail}
+          onRecalculate={vi.fn()}
+          onDelete={() => Promise.reject(
+            new ClientApiError(503, "UPSTREAM", "删除服务暂不可用", "req-delete-focus"),
+          )}
+        />
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "删除产品" }));
+    const dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    const input = within(dialog).getByRole("textbox", { name: "输入产品代码确认" });
+    await user.type(input, detail.productCode);
+    await user.click(within(dialog).getByRole("button", { name: "确认永久删除" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("删除服务暂不可用");
+    expect(input).toHaveValue(detail.productCode);
+    expect(dialog).toHaveFocus();
+
+    const close = within(dialog).getByRole("button", { name: "关闭" });
+    await user.tab();
+    expect(close).toHaveFocus();
+
+    dialog.focus();
+    const confirm = within(dialog).getByRole("button", { name: "确认永久删除" });
+    await user.tab({ shift: true });
+    expect(confirm).toHaveFocus();
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it("traps delete focus, isolates the background, and supports close, Escape, and backdrop", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <nav aria-label="主导航"><Link href="/grids">网格产品</Link></nav>
+        <GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />
+      </>,
+    );
+
+    const navigation = screen.getByRole("navigation", { name: "主导航" });
+    const trigger = screen.getByRole("button", { name: "删除产品" });
+    const background = screen.getByRole("group", { name: "产品详情内容" });
+    await user.click(trigger);
+    let dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    const input = within(dialog).getByRole("textbox", { name: "输入产品代码确认" });
+    const close = within(dialog).getByRole("button", { name: "关闭" });
+    expect(input).toHaveFocus();
+    expect(background).toHaveAttribute("aria-hidden", "true");
+    expect(background).toHaveAttribute("inert");
+    expect(navigation).toHaveAttribute("aria-hidden", "true");
+    expect(navigation).toHaveAttribute("inert");
+
+    await user.tab({ shift: true });
+    expect(close).toHaveFocus();
+    await user.tab();
+    expect(input).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "永久删除产品" })).not.toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(navigation).not.toHaveAttribute("aria-hidden");
+    expect(navigation).not.toHaveAttribute("inert");
+
+    await user.click(trigger);
+    dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    await user.click(within(dialog).getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("dialog", { name: "永久删除产品" })).not.toBeInTheDocument();
+
+    await user.click(trigger);
+    await user.click(screen.getByRole("button", { name: "关闭删除确认弹窗" }));
+    expect(screen.queryByRole("dialog", { name: "永久删除产品" })).not.toBeInTheDocument();
+    expect(background).not.toHaveAttribute("aria-hidden");
+    expect(background).not.toHaveAttribute("inert");
+  });
+});
+
+describe("GridDetail controller", () => {
+  it("keeps loading and load-error states inside the detail palette scope", async () => {
+    api.getGridTrade.mockReturnValue(new Promise(() => undefined));
+    const loadingRender = render(<GridDetail id={detail.id} />);
+
+    expect(screen.getByRole("status")).toHaveClass(styles.detail, styles.pageStatus);
+
+    loadingRender.unmount();
+    api.getGridTrade.mockRejectedValue(new Error("offline"));
+    render(<GridDetail id={detail.id} />);
+
+    expect(await screen.findByRole("alert")).toHaveClass(styles.detail, styles.loadError);
+  });
+
+  it("loads the authoritative detail once on mount", async () => {
+    api.getGridTrade.mockResolvedValue(detail);
+
+    render(<GridDetail id={detail.id} />);
+
+    expect(await screen.findByRole("heading", { name: "黄金 ETF" })).toBeInTheDocument();
+    expect(api.getGridTrade).toHaveBeenCalledTimes(1);
+    expect(api.getGridTrade).toHaveBeenCalledWith(detail.id, expect.any(AbortSignal));
+  });
+
+  it("replaces the displayed calculation after a successful authoritative recalculation", async () => {
+    const recalculated = {
+      ...detail,
+      updatedAt: "2026-09-02T01:00:00.000Z",
+      calculation: {
+        ...detail.calculation,
+        totalProfitAmount: "2000.000",
+      },
+    };
+    api.getGridTrade.mockResolvedValue(detail);
+    api.recalculateGridTrade.mockResolvedValue(recalculated);
+    render(<GridDetail id={detail.id} />);
+
+    await screen.findByRole("heading", { name: "黄金 ETF" });
+    await userEvent.click(screen.getByRole("button", { name: "重新计算" }));
+
+    await waitFor(() => expect(screen.getByRole("row", { name: /计算汇总/ })).toHaveTextContent("2,000.000"));
+  });
+
+  it("keeps the current table under a temporary recalculation status until success", async () => {
+    const request = deferred<GridTradeDetail>();
+    const recalculated = {
+      ...detail,
+      calculation: { ...detail.calculation, totalProfitAmount: "2000.000" },
+    };
+    api.getGridTrade.mockResolvedValue(detail);
+    api.recalculateGridTrade.mockReturnValue(request.promise);
+    render(<GridDetail id={detail.id} />);
+
+    await screen.findByRole("heading", { name: "黄金 ETF" });
+    await userEvent.click(screen.getByRole("button", { name: "重新计算" }));
+
+    expect(screen.getByRole("status", { name: "正在计算…" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /计算汇总/ })).toHaveTextContent("1,542.468");
+
+    request.resolve(recalculated);
+    await waitFor(() => {
+      expect(screen.queryByRole("status", { name: "正在计算…" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("preserves the current calculation after failure and allows retry", async () => {
+    const request = deferred<GridTradeDetail>();
+    api.getGridTrade.mockResolvedValue(detail);
+    api.recalculateGridTrade
+      .mockReturnValueOnce(request.promise)
+      .mockResolvedValueOnce({
+        ...detail,
+        calculation: { ...detail.calculation, totalProfitAmount: "1800.000" },
+      });
+    render(<GridDetail id={detail.id} />);
+
+    await screen.findByRole("heading", { name: "黄金 ETF" });
+    await userEvent.click(screen.getByRole("button", { name: "重新计算" }));
+
+    expect(screen.getByRole("status", { name: "正在计算…" })).toBeInTheDocument();
+    request.reject(new ClientApiError(503, "UPSTREAM", "计算服务暂不可用", "req-4"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("计算服务暂不可用");
+    expect(screen.getByRole("alert")).toHaveTextContent("请求 ID：req-4");
+    expect(screen.getByRole("row", { name: /计算汇总/ })).toHaveTextContent("1,542.468");
+    expect(screen.queryByRole("status", { name: "正在计算…" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "重新计算" }));
+    await waitFor(() => expect(screen.getByRole("row", { name: /计算汇总/ })).toHaveTextContent("1,800.000"));
+  });
+
+  it("blocks duplicate recalculation requests while one is pending", async () => {
+    api.getGridTrade.mockResolvedValue(detail);
+    api.recalculateGridTrade.mockReturnValue(new Promise(() => undefined));
+    render(<GridDetail id={detail.id} />);
+
+    await screen.findByRole("heading", { name: "黄金 ETF" });
+    const button = screen.getByRole("button", { name: "重新计算" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(api.recalculateGridTrade).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "正在计算…" })).toBeDisabled();
+  });
+
+  it("deletes through the API and replaces history with the product list", async () => {
+    api.getGridTrade.mockResolvedValue(detail);
+    api.deleteGridTrade.mockResolvedValue(undefined);
+    render(<GridDetail id={detail.id} />);
+
+    await screen.findByRole("heading", { name: "黄金 ETF" });
+    await userEvent.click(screen.getByRole("button", { name: "删除产品" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "输入产品代码确认" }), detail.productCode);
+    await userEvent.click(screen.getByRole("button", { name: "确认永久删除" }));
+
+    await waitFor(() => expect(api.deleteGridTrade).toHaveBeenCalledWith(detail.id));
+    expect(api.deleteGridTrade).toHaveBeenCalledTimes(1);
+    expect(navigation.replace).toHaveBeenCalledWith("/grids");
+  });
+});

@@ -6,6 +6,17 @@ F.I.T Grid Web 是对 Android `FitProj` v2.1.0 网格交易能力的 Web 迁移�
 
 Android 源仓库仅作为只读行为参考，不属于本仓库，也不得把 Web 代码提交到 Android 仓库。
 
+## 本地前端调试
+
+只检查登录页、应用框架、响应式布局、搜索和分页时，不需要 PostgreSQL、Docker 或生产镜像：
+
+```bash
+pnpm install
+pnpm dev:ui
+```
+
+浏览器打开 `http://localhost:3000/login`，使用演示账号 `demo` 和密码 `fitgrid-demo`。该模式提供 24 条只读演示产品，覆盖 20 条首屏、第二页、名称/代码搜索、桌面表格和手机卡片；修改代码后由 Next.js 自动热更新。演示模式只在 `next dev` 下生效，生产构建检测到 `NEXT_PUBLIC_UI_DEMO_MODE=1` 会直接失败，演示账号和数据不会进入 VPS 数据库。
+
 ## 本地服务端开发
 
 需要 Node.js 22.12+、pnpm 11 和 PostgreSQL 17。复制 `.env.example` 为 `.env`，替换全部占位秘密，并确保运行连接使用无 `BYPASSRLS` 的受限账号。

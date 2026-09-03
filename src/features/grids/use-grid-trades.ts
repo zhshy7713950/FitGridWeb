@@ -58,6 +58,11 @@ export function useGridTrades(
   const abortController = useRef<AbortController | null>(null);
   const effectiveQueryRef = useRef("");
   const refreshInFlight = useRef<Promise<void> | null>(null);
+  const requestRef = useRef(request);
+
+  useEffect(() => {
+    requestRef.current = request;
+  }, [request]);
 
   useEffect(() => {
     const lifetimeRequestVersion = requestVersion;
@@ -110,7 +115,7 @@ export function useGridTrades(
     abortController.current = controller;
 
     try {
-      const page = await request({ q: q || undefined, signal: controller.signal });
+      const page = await requestRef.current({ q: q || undefined, signal: controller.signal });
       if (!mounted.current || version !== requestVersion.current) return;
       setItems(page.items);
       setNextCursor(page.nextCursor);
@@ -122,7 +127,7 @@ export function useGridTrades(
       if (abortController.current === controller) abortController.current = null;
       if (mounted.current && version === requestVersion.current) setInitialLoading(false);
     }
-  }, [request]);
+  }, []);
 
   useEffect(() => {
     const version = ++requestVersion.current;
@@ -131,7 +136,7 @@ export function useGridTrades(
     abortController.current = controller;
     let active = true;
 
-    void request({ q: effectiveQuery || undefined, signal: controller.signal })
+    void requestRef.current({ q: effectiveQuery || undefined, signal: controller.signal })
       .then(
         (page) => {
           if (!active || !mounted.current || version !== requestVersion.current) return;
@@ -154,7 +159,7 @@ export function useGridTrades(
       active = false;
       controller.abort();
     };
-  }, [clearVersion, effectiveQuery, request]);
+  }, [clearVersion, effectiveQuery]);
 
   const loadCursor = useCallback(async (cursor: string) => {
     if (!mounted.current || cursorControllers.current.has(cursor)) return;
@@ -166,7 +171,7 @@ export function useGridTrades(
     setPageError("");
 
     try {
-      const page = await request({
+      const page = await requestRef.current({
         q: effectiveQuery || undefined,
         cursor,
         signal: controller.signal,
@@ -188,7 +193,7 @@ export function useGridTrades(
         setPageLoading(false);
       }
     }
-  }, [effectiveQuery, request]);
+  }, [effectiveQuery]);
 
   const refresh = useCallback(() => {
     if (!mounted.current) return Promise.resolve();

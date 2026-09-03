@@ -1,20 +1,53 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
 import { ClientApiError } from "@/lib/api-client";
 import { safeReturnPath, withBasePath } from "@/lib/app-paths";
+import { isUiDemoMode, UI_DEMO_PASSWORD, UI_DEMO_USERNAME } from "@/lib/ui-demo";
 import { login } from "./login-api";
 import styles from "./login.module.css";
 
 type LoginRequest = typeof login;
 type Navigate = (path: string) => void;
+const rememberedUsernameKey = "fitgrid:last-successful-username:v1";
+
+function readRememberedUsername(): string {
+  try {
+    return window.localStorage.getItem(rememberedUsernameKey) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberUsername(username: string): void {
+  try {
+    window.localStorage.setItem(rememberedUsernameKey, username);
+  } catch {
+    // Login must continue when browser storage is unavailable.
+  }
+}
+
+function subscribeRememberedUsername(onChange: () => void): () => void {
+  function handleStorage(event: StorageEvent) {
+    if (event.key === rememberedUsernameKey) onChange();
+  }
+
+  window.addEventListener("storage", handleStorage);
+  return () => window.removeEventListener("storage", handleStorage);
+}
 
 export function LoginForm({
   returnTo,
   request = login,
   navigate = (path) => window.location.replace(withBasePath(path as `/${string}`)),
 }: { returnTo: string; request?: LoginRequest; navigate?: Navigate }) {
-  const [username, setUsername] = useState("");
+  const rememberedUsername = useSyncExternalStore(
+    subscribeRememberedUsername,
+    readRememberedUsername,
+    () => "",
+  );
+  const [usernameInput, setUsernameInput] = useState<string | null>(null);
+  const username = usernameInput ?? rememberedUsername;
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -38,7 +71,8 @@ export function LoginForm({
     setError("");
     setFieldErrors({});
     try {
-      await request(username, password);
+      const session = await request(username, password);
+      rememberUsername(session.user.username);
       navigate(safeReturnPath(returnTo));
     } catch (caught) {
       setPassword("");
@@ -63,6 +97,12 @@ export function LoginForm({
 
   return (
     <form className={styles.form} onSubmit={submit} noValidate>
+      {isUiDemoMode() ? (
+        <div className={styles.demoNotice} role="note">
+          <strong>本地演示模式</strong>
+          <span>用户名 <code>{UI_DEMO_USERNAME}</code> · 密码 <code>{UI_DEMO_PASSWORD}</code></span>
+        </div>
+      ) : null}
       <div className={styles.field}>
         <label htmlFor="username">用户名</label>
         <input
@@ -72,7 +112,7 @@ export function LoginForm({
           aria-invalid={!!fieldErrors.username}
           aria-describedby={fieldErrors.username ? "username-error" : undefined}
           value={username}
-          onChange={(event) => setUsername(event.target.value)}
+          onChange={(event) => setUsernameInput(event.target.value)}
         />
         {fieldErrors.username && <span id="username-error">{fieldErrors.username[0]}</span>}
       </div>
@@ -91,9 +131,15 @@ export function LoginForm({
         {fieldErrors.password && <span id="password-error">{fieldErrors.password[0]}</span>}
       </div>
       {error && (
-        <p className={styles.error} role="alert">
-          {retryAfter > 0 ? `${error}，${retryAfter} 秒后重试` : error}
-        </p>
+        <div className={styles.error} role="alert" aria-live="assertive">
+          <span className={styles.errorMark} aria-hidden="true">!</span>
+          <span>
+            <strong>登录失败</strong>
+            <span className={styles.errorMessage}>
+              {retryAfter > 0 ? `${error}，${retryAfter} 秒后重试` : error}
+            </span>
+          </span>
+        </div>
       )}
       <button className={styles.submit} disabled={pending || retryAfter > 0}>
         {pending ? "正在登录…" : "登录工作台"}
