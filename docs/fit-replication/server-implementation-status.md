@@ -97,7 +97,7 @@
 
 ## 2026-09-03 Task 7 验证记录
 
-本机自动化（本次文档变更后新鲜执行）：
+下列 `pnpm test` 结果来自 Fix Round 1 纯文档修订之前的 Task 7 验证运行，保留当时的准确计数和已知失败；其余 typecheck、lint、build 与 diff check 已在 Fix Round 1 修订后重新执行：
 
 ```text
 pnpm test
@@ -111,9 +111,9 @@ pnpm build      # exit 0；23/23 static pages generated
 git diff --check  # exit 0
 ```
 
-受限 sandbox 内第一次 `pnpm test` 得到 73 files/734 tests passed、2 files/8 tests skipped、4 files/18 tests failed；失败均来自内核权限门禁：loopback `listen EPERM`、维护/download-token kernel lock 不可用、伪 TTY `stty: TIOCGETD`。允许本机 loopback/PTY 后，一次完整 run 曾得到 77 files/757 tests passed、2 files/3 tests skipped、exit 0。最终复跑得到上方单一失败：`src/e2e/ui-demo.smoke.test.ts` 的管理员邀请场景捕获到一个 HTTP 500 console error；相同 case 的 focused rerun仍为 1 failed/4 skipped。
+受限 sandbox 内第一次 `pnpm test` 得到 73 files/734 tests passed、2 files/8 tests skipped、4 files/18 tests failed；失败均来自内核权限门禁：loopback `listen EPERM`、维护/download-token kernel lock 不可用、伪 TTY `stty: TIOCGETD`。允许本机 loopback/PTY 后，一次完整 run 曾得到 77 files/757 tests passed、2 files/3 tests skipped、exit 0。Fix Round 1 前的最后一次 full run 得到上方单一失败：`src/e2e/ui-demo.smoke.test.ts` 的管理员邀请场景捕获到一个 HTTP 500 console error；相同 case 的 focused rerun仍为 1 failed/4 skipped。Fix Round 1 和 Fix Round 2 都是纯文档修订，没有在其后重跑产品测试套件。
 
-根因已定位到本任务基线：demo `AdminWorkspace` 挂载 live `<DataVault />`，其 mount effect 请求 `/api/v1/admin/backups`，而 `dev:ui` 按设计清空 `BETTER_AUTH_SECRET`/maintenance 配置，`getRuntimeServices()` 因此返回 500；现有 smoke test 要求 console error 为空。Task 7 没有修改 Task 6 产品代码，该 gate 留给 Task 6/final fix 修复并重新跑完整套件。backup/maintenance 单元与集成套件在最终 full run 中没有失败。
+根因已定位到本任务基线：demo `AdminWorkspace` 挂载 live `<DataVault />`，其 mount effect 请求 `/api/v1/admin/backups`，而 `dev:ui` 按设计清空 `BETTER_AUTH_SECRET`/maintenance 配置，`getRuntimeServices()` 因此返回 500；现有 smoke test 要求 console error 为空。Task 7 没有修改 Task 6 产品代码，该 gate 留给 Task 6/final fix 修复并重新跑完整套件。backup/maintenance 单元与集成套件在上述 Fix Round 1 前的 full run 中没有失败。
 
 生产等价 Docker restore drill：**未执行，环境门控**。检查结果为 `docker`、`age`、`systemctl`、`pg_restore` 均不可用；主机是 Darwin arm64，不是 Ubuntu 24.04。由于仓库脚本内部固定 Compose project 名 `fitgridweb`，也不能在共享主机上仅用外层 `fitgridweb-drill` 名称证明隔离。本次没有创建、检查或删除任何 Docker project/volume，也没有触碰 VPS。
 
