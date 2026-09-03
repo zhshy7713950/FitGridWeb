@@ -33,14 +33,36 @@ function appPathname(pathname: string): string {
   return pathname;
 }
 
+function hierarchicalBackLink(pathname: string): { href: string; label: string } | null {
+  const normalized = pathname.length > 1 ? pathname.replace(/\/$/, "") : pathname;
+  const segments = normalized.split("/").filter(Boolean);
+
+  if (segments[0] !== "grids") return null;
+  if (segments.length === 3 && segments[2] === "edit") {
+    return { href: `/grids/${segments[1]}`, label: "返回产品详情" };
+  }
+  if (segments.length === 2) {
+    return { href: "/grids", label: "返回网格产品" };
+  }
+  return null;
+}
+
 export function AppShell({ user, children }: { user: SessionUser; children: ReactNode }) {
   const pathname = appPathname(usePathname());
   const gridsCurrent = pathname === "/grids" || pathname.startsWith("/grids/");
+  const backLink = hierarchicalBackLink(pathname);
 
   return (
     <div className={styles.shell}>
       <header className={styles.accountBar}>
-        <span className={styles.mobileBrand}>FitGrid</span>
+        {backLink ? (
+          <Link className={styles.backAction} href={backLink.href}>
+            <span aria-hidden="true">←</span>
+            <span>{backLink.label}</span>
+          </Link>
+        ) : (
+          <span className={styles.mobileBrand}>FitGrid</span>
+        )}
         <span className={styles.connection}>安全连接</span>
         <span className={styles.username} title={user.username}>
           {user.username}

@@ -34,15 +34,15 @@ const gridTypeLabel: Record<GridItem["gridType"], string> = {
 };
 
 const buyColumns = [
-  { key: "buyPrice", label: "买入价格" },
-  { key: "buyCount", label: "买入数量" },
-  { key: "buyAmount", label: "买入金额" },
+  { key: "buyPrice", label: "买入价格", side: "buy" },
+  { key: "buyCount", label: "买入数量", side: "buy" },
+  { key: "buyAmount", label: "买入金额", side: "buy" },
 ] as const;
 
 const sellColumns = [
-  { key: "sellPrice", label: "卖出价格" },
-  { key: "sellCount", label: "卖出数量" },
-  { key: "sellAmount", label: "卖出金额" },
+  { key: "sellPrice", label: "卖出价格", side: "sell" },
+  { key: "sellCount", label: "卖出数量", side: "sell" },
+  { key: "sellAmount", label: "卖出金额", side: "sell" },
 ] as const;
 
 const resultColumns = [
@@ -291,13 +291,7 @@ export function GridDetail({ id }: { id: string }) {
     router.replace("/grids");
   }
 
-  if (loading) {
-    return (
-      <div className={`${styles.detail} ${styles.pageStatus}`} role="status">
-        正在加载产品…
-      </div>
-    );
-  }
+  if (loading) return <GridDetailLoading />;
 
   if (loadError || !detail) {
     const error = loadError ?? { message: "加载产品失败，请重试", retryable: true };
@@ -320,6 +314,21 @@ export function GridDetail({ id }: { id: string }) {
       recalculating={recalculating}
       actionError={actionError}
     />
+  );
+}
+
+export function GridDetailLoading() {
+  return (
+    <div
+      className={`${styles.detail} ${styles.pageStatus}`}
+      role="status"
+      aria-label="正在打开产品…"
+    >
+      <div className={styles.pageStatusIndicator}>
+        <span className={styles.spinner} aria-hidden="true" />
+        <span>正在打开产品…</span>
+      </div>
+    </div>
   );
 }
 
@@ -457,24 +466,35 @@ export function GridDetailView({
               <th scope="col">序号</th>
               <th scope="col">种类</th>
               <th scope="col">档位</th>
-              {columns.map((column) => <th scope="col" key={column.key}>{column.label}</th>)}
+              {columns.map((column) => (
+                <th
+                  scope="col"
+                  key={column.key}
+                  data-trade-side={"side" in column ? column.side : undefined}
+                >
+                  {column.label}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {items.map((item, index) => {
               const selected = index === selectedIndex;
               return (
-                <tr key={`${item.sequence}-${item.gridType}`} className={selected ? styles.selectedRow : undefined}>
+                <tr
+                  key={`${item.sequence}-${item.gridType}`}
+                  className={selected ? styles.selectedRow : undefined}
+                  onClick={(event) => {
+                    rowTriggerRef.current = event.currentTarget.querySelector("button");
+                    setSelectedSequence(item.sequence);
+                  }}
+                >
                   <td>
                     <button
                       type="button"
                       className={styles.rowButton}
                       aria-label={`查看第 ${item.sequence} 笔明细`}
                       aria-pressed={selected}
-                      onClick={(event) => {
-                        rowTriggerRef.current = event.currentTarget;
-                        setSelectedSequence(item.sequence);
-                      }}
                     >
                       {item.sequence}
                     </button>
@@ -486,7 +506,10 @@ export function GridDetailView({
                   </td>
                   <td>{formatDecimal(item.gear)}%</td>
                   {columns.map((column) => (
-                    <td key={column.key}>
+                    <td
+                      key={column.key}
+                      data-trade-side={"side" in column ? column.side : undefined}
+                    >
                       {formatDecimal(item[column.key])}{"suffix" in column ? column.suffix : ""}
                     </td>
                   ))}
@@ -500,11 +523,11 @@ export function GridDetailView({
               {detail.isShort ? (
                 <>
                   <td colSpan={3}>总盈利 <strong>{formatDecimal(detail.calculation.totalProfitAmount)}</strong></td>
-                  <td colSpan={3}>买入总金额 <strong>{formatDecimal(detail.calculation.totalBuyAmount)}</strong></td>
+                  <td colSpan={3} data-trade-side="buy">买入总金额 <strong>{formatDecimal(detail.calculation.totalBuyAmount)}</strong></td>
                 </>
               ) : (
                 <>
-                  <td colSpan={3}>买入总金额 <strong>{formatDecimal(detail.calculation.totalBuyAmount)}</strong></td>
+                  <td colSpan={3} data-trade-side="buy">买入总金额 <strong>{formatDecimal(detail.calculation.totalBuyAmount)}</strong></td>
                   <td colSpan={3}>总盈利 <strong>{formatDecimal(detail.calculation.totalProfitAmount)}</strong></td>
                 </>
               )}

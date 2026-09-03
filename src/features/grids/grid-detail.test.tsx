@@ -172,6 +172,56 @@ describe("GridDetailView", () => {
     expect(summaryCells.map((cell) => cell.getAttribute("colspan"))).toEqual(["3", "3", "4"]);
   });
 
+  it("marks buy values red-side and sell values green-side in the table and row inspector", async () => {
+    const user = userEvent.setup();
+    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
+
+    for (const label of ["买入价格", "买入数量", "买入金额"]) {
+      expect(screen.getByRole("columnheader", { name: label })).toHaveAttribute(
+        "data-trade-side",
+        "buy",
+      );
+    }
+    for (const label of ["卖出价格", "卖出数量", "卖出金额"]) {
+      expect(screen.getByRole("columnheader", { name: label })).toHaveAttribute(
+        "data-trade-side",
+        "sell",
+      );
+    }
+
+    const firstRow = screen.getByRole("button", { name: "查看第 1 笔明细" }).closest("tr");
+    expect(firstRow).not.toBeNull();
+    const cells = within(firstRow!).getAllByRole("cell");
+    for (const cell of cells.slice(3, 6)) {
+      expect(cell).toHaveAttribute("data-trade-side", "buy");
+    }
+    for (const cell of cells.slice(6, 9)) {
+      expect(cell).toHaveAttribute("data-trade-side", "sell");
+    }
+
+    await user.click(cells[6]);
+    const dialog = screen.getByRole("dialog", { name: "网格行明细" });
+    expect(within(dialog).getByText("买入价格").closest("div")).toHaveAttribute(
+      "data-trade-side",
+      "buy",
+    );
+    expect(within(dialog).getByText("卖出价格").closest("div")).toHaveAttribute(
+      "data-trade-side",
+      "sell",
+    );
+  });
+
+  it("opens the row inspector when any financial cell in a calculation row is clicked", async () => {
+    const user = userEvent.setup();
+    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
+
+    const firstRow = screen.getByRole("button", { name: "查看第 1 笔明细" }).closest("tr");
+    expect(firstRow).not.toBeNull();
+    await user.click(within(firstRow!).getByText("2,165.268"));
+
+    expect(screen.getByRole("dialog", { name: "网格行明细" })).toHaveTextContent("1 / 3");
+  });
+
   it("opens a row and moves through calculation items with bounded controls", async () => {
     const user = userEvent.setup();
     render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
@@ -546,7 +596,10 @@ describe("GridDetail controller", () => {
     api.getGridTrade.mockReturnValue(new Promise(() => undefined));
     const loadingRender = render(<GridDetail id={detail.id} />);
 
-    expect(screen.getByRole("status")).toHaveClass(styles.detail, styles.pageStatus);
+    const loadingStatus = screen.getByRole("status", { name: "正在打开产品…" });
+    expect(loadingStatus).toHaveClass(styles.detail, styles.pageStatus);
+    expect(loadingStatus).toHaveTextContent("正在打开产品…");
+    expect(loadingStatus.querySelector(`.${styles.spinner}`)).toHaveAttribute("aria-hidden", "true");
 
     loadingRender.unmount();
     api.getGridTrade.mockRejectedValue(new Error("offline"));

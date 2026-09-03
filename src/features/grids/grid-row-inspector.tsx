@@ -76,12 +76,12 @@ export function GridRowInspector({
   if (!item) return null;
 
   const buyFields = [
-    { label: "买入价格", value: item.buyPrice },
-    { label: "买入数量", value: item.buyCount },
+    { label: "买入价格", value: item.buyPrice, side: "buy" },
+    { label: "买入数量", value: item.buyCount, side: "buy" },
   ];
   const sellFields = [
-    { label: "卖出价格", value: item.sellPrice },
-    { label: "卖出数量", value: item.sellCount },
+    { label: "卖出价格", value: item.sellPrice, side: "sell" },
+    { label: "卖出数量", value: item.sellCount, side: "sell" },
   ];
   const fields = isShort ? [...sellFields, ...buyFields] : [...buyFields, ...sellFields];
 
@@ -120,7 +120,7 @@ export function GridRowInspector({
 
         <dl className={styles.inspectorValues}>
           {fields.map((field) => (
-            <div key={field.label}>
+            <div key={field.label} data-trade-side={field.side}>
               <dt>{field.label}</dt>
               <dd>{formatDecimal(field.value)}</dd>
             </div>
