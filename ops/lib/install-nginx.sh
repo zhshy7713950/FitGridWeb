@@ -273,6 +273,7 @@ render_proxy_location() {
   qualifier=$1
   path=$2
   app_port=$3
+  upload_mebibytes=$4
   cat <<EOF
 location ${qualifier} ${path} {
     proxy_pass http://127.0.0.1:${app_port};
@@ -287,19 +288,25 @@ location ${qualifier} ${path} {
     proxy_request_buffering off;
     proxy_buffering off;
     proxy_connect_timeout 10s;
-    proxy_read_timeout 60s;
-    proxy_send_timeout 60s;
-    client_max_body_size 10m;
+    proxy_read_timeout 600s;
+    proxy_send_timeout 600s;
+    client_max_body_size ${upload_mebibytes}m;
 }
 EOF
 }
 
 render_nginx_snippet() {
   app_port=$1
+  upload_max_bytes=${2:-536870912}
   case $app_port in ""|*[!0-9]*) fitgrid_error "应用端口无效"; return 1 ;; esac
-  render_proxy_location = /fitgrid "$app_port"
+  case $upload_max_bytes in ""|*[!0-9]*) fitgrid_error "上传字节上限无效"; return 1 ;; esac
+  upload_mebibytes=$(awk -v bytes="$upload_max_bytes" 'BEGIN {
+    if (bytes + 0 <= 0) exit 1
+    printf "%.0f", int((bytes + 1048575) / 1048576)
+  }') || { fitgrid_error "上传字节上限无效"; return 1; }
+  render_proxy_location = /fitgrid "$app_port" "$upload_mebibytes"
   printf '\n'
-  render_proxy_location '^~' /fitgrid/ "$app_port"
+  render_proxy_location '^~' /fitgrid/ "$app_port" "$upload_mebibytes"
 }
 
 portable_mode() {

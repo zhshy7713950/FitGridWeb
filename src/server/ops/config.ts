@@ -4,6 +4,14 @@ const secret = z.string().min(32).refine(
   (value) => !/replace|change.?me/i.test(value),
   "秘密仍是示例或默认值",
 );
+const privateHostPath = z.string().regex(
+  /^\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+$/,
+  "主机路径必须是规范的绝对路径",
+);
+const numericNonRootGid = z.string()
+  .regex(/^[0-9]+$/, "GID 必须只包含十进制数字")
+  .transform(Number)
+  .pipe(z.number().int().min(1).max(2147483647));
 const deploymentSchema = z.strictObject({
   DOMAIN: z.string().regex(/^(?!https?:\/\/)[a-z0-9.-]+$/i),
   APP_BASE_PATH: z.literal("/fitgrid"),
@@ -26,6 +34,12 @@ const deploymentSchema = z.strictObject({
   MIGRATION_DATABASE_URL: z.url({ protocol: /^postgres(?:ql)?$/ }),
   BETTER_AUTH_SECRET: secret,
   OWNER_REF_SECRET: secret,
+  ADMIN_OPS_WEB_DIR: privateHostPath,
+  ADMIN_OPS_ROOT_DIR: privateHostPath,
+  PORTABLE_BACKUP_DIR: privateHostPath,
+  PORTABLE_BACKUP_HISTORY_FILE: privateHostPath,
+  PORTABLE_BACKUP_MAX_BYTES: z.coerce.number().int().positive().safe(),
+  PORTABLE_BACKUP_READER_GID: numericNonRootGid,
 });
 
 export type DeploymentEnvironment = z.output<typeof deploymentSchema>;
@@ -59,6 +73,19 @@ export function validateDeploymentEnvironment(
   }
   if (parsed.APP_DATABASE_USER === parsed.POSTGRES_USER) {
     throw new Error("运行角色与迁移角色必须分离");
+  }
+  if (parsed.PORTABLE_BACKUP_HISTORY_FILE !== `${parsed.ADMIN_OPS_WEB_DIR}/status/backups.json`) {
+    throw new Error("便携备份历史必须位于管理员状态目录");
+  }
+  const overlaps = (left: string, right: string) => (
+    left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`)
+  );
+  if (
+    overlaps(parsed.ADMIN_OPS_WEB_DIR, parsed.ADMIN_OPS_ROOT_DIR)
+    || overlaps(parsed.ADMIN_OPS_WEB_DIR, parsed.PORTABLE_BACKUP_DIR)
+    || overlaps(parsed.ADMIN_OPS_ROOT_DIR, parsed.PORTABLE_BACKUP_DIR)
+  ) {
+    throw new Error("网页任务目录不得包含 root 状态或便携备份目录");
   }
   return parsed;
 }

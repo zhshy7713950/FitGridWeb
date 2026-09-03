@@ -209,10 +209,19 @@ describe("nginx managed include", () => {
     expect(result.stdout).toContain("proxy_set_header Host $http_host;");
     expect(result.stdout).toContain("proxy_set_header X-Forwarded-Host $http_host;");
     expect(result.stdout).toContain("proxy_set_header X-Forwarded-Proto https;");
-    expect(result.stdout).toContain("client_max_body_size 10m;");
+    expect(result.stdout.match(/client_max_body_size 512m;/g)).toHaveLength(2);
     expect(result.stdout).toContain("proxy_buffering off;");
     expect(result.stdout).toContain("proxy_set_header Upgrade $http_upgrade;");
-    expect(result.stdout).toContain("proxy_read_timeout 60s;");
+    expect(result.stdout.match(/proxy_read_timeout 600s;/g)).toHaveLength(2);
+    expect(result.stdout.match(/proxy_send_timeout 600s;/g)).toHaveLength(2);
+    expect(result.stdout.match(/proxy_request_buffering off;/g)).toHaveLength(2);
+  });
+
+  it("derives an nginx MiB ceiling from the validated byte limit", async () => {
+    const files = await fixture();
+    expect(run("render_nginx_snippet 3300 1048577", files).stdout).toContain("client_max_body_size 2m;");
+    expect(run("render_nginx_snippet 3300 0", files).status).toBe(1);
+    expect(run("render_nginx_snippet 3300 invalid", files).status).toBe(1);
   });
 
   it("inserts the include inside the server even when another top-level block follows", async () => {
@@ -223,6 +232,10 @@ describe("nginx managed include", () => {
     expect(run(`install_nginx_include "${files.site}" "${files.desiredSnippet}" "${files.backups}"`, files).status).toBe(0);
     const site = await readFile(files.site, "utf8");
     expect(site.indexOf("fitgridweb-managed")).toBeLessThan(site.indexOf("map $http_upgrade"));
+    expect(site).toContain("location /existing { return 200; }");
+    expect(site).toContain("listen 8443 ssl;");
+    expect(site).not.toContain("10256");
+    expect(site).not.toContain("30127");
   });
 
   it("installs once and stays idempotent", async () => {

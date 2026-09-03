@@ -177,6 +177,12 @@ describe("installer environment", () => {
     expect(secrets).toHaveLength(5);
     expect(new Set(secrets).size).toBe(5);
     expect(first.stdout + first.stderr).not.toContain(secrets[0]);
+    expect(firstEnvironment).toContain("ADMIN_OPS_WEB_DIR=/var/lib/fitgridweb/admin-ops/web");
+    expect(firstEnvironment).toContain("ADMIN_OPS_ROOT_DIR=/var/lib/fitgridweb/admin-ops/root");
+    expect(firstEnvironment).toContain("PORTABLE_BACKUP_DIR=/var/lib/fitgridweb/portable-backups");
+    expect(firstEnvironment).toContain("PORTABLE_BACKUP_HISTORY_FILE=/var/lib/fitgridweb/admin-ops/web/status/backups.json");
+    expect(firstEnvironment).toContain("PORTABLE_BACKUP_MAX_BYTES=536870912");
+    expect(firstEnvironment).toContain("PORTABLE_BACKUP_READER_GID=1001");
 
     const second = run(`ensure_environment ${args}`, files);
     expect(second.status, second.stderr).toBe(0);
@@ -199,7 +205,16 @@ describe("installer environment", () => {
     const configured = (await readFile(files.environment, "utf8"))
       .replace("BACKUP_DIR=/var/lib/fitgridweb/backups", "BACKUP_DIR=/srv/fitgrid-backups")
       .replace("BACKUP_REMOTE_DIR=", "BACKUP_REMOTE_DIR=/mnt/remote-fitgrid")
-      .replace("BACKUP_RETENTION_DAYS=180", "BACKUP_RETENTION_DAYS=365");
+      .replace("BACKUP_RETENTION_DAYS=180", "BACKUP_RETENTION_DAYS=365")
+      .replace("ADMIN_OPS_WEB_DIR=/var/lib/fitgridweb/admin-ops/web", "ADMIN_OPS_WEB_DIR=/srv/fitgrid-admin/web")
+      .replace("ADMIN_OPS_ROOT_DIR=/var/lib/fitgridweb/admin-ops/root", "ADMIN_OPS_ROOT_DIR=/srv/fitgrid-admin/root")
+      .replace("PORTABLE_BACKUP_DIR=/var/lib/fitgridweb/portable-backups", "PORTABLE_BACKUP_DIR=/srv/fitgrid-portable")
+      .replace(
+        "PORTABLE_BACKUP_HISTORY_FILE=/var/lib/fitgridweb/admin-ops/web/status/backups.json",
+        "PORTABLE_BACKUP_HISTORY_FILE=/srv/fitgrid-admin/web/status/backups.json",
+      )
+      .replace("PORTABLE_BACKUP_MAX_BYTES=536870912", "PORTABLE_BACKUP_MAX_BYTES=268435456")
+      .replace("PORTABLE_BACKUP_READER_GID=1001", "PORTABLE_BACKUP_READER_GID=2001");
     await writeFile(files.environment, configured);
 
     expect(run(command, files).status).toBe(0);
@@ -207,5 +222,26 @@ describe("installer environment", () => {
     expect(upgraded).toContain("BACKUP_DIR=/srv/fitgrid-backups");
     expect(upgraded).toContain("BACKUP_REMOTE_DIR=/mnt/remote-fitgrid");
     expect(upgraded).toContain("BACKUP_RETENTION_DAYS=365");
+    expect(upgraded).toContain("ADMIN_OPS_WEB_DIR=/srv/fitgrid-admin/web");
+    expect(upgraded).toContain("ADMIN_OPS_ROOT_DIR=/srv/fitgrid-admin/root");
+    expect(upgraded).toContain("PORTABLE_BACKUP_DIR=/srv/fitgrid-portable");
+    expect(upgraded).toContain("PORTABLE_BACKUP_HISTORY_FILE=/srv/fitgrid-admin/web/status/backups.json");
+    expect(upgraded).toContain("PORTABLE_BACKUP_MAX_BYTES=268435456");
+    expect(upgraded).toContain("PORTABLE_BACKUP_READER_GID=2001");
+  });
+
+  it("replaces overlapping maintenance roots with isolated defaults", async () => {
+    const files = await fixture();
+    const command = `ensure_environment "${files.environment}" "${files.key}" grid.example.com 3300 443 2ca7f41000000000000000000000000000000000`;
+    expect(run(command, files).status).toBe(0);
+    const unsafe = (await readFile(files.environment, "utf8"))
+      .replace("ADMIN_OPS_ROOT_DIR=/var/lib/fitgridweb/admin-ops/root", "ADMIN_OPS_ROOT_DIR=/srv/shared")
+      .replace("PORTABLE_BACKUP_DIR=/var/lib/fitgridweb/portable-backups", "PORTABLE_BACKUP_DIR=/srv/shared");
+    await writeFile(files.environment, unsafe);
+
+    expect(run(command, files).status).toBe(0);
+    const repaired = await readFile(files.environment, "utf8");
+    expect(repaired).toContain("ADMIN_OPS_ROOT_DIR=/var/lib/fitgridweb/admin-ops/root");
+    expect(repaired).toContain("PORTABLE_BACKUP_DIR=/var/lib/fitgridweb/portable-backups");
   });
 });

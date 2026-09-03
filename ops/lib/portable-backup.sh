@@ -24,6 +24,34 @@ portable_max_bytes() {
   printf '%s\n' "$portable_max"
 }
 
+portable_reader_gid() {
+  portable_gid=${PORTABLE_BACKUP_READER_GID:-1001}
+  if ! awk -v candidate="$portable_gid" 'BEGIN {
+    exit !(candidate ~ /^[0-9]+$/ && candidate + 0 >= 1 && candidate + 0 <= 2147483647)
+  }'; then
+    portable_fail "PORTABLE_BACKUP_READER_GID must be a numeric non-root GID"
+    return 1
+  fi
+  printf '%s\n' "$portable_gid"
+}
+
+portable_publish_for_reader() {
+  portable_publish_file=$1
+  [ -f "$portable_publish_file" ] && [ ! -L "$portable_publish_file" ] \
+    || { portable_fail "Portable backup publication target is not a regular file"; return 1; }
+  portable_publish_gid=$(portable_reader_gid) || return 1
+  chown "0:$portable_publish_gid" "$portable_publish_file" || {
+    portable_publish_status=$?
+    echo "Could not assign portable backup reader ownership" >&2
+    return "$portable_publish_status"
+  }
+  chmod 0640 "$portable_publish_file" || {
+    portable_publish_status=$?
+    echo "Could not set portable backup reader permissions" >&2
+    return "$portable_publish_status"
+  }
+}
+
 portable_require_passphrase() {
   portable_passphrase_file=$1
   [ -f "$portable_passphrase_file" ] || { portable_fail "Portable backup passphrase is missing"; return 1; }
@@ -351,6 +379,7 @@ create_portable_backup() (
   chmod 600 "$portable_partial"
   [ -s "$portable_partial" ] || { portable_fail "Encrypted portable backup is empty"; exit 1; }
   portable_validate_ciphertext "$portable_partial" "$passphrase_file"
+  portable_publish_for_reader "$portable_partial"
   portable_archive_file="$output_directory/$base.fitgridbackup"
   mv "$portable_partial" "$portable_archive_file"
   portable_partial=

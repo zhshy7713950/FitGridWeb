@@ -37,6 +37,7 @@ async function fixture() {
     "POSTGRES_DB=fitgridweb",
     "POSTGRES_USER=fitgrid_migrate",
     "MIGRATION_DATABASE_URL=postgresql://fitgrid_migrate:secret@db:5432/fitgridweb",
+    "PORTABLE_BACKUP_MAX_BYTES=536870912",
   ];
   await writeFile(environment, [`APP_IMAGE=${newImage}`, ...common].join("\n") + "\n");
   await writeFile(oldEnvironment, [`APP_IMAGE=${oldImage}`, ...common].join("\n") + "\n");
@@ -136,11 +137,12 @@ mktemp() {
 ensure_environment() { :; }
 ensure_swap() { :; }
 deploy_release() { :; }
-render_nginx_snippet() { printf 'location /fitgrid {}\\n'; }
+render_nginx_snippet() { printf 'phase render-nginx %s\\n' "$*" >>"$COMMAND_LOG"; printf 'location /fitgrid {}\\n'; }
 install_nginx_include() { :; }
 verify_health() { printf 'phase health\\n' >>"$COMMAND_LOG"; }
 install_systemd_unit() { printf 'phase install-systemd\\n' >>"$COMMAND_LOG"; }
 systemctl() { printf 'phase restart-systemd\\n' >>"$COMMAND_LOG"; }
+install_maintenance_components() { printf 'phase install-maintenance\\n' >>"$COMMAND_LOG"; }
 create_initial_admin() { :; }
 fitgrid_install_main grid.example.com 3300 443 /etc/nginx/conf.d/fitgridweb.conf \
   ${sha} no no true "${files.project}" "${files.environment}" "${files.root}/backup.key"
@@ -158,6 +160,48 @@ fitgrid_install_main grid.example.com 3300 443 /etc/nginx/conf.d/fitgridweb.conf
     expect(log).toContain(`image rm ${previousImage}`);
     expect(log.indexOf("docker image ls")).toBeGreaterThan(log.indexOf("phase restart-systemd"));
     expect(log.indexOf("docker image ls")).toBeGreaterThan(log.lastIndexOf("phase health"));
+    expect(log).toContain("phase render-nginx 3300 536870912");
+    expect(log.indexOf("phase install-maintenance")).toBeGreaterThan(log.lastIndexOf("phase health"));
+  });
+
+  it("retains the healthy running app when post-health maintenance installation fails", async () => {
+    const files = await fixture();
+    const sha = "2ca7f41000000000000000000000000000000000";
+    const command = `
+validate_domain() { :; }
+validate_port() { :; }
+validate_nginx_site() { :; }
+image_for_sha() { printf 'unused\\n'; }
+assert_public_image() { :; }
+install_dependencies() { :; }
+assert_app_port_available() { :; }
+mkdir() { :; }
+mktemp() {
+  if [ "\${1:-}" = -d ]; then printf '%s\\n' "${files.nginxTemporary}"; else printf '%s\\n' "${files.environmentBackup}"; fi
+}
+ensure_environment() { :; }
+ensure_swap() { :; }
+deploy_release() { printf 'phase deploy\\n' >>"$COMMAND_LOG"; }
+render_nginx_snippet() { printf 'location /fitgrid {}\\n'; }
+install_nginx_include() { :; }
+verify_health() { printf 'phase health\\n' >>"$COMMAND_LOG"; }
+install_systemd_unit() { :; }
+systemctl() { printf 'phase restart-systemd\\n' >>"$COMMAND_LOG"; }
+install_maintenance_components() { fitgrid_error '维护组件安装失败：logrotate'; return 9; }
+rollback_release() { printf 'phase rollback\\n' >>"$COMMAND_LOG"; }
+fitgrid_install_main grid.example.com 3300 443 /etc/nginx/conf.d/fitgridweb.conf \\
+  ${sha} no no true "${files.project}" "${files.environment}" "${files.root}/backup.key"
+`;
+
+    const result = run(command, files);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("维护组件安装失败：logrotate");
+    expect(result.stderr).toContain("应用保持运行");
+    const log = await readFile(files.log, "utf8");
+    expect(log).not.toContain("phase rollback");
+    expect(log).not.toMatch(/stop app|down|-v|volume rm/);
+    expect(log).toContain("phase health");
+    expect(log).toContain("phase restart-systemd");
   });
 
   it("does not update the app when migration fails", async () => {

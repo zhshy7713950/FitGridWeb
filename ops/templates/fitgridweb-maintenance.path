@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for FitGridWeb administrator maintenance jobs
+
+[Path]
+PathExistsGlob=/var/lib/fitgridweb/admin-ops/web/inbox/*.json
+Unit=fitgridweb-maintenance.service
+
+[Install]
+WantedBy=multi-user.target

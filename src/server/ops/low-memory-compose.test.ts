@@ -51,4 +51,26 @@ describe("low-memory production Compose overlay", () => {
     const overlay = readCompose("docker-compose.low-memory.yml");
     expect(overlay.services.caddy).toBeUndefined();
   });
+
+  it("mounts only the web spool writable and portable backups read-only", () => {
+    const base = readCompose("docker-compose.yml");
+    const app = base.services.app as {
+      environment: Record<string, string>;
+      group_add: string[];
+      volumes: string[];
+    };
+
+    expect(app.volumes).toEqual([
+      "${ADMIN_OPS_WEB_DIR:?ADMIN_OPS_WEB_DIR is required}:/var/lib/fitgridweb/admin-ops:rw",
+      "${PORTABLE_BACKUP_DIR:?PORTABLE_BACKUP_DIR is required}:/var/lib/fitgridweb/portable-backups:ro",
+    ]);
+    expect(app.group_add).toEqual(["${PORTABLE_BACKUP_READER_GID:-1001}"]);
+    expect(app.environment).toMatchObject({
+      ADMIN_OPS_DIR: "/var/lib/fitgridweb/admin-ops",
+      PORTABLE_BACKUP_DIR: "/var/lib/fitgridweb/portable-backups",
+      PORTABLE_BACKUP_HISTORY_FILE: "/var/lib/fitgridweb/admin-ops/status/backups.json",
+      PORTABLE_BACKUP_MAX_BYTES: "${PORTABLE_BACKUP_MAX_BYTES:?PORTABLE_BACKUP_MAX_BYTES is required}",
+    });
+    expect(JSON.stringify(app)).not.toMatch(/docker\.sock|backup\.key|fitgridweb\.env|MIGRATION_DATABASE_URL/);
+  });
 });

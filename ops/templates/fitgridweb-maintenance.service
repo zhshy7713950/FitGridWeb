@@ -1,0 +1,15 @@
+[Unit]
+Description=FitGridWeb administrator maintenance worker
+Requires=docker.service
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=root
+Group=1001
+WorkingDirectory=/opt/fitgridweb
+EnvironmentFile=/etc/fitgridweb/fitgridweb.env
+ExecStart=/opt/fitgridweb/ops/maintenance-worker.sh
+UMask=0077
+TimeoutStartSec=infinity

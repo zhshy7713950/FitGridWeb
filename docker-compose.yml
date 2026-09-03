@@ -21,6 +21,8 @@ services:
 
   app:
     image: ${APP_IMAGE:?APP_IMAGE is required}
+    group_add:
+      - ${PORTABLE_BACKUP_READER_GID:-1001}
     build:
       context: .
       dockerfile: Dockerfile
@@ -37,6 +39,13 @@ services:
       OWNER_REF_SECRET: ${OWNER_REF_SECRET:?OWNER_REF_SECRET is required}
       CURSOR_SIGNING_SECRET: ${CURSOR_SIGNING_SECRET:-${BETTER_AUTH_SECRET}}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      ADMIN_OPS_DIR: /var/lib/fitgridweb/admin-ops
+      PORTABLE_BACKUP_DIR: /var/lib/fitgridweb/portable-backups
+      PORTABLE_BACKUP_HISTORY_FILE: /var/lib/fitgridweb/admin-ops/status/backups.json
+      PORTABLE_BACKUP_MAX_BYTES: ${PORTABLE_BACKUP_MAX_BYTES:?PORTABLE_BACKUP_MAX_BYTES is required}
+    volumes:
+      - ${ADMIN_OPS_WEB_DIR:?ADMIN_OPS_WEB_DIR is required}:/var/lib/fitgridweb/admin-ops:rw
+      - ${PORTABLE_BACKUP_DIR:?PORTABLE_BACKUP_DIR is required}:/var/lib/fitgridweb/portable-backups:ro
     depends_on:
       db:
         condition: service_healthy

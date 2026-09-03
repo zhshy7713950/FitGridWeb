@@ -11,6 +11,8 @@ const projectDirectory = process.cwd();
 type PortableFixtureOptions = {
   ageExit?: number;
   existingBackups?: number;
+  publishChownExit?: number;
+  publishChmodExit?: number;
 };
 
 async function executable(directory: string, name: string, source: string) {
@@ -58,6 +60,7 @@ async function portableFixture(options: PortableFixtureOptions = {}) {
   const environmentFile = path.join(root, ".env");
   const passphrase = path.join(root, "passphrase");
   const history = path.join(root, "history.json");
+  const statusFile = path.join(root, "status.json");
   const commandLog = path.join(root, "commands.log");
   await mkdir(bin, { recursive: true });
   await mkdir(backups);
@@ -101,6 +104,15 @@ esac`);
 printf 'age %s\\n' "$*" >>"$COMMAND_LOG"
 [ "\${AGE_EXIT:-0}" = 0 ] || exit "$AGE_EXIT"
 cat`);
+  await executable(bin, "chown", `
+printf 'chown %s\\n' "$*" >>"$COMMAND_LOG"
+[ "\${PUBLISH_CHOWN_EXIT:-0}" = 0 ] || exit "$PUBLISH_CHOWN_EXIT"`);
+  await executable(bin, "chmod", `
+printf 'chmod %s\\n' "$*" >>"$COMMAND_LOG"
+case "$1" in
+  640|0640) case "$2" in *fitgridbackup*) [ "\${PUBLISH_CHMOD_EXIT:-0}" = 0 ] || exit "$PUBLISH_CHMOD_EXIT" ;; esac ;;
+esac
+exec /bin/chmod "$@"`);
   await executable(bin, "stat", `
 case "$1" in
   -c) case "$2" in
@@ -114,7 +126,12 @@ case "$1" in
 esac`);
   await executable(bin, "id", "printf '0\\n'");
 
-  return { root, bin, backups, prepared, environmentFile, passphrase, history, commandLog, ageExit: options.ageExit ?? 0 };
+  return {
+    root, bin, backups, prepared, environmentFile, passphrase, history, statusFile, commandLog,
+    ageExit: options.ageExit ?? 0,
+    publishChownExit: options.publishChownExit ?? 0,
+    publishChmodExit: options.publishChmodExit ?? 0,
+  };
 }
 
 function testEnvironment(files: Awaited<ReturnType<typeof portableFixture>>, extra: Record<string, string> = {}) {
@@ -124,17 +141,22 @@ function testEnvironment(files: Awaited<ReturnType<typeof portableFixture>>, ext
     ENV_FILE: files.environmentFile,
     COMMAND_LOG: files.commandLog,
     AGE_EXIT: String(files.ageExit),
+    PUBLISH_CHOWN_EXIT: String(files.publishChownExit),
+    PUBLISH_CHMOD_EXIT: String(files.publishChmodExit),
     FITGRID_BACKUP_TIMESTAMP: "20260903T070000Z",
     TMPDIR: files.root,
     ...extra,
   };
 }
 
-function runPortableCreate(files: Awaited<ReturnType<typeof portableFixture>>) {
-  return spawnSync("sh", ["-c", `. \"${path.join(projectDirectory, "ops/lib/portable-backup.sh")}\"; . \"${path.join(projectDirectory, "ops/env.sh")}\"; load_fitgrid_environment; create_portable_backup \"$PASSPHRASE_FILE\" \"$PORTABLE_BACKUP_DIR\" \"$PORTABLE_BACKUP_HISTORY_FILE\"`], {
+function runPortableCreate(
+  files: Awaited<ReturnType<typeof portableFixture>>,
+  extra: Record<string, string> = {},
+) {
+  return spawnSync("sh", ["-c", `. \"${path.join(projectDirectory, "ops/lib/portable-backup.sh")}\"; . \"${path.join(projectDirectory, "ops/env.sh")}\"; load_fitgrid_environment; create_portable_backup \"$PASSPHRASE_FILE\" \"$PORTABLE_BACKUP_DIR\" \"$PORTABLE_BACKUP_HISTORY_FILE\" \"$STATUS_FILE\"`], {
     cwd: projectDirectory,
     encoding: "utf8",
-    env: testEnvironment(files, { PASSPHRASE_FILE: files.passphrase }),
+    env: testEnvironment(files, { PASSPHRASE_FILE: files.passphrase, STATUS_FILE: files.statusFile, ...extra }),
   });
 }
 
@@ -216,7 +238,13 @@ describe("portable backups", () => {
       "fitgridweb-20260830T070000Z.fitgridbackup",
     ]);
     expect(await readJson(files.history)).toMatchObject({ entries: [{ size: 321 }] });
-    expect((await stat(path.join(files.backups, "fitgridweb-20260903T070000Z.fitgridbackup"))).mode & 0o777).toBe(0o600);
+    expect(await readJson(files.statusFile)).toEqual({ state: "ready" });
+    expect((await stat(path.join(files.backups, "fitgridweb-20260903T070000Z.fitgridbackup"))).mode & 0o777).toBe(0o640);
+    const commandLog = await readFile(files.commandLog, "utf8");
+    expect(commandLog).toContain(
+      `chown 0:1001 ${files.backups}/fitgridweb-20260903T070000Z.fitgridbackup.partial`,
+    );
+    expect(commandLog.lastIndexOf("age ")).toBeLessThan(commandLog.indexOf("chown 0:1001"));
     expect(await recursiveNames(files.root)).not.toContainEqual(expect.stringMatching(/^\.id\./));
   });
 
@@ -249,6 +277,27 @@ describe("portable backups", () => {
     expect(runPortableCreate(files).status).toBe(9);
     expect(await successfulPortableNames(files.backups)).toHaveLength(5);
     expect(await recursiveNames(files.backups)).not.toContainEqual(expect.stringMatching(/\.partial/));
+  });
+
+  it.each([
+    ["ownership", { publishChownExit: 8 }, 8],
+    ["mode", { publishChmodExit: 7 }, 7],
+  ] as const)("does not publish history or ciphertext when reader %s handoff fails", async (_failure, options, status) => {
+    const files = await portableFixture(options);
+    const result = runPortableCreate(files);
+    expect(result.status).toBe(status);
+    expect(await successfulPortableNames(files.backups)).toEqual([]);
+    expect(await recursiveNames(files.backups)).not.toContainEqual(expect.stringMatching(/\.partial$/));
+    expect(await readJson(files.history)).toEqual({ entries: [] });
+    expect(await readJson(files.statusFile)).not.toEqual({ state: "ready" });
+  });
+
+  it("rejects a non-numeric portable backup reader group before publication", async () => {
+    const files = await portableFixture();
+    const result = runPortableCreate(files, { PORTABLE_BACKUP_READER_GID: "not-a-group" });
+    expect(result.status).not.toBe(0);
+    expect(await successfulPortableNames(files.backups)).toEqual([]);
+    expect(await readJson(files.history)).toEqual({ entries: [] });
   });
 
   it.each(["wrong password", "tampered archive", "../escape", "unknown format"])(

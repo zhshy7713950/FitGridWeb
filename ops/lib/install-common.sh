@@ -238,6 +238,52 @@ secret_or_new() {
   openssl rand -hex 32
 }
 
+safe_absolute_path_or_default() {
+  key=$1
+  file=$2
+  default_value=$3
+  value=$(environment_value "$key" "$file")
+  case $value in
+    ""|/|*[!A-Za-z0-9_./-]*|*//*|*/./*|*/../*|*/.|*/..|*/)
+      value=$default_value
+      ;;
+  esac
+  printf '%s\n' "$value"
+}
+
+positive_integer_or_default() {
+  key=$1
+  file=$2
+  default_value=$3
+  value=$(environment_value "$key" "$file")
+  if ! awk -v candidate="$value" 'BEGIN { exit !(candidate ~ /^[0-9]+$/ && candidate + 0 > 0) }'; then
+    value=$default_value
+  fi
+  printf '%s\n' "$value"
+}
+
+reader_gid_or_default() {
+  key=$1
+  file=$2
+  default_value=$3
+  value=$(environment_value "$key" "$file")
+  if ! awk -v candidate="$value" 'BEGIN {
+    exit !(candidate ~ /^[0-9]+$/ && candidate + 0 >= 1 && candidate + 0 <= 2147483647)
+  }'; then
+    value=$default_value
+  fi
+  printf '%s\n' "$value"
+}
+
+paths_overlap() {
+  left_path=$1
+  right_path=$2
+  [ "$left_path" = "$right_path" ] && return 0
+  case "$left_path/" in "$right_path/"*) return 0 ;; esac
+  case "$right_path/" in "$left_path/"*) return 0 ;; esac
+  return 1
+}
+
 ensure_environment() {
   environment_file=$1
   backup_key_file=$2
@@ -274,6 +320,21 @@ ensure_environment() {
   retention_days=$(environment_value BACKUP_RETENTION_DAYS "$environment_file")
   case $retention_days in ""|*[!0-9]*) retention_days=180 ;; esac
   if [ "$retention_days" -lt 1 ] || [ "$retention_days" -gt 3650 ]; then retention_days=180; fi
+  admin_ops_web_directory=$(safe_absolute_path_or_default ADMIN_OPS_WEB_DIR "$environment_file" /var/lib/fitgridweb/admin-ops/web)
+  admin_ops_root_directory=$(safe_absolute_path_or_default ADMIN_OPS_ROOT_DIR "$environment_file" /var/lib/fitgridweb/admin-ops/root)
+  portable_backup_directory=$(safe_absolute_path_or_default PORTABLE_BACKUP_DIR "$environment_file" /var/lib/fitgridweb/portable-backups)
+  if paths_overlap "$admin_ops_web_directory" "$admin_ops_root_directory" \
+    || paths_overlap "$admin_ops_web_directory" "$portable_backup_directory" \
+    || paths_overlap "$admin_ops_root_directory" "$portable_backup_directory"; then
+    admin_ops_web_directory=/var/lib/fitgridweb/admin-ops/web
+    admin_ops_root_directory=/var/lib/fitgridweb/admin-ops/root
+    portable_backup_directory=/var/lib/fitgridweb/portable-backups
+  fi
+  portable_backup_history_file=$(safe_absolute_path_or_default PORTABLE_BACKUP_HISTORY_FILE "$environment_file" "$admin_ops_web_directory/status/backups.json")
+  [ "$portable_backup_history_file" = "$admin_ops_web_directory/status/backups.json" ] \
+    || portable_backup_history_file="$admin_ops_web_directory/status/backups.json"
+  portable_backup_max_bytes=$(positive_integer_or_default PORTABLE_BACKUP_MAX_BYTES "$environment_file" 536870912)
+  portable_backup_reader_gid=$(reader_gid_or_default PORTABLE_BACKUP_READER_GID "$environment_file" 1001)
 
   if [ ! -s "$backup_key_file" ]; then
     backup_key_temp=$(mktemp "${backup_key_file}.tmp.XXXXXX")
@@ -312,6 +373,12 @@ ensure_environment() {
     printf 'BACKUP_REMOTE_DIR=%s\n' "$backup_remote_directory"
     printf 'BACKUP_ENCRYPTION_KEY_FILE=%s\n' "$backup_key_file"
     printf 'BACKUP_RETENTION_DAYS=%s\n' "$retention_days"
+    printf 'ADMIN_OPS_WEB_DIR=%s\n' "$admin_ops_web_directory"
+    printf 'ADMIN_OPS_ROOT_DIR=%s\n' "$admin_ops_root_directory"
+    printf 'PORTABLE_BACKUP_DIR=%s\n' "$portable_backup_directory"
+    printf 'PORTABLE_BACKUP_HISTORY_FILE=%s\n' "$portable_backup_history_file"
+    printf 'PORTABLE_BACKUP_MAX_BYTES=%s\n' "$portable_backup_max_bytes"
+    printf 'PORTABLE_BACKUP_READER_GID=%s\n' "$portable_backup_reader_gid"
   } >"$temporary"
   chmod 600 "$temporary"
   mv "$temporary" "$environment_file"

@@ -206,7 +206,9 @@ fitgrid_install_main() {
 
   nginx_temporary=$(mktemp -d)
   trap 'rm -rf "$nginx_temporary"' EXIT HUP INT TERM
-  render_nginx_snippet "$app_port" >"$nginx_temporary/fitgridweb-location.conf"
+  portable_backup_max_bytes=$(awk -F= '$1 == "PORTABLE_BACKUP_MAX_BYTES" { sub(/^[^=]*=/, ""); print; exit }' "$environment_file")
+  portable_backup_max_bytes=${portable_backup_max_bytes:-536870912}
+  render_nginx_snippet "$app_port" "$portable_backup_max_bytes" >"$nginx_temporary/fitgridweb-location.conf"
   public_suffix=
   [ "$public_port" -eq 443 ] || public_suffix=":$public_port"
   public_health="https://$domain$public_suffix/fitgrid/api/v1/health"
@@ -229,6 +231,11 @@ fitgrid_install_main() {
   fi
   if ! verify_health "$public_health"; then
     rollback_release "$project_directory" "$environment_file" "$old_environment" "$app_port" "$public_health" || true
+    return 1
+  fi
+
+  if ! install_maintenance_components "$project_directory" "$environment_file"; then
+    fitgrid_error "维护组件安装失败；FitGridWeb 应用保持运行，请按上方具体错误检查"
     return 1
   fi
 
