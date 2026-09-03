@@ -138,7 +138,7 @@ function runPortableCreate(files: Awaited<ReturnType<typeof portableFixture>>) {
   });
 }
 
-function runPortableInspect(files: Awaited<ReturnType<typeof portableFixture>>, archive: string) {
+function runPortableInspect(files: Awaited<ReturnType<typeof portableFixture>>, archive: string, resultFile = path.join(files.root, "result.json")) {
   return spawnSync("sh", ["-c", `. \"${path.join(projectDirectory, "ops/lib/portable-backup.sh")}\"; . \"${path.join(projectDirectory, "ops/env.sh")}\"; load_fitgrid_environment; inspect_portable_backup \"$ARCHIVE\" \"$PASSPHRASE_FILE\" \"$PREPARED_DIRECTORY\" \"$RESULT_FILE\"`], {
     cwd: projectDirectory,
     encoding: "utf8",
@@ -146,7 +146,7 @@ function runPortableInspect(files: Awaited<ReturnType<typeof portableFixture>>, 
       ARCHIVE: archive,
       PASSPHRASE_FILE: files.passphrase,
       PREPARED_DIRECTORY: files.prepared,
-      RESULT_FILE: path.join(files.root, "result.json"),
+      RESULT_FILE: resultFile,
     }),
   });
 }
@@ -170,6 +170,21 @@ async function portableInspectFixture(caseName: string) {
     if (tar.status !== 0) throw new Error(tar.stderr);
   }
   if (caseName === "wrong password") files.ageExit = 1;
+  if (caseName === "hostile checksum filename" || caseName === "multiple checksum records") {
+    const checksum = caseName === "hostile checksum filename"
+      ? "0000000000000000000000000000000000000000000000000000000000000000  /etc/passwd\\n"
+      : "0000000000000000000000000000000000000000000000000000000000000000  database.dump\\n0000000000000000000000000000000000000000000000000000000000000000  /etc/passwd\\n";
+    const payload = path.join(files.root, "upload.fitgridbackup-payload", "database.dump.sha256");
+    await writeFile(payload, checksum);
+    const tar = spawnSync("tar", ["-cf", archive, "manifest.json", "database.dump", "database.dump.sha256"], { cwd: path.dirname(payload), encoding: "utf8" });
+    if (tar.status !== 0) throw new Error(tar.stderr);
+    await executable(files.bin, "sha256sum", `
+if [ "$1" = -c ]; then
+  printf 'sha256sum -c %s\\n' "$2" >>"$COMMAND_LOG"
+  exit 0
+fi
+exec /sbin/sha256sum "$@"`);
+  }
   if (caseName === "../escape") {
     await executable(files.bin, "tar", `
 case "$1" in
@@ -193,7 +208,24 @@ describe("portable backups", () => {
       "fitgridweb-20260830T070000Z.fitgridbackup",
     ]);
     expect(await readJson(files.history)).toMatchObject({ entries: [{ size: 321 }] });
+    expect((await stat(path.join(files.backups, "fitgridweb-20260903T070000Z.fitgridbackup"))).mode & 0o777).toBe(0o600);
     expect(await recursiveNames(files.root)).not.toContainEqual(expect.stringMatching(/^\.id\./));
+  });
+
+  it("keeps at most five unique successful history entries when old history contains duplicates", async () => {
+    const files = await portableFixture({ existingBackups: 5 });
+    await writeFile(files.history, JSON.stringify({ entries: [
+      { filename: "fitgridweb-20260902T070000Z.fitgridbackup", status: "ready" },
+      { filename: "fitgridweb-20260902T070000Z.fitgridbackup", status: "ready" },
+      { filename: "fitgridweb-20260901T070000Z.fitgridbackup", status: "ready" },
+      { filename: "fitgridweb-20260831T070000Z.fitgridbackup", status: "ready" },
+      { filename: "fitgridweb-20260830T070000Z.fitgridbackup", status: "ready" },
+      { filename: "fitgridweb-20260829T070000Z.fitgridbackup", status: "ready" },
+    ] }));
+    expect(runPortableCreate(files).status).toBe(0);
+    const entries = (await readJson(files.history)).entries;
+    expect(entries).toHaveLength(5);
+    expect(new Set(entries.map((entry: { filename: string }) => entry.filename)).size).toBe(5);
   });
 
   it("keeps all five old backups when encryption fails", async () => {
@@ -212,6 +244,16 @@ describe("portable backups", () => {
     },
   );
 
+  it.each(["hostile checksum filename", "multiple checksum records"])(
+    "rejects %s before invoking sha256sum or publishing a prepared dump",
+    async (caseName) => {
+      const files = await portableInspectFixture(caseName);
+      expect(runPortableInspect(files, files.archive).status).not.toBe(0);
+      expect(await recursiveNames(files.prepared)).toEqual([]);
+      expect(await readFile(files.commandLog, "utf8")).not.toContain("sha256sum -c");
+    },
+  );
+
   it("atomically publishes a verified custom dump with private permissions", async () => {
     const files = await portableInspectFixture("valid archive");
     const result = runPortableInspect(files, files.archive);
@@ -226,6 +268,15 @@ describe("portable backups", () => {
     const wrongExtension = path.join(files.root, "upload.tar");
     await writeFile(wrongExtension, await readFile(files.archive));
     expect(runPortableInspect(files, wrongExtension).status).not.toBe(0);
+    expect(await recursiveNames(files.prepared)).toEqual([]);
+  });
+
+  it("does not publish a prepared dump when result publication fails", async () => {
+    const files = await portableInspectFixture("valid archive");
+    const blockedParent = path.join(files.root, "blocked-result-parent");
+    await writeFile(blockedParent, "not a directory");
+    const result = runPortableInspect(files, files.archive, path.join(blockedParent, "result.json"));
+    expect(result.status).not.toBe(0);
     expect(await recursiveNames(files.prepared)).toEqual([]);
   });
 

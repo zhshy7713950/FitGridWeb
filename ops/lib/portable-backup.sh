@@ -185,7 +185,7 @@ portable_age_encrypt() {
   portable_encrypt_work=$2
   portable_encrypt_output=$3
   (cd "$portable_encrypt_work" && tar -cf - manifest.json database.dump database.dump.sha256) |
-    portable_age_run "$portable_encrypt_passphrase" -p >"$portable_encrypt_output"
+    (umask 077; portable_age_run "$portable_encrypt_passphrase" -p >"$portable_encrypt_output")
 }
 
 portable_age_decrypt() {
@@ -241,6 +241,14 @@ portable_validate_plain_archive() {
   portable_tar=$1
   portable_directory=$2
   portable_validate_members "$portable_tar" "$portable_directory" || return 1
+  awk '
+    NR == 1 && $0 ~ /^[0-9a-f]{64}  database\.dump$/ { valid = 1; next }
+    { exit 1 }
+    END { exit !(valid && NR == 1) }
+  ' "$portable_directory/database.dump.sha256" || {
+    portable_fail "Portable backup checksum record is invalid"
+    return 1
+  }
   (cd "$portable_directory" && sha256sum -c database.dump.sha256) >/dev/null || {
     portable_fail "Portable backup checksum is invalid"
     return 1
@@ -296,19 +304,17 @@ prune_portable_backups() {
     printf '%s\n' "$portable_old" | while IFS= read -r portable_old_file; do rm -f "$portable_old_file"; done
   fi
   if [ -f "$portable_prune_history" ]; then
-    portable_prune_tmp=$(mktemp "$(dirname "$portable_prune_history")/.history-prune.XXXXXX") || return 1
-    jq --arg directory "$portable_prune_directory" '
-      .entries = [(.entries // [])[] | select((.filename | type == "string") and ($directory + "/" + .filename | test("^.*$")))]
-    ' "$portable_prune_history" >"$portable_prune_tmp" || { rm -f "$portable_prune_tmp"; return 1; }
-    # Keep only index entries whose final backup file still exists.
-    portable_filtered=$(mktemp "$(dirname "$portable_prune_history")/.history-filter.XXXXXX") || { rm -f "$portable_prune_tmp"; return 1; }
-    jq -c '.entries[]?' "$portable_prune_tmp" | while IFS= read -r portable_entry; do
+    portable_filtered=$(mktemp "$(dirname "$portable_prune_history")/.history-filter.XXXXXX") || return 1
+    # Retain only real portable archives, the first entry per filename, and five entries at most.
+    jq -c '.entries[]?' "$portable_prune_history" | while IFS= read -r portable_entry; do
       portable_filename=$(printf '%s\n' "$portable_entry" | jq -r '.filename')
-      [ -f "$portable_prune_directory/$portable_filename" ] && printf '%s\n' "$portable_entry"
-    done | jq -s '{entries:.}' >"$portable_filtered"
+      case "$portable_filename" in
+        fitgridweb-????????T??????Z.fitgridbackup)
+          [ -f "$portable_prune_directory/$portable_filename" ] && printf '%s\n' "$portable_entry" ;;
+      esac
+    done | jq -s 'reduce .[] as $entry ([]; if any(.[]; .filename == $entry.filename) then . else . + [$entry] end) | .[:5] | {entries:.}' >"$portable_filtered" || { rm -f "$portable_filtered"; return 1; }
     chmod 640 "$portable_filtered"
     mv "$portable_filtered" "$portable_prune_history"
-    rm -f "$portable_prune_tmp"
   fi
 }
 
@@ -336,6 +342,7 @@ create_portable_backup() (
   portable_write_manifest "$portable_work/manifest.json" "$timestamp"
   portable_status "$status_file" encrypting
   portable_age_encrypt "$passphrase_file" "$portable_work" "$portable_partial"
+  chmod 600 "$portable_partial"
   [ -s "$portable_partial" ] || { portable_fail "Encrypted portable backup is empty"; exit 1; }
   portable_validate_ciphertext "$portable_partial" "$passphrase_file"
   portable_archive_file="$output_directory/$base.fitgridbackup"
@@ -363,15 +370,26 @@ inspect_portable_backup() (
   [ -z "$(find "$prepared_directory" -mindepth 1 -maxdepth 1 -print -quit)" ] || { portable_fail "Prepared directory is not empty"; exit 1; }
   portable_parent=$(dirname "$prepared_directory")
   portable_work=$(mktemp -d "$portable_parent/.portable-inspect.XXXXXX")
-  trap 'portable_inspect_status=$?; rm -rf "$portable_work"; exit "$portable_inspect_status"' EXIT HUP INT TERM
+  portable_result_tmp=
+  portable_prepared_dump=
+  portable_inspect_cleanup() {
+    rm -rf "$portable_work"
+    [ -z "$portable_result_tmp" ] || rm -f "$portable_result_tmp"
+    [ -z "$portable_prepared_dump" ] || rm -f "$portable_prepared_dump"
+    return 0
+  }
+  trap 'portable_inspect_status=$?; portable_inspect_cleanup; exit "$portable_inspect_status"' EXIT HUP INT TERM
   portable_age_decrypt "$passphrase_file" "$archive" "$portable_work/archive.tar"
   portable_validate_plain_archive "$portable_work/archive.tar" "$portable_work"
-  chmod 600 "$portable_work/database.dump"
-  mv "$portable_work/database.dump" "$prepared_directory/database.dump"
   portable_result_parent=$(dirname "$result_file")
   mkdir -p "$portable_result_parent"
   portable_result_tmp=$(mktemp "$portable_result_parent/.result.XXXXXX")
   cp "$portable_work/manifest.json" "$portable_result_tmp"
   chmod 600 "$portable_result_tmp"
+  chmod 600 "$portable_work/database.dump"
+  portable_prepared_dump="$prepared_directory/database.dump"
+  mv "$portable_work/database.dump" "$portable_prepared_dump"
   mv "$portable_result_tmp" "$result_file"
+  portable_result_tmp=
+  portable_prepared_dump=
 )
