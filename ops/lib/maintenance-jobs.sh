@@ -622,7 +622,7 @@ maintenance_validate_prepared() {
     maintenance_validation_code=PREPARED_DUMP_CHANGED
     return 1
   }
-  fitgrid_compose exec -T db pg_restore --list <"$maintenance_claimed_dump" >/dev/null || {
+  portable_validate_data_only_dump "$maintenance_claimed_dump" "$maintenance_current_work" || {
     maintenance_validation_code=PREPARED_DUMP_INVALID
     return 1
   }
@@ -660,9 +660,28 @@ maintenance_terminate_runtime_connections() {
     --command "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND usename = :'runtime_user' AND pid <> pg_backend_pid()" >/dev/null
 }
 
-maintenance_restore_dump() {
+maintenance_restore_trusted_dump() {
   maintenance_restore_input=$1
   fitgrid_compose exec -T db pg_restore --clean --if-exists --no-owner --exit-on-error --single-transaction \
+    --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" <"$maintenance_restore_input"
+}
+
+maintenance_reset_portable_schema() {
+  fitgrid_compose exec -T db psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" \
+    --set=ON_ERROR_STOP=1 --set=migration_user="$POSTGRES_USER" --set=runtime_user="$APP_DATABASE_USER" <<'EOSQL'
+DROP SCHEMA public CASCADE;
+CREATE SCHEMA public AUTHORIZATION :"migration_user";
+GRANT USAGE ON SCHEMA public TO :"runtime_user";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"migration_user" IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"runtime_user";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"migration_user" IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO :"runtime_user";
+EOSQL
+}
+
+maintenance_restore_portable_data() {
+  maintenance_restore_input=$1
+  fitgrid_compose exec -T db pg_restore --data-only --no-owner --no-privileges --exit-on-error --single-transaction \
     --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" <"$maintenance_restore_input"
 }
 
@@ -767,7 +786,7 @@ maintenance_attempt_rollback() {
     && openssl enc -d -aes-256-cbc -pbkdf2 -pass "file:$BACKUP_ENCRYPTION_KEY_FILE" \
       -in "$maintenance_rollback_encrypted" -out "$maintenance_rollback_plain" \
     && fitgrid_compose exec -T db pg_restore --list <"$maintenance_rollback_plain" >/dev/null \
-    && maintenance_restore_dump "$maintenance_rollback_plain" \
+    && maintenance_restore_trusted_dump "$maintenance_rollback_plain" \
     && maintenance_run_migrations \
     && fitgrid_compose up --no-build -d --wait app \
     && maintenance_verify_health rollback
@@ -798,17 +817,21 @@ maintenance_handle_restore() {
   export MAINTENANCE_RESTORE_SOURCE
   if fitgrid_compose stop app \
     && maintenance_terminate_runtime_connections \
-    && maintenance_restore_dump "$maintenance_prepared_dump"
+    && maintenance_reset_portable_schema
   then
     maintenance_write_status migrating
-    if maintenance_run_migrations \
-      && maintenance_delete_all_sessions \
-      && fitgrid_compose up --no-build -d --wait app
+    if maintenance_run_migrations
     then
-      maintenance_write_status checking
-      if maintenance_verify_health restored; then
-        maintenance_finalize_restored_success
-        return $?
+      maintenance_write_status restoring
+      if maintenance_restore_portable_data "$maintenance_prepared_dump" \
+        && maintenance_delete_all_sessions \
+        && fitgrid_compose up --no-build -d --wait app
+      then
+        maintenance_write_status checking
+        if maintenance_verify_health restored; then
+          maintenance_finalize_restored_success
+          return $?
+        fi
       fi
     fi
   fi

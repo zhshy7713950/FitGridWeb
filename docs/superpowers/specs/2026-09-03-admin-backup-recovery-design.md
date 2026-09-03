@@ -13,12 +13,14 @@ FitGridWeb 已有 `ops/backup.sh` 和 `ops/restore.sh`，能够使用服务器�
 
 ## 2. 范围
 
-完整备份覆盖 PostgreSQL 中的全部 FitGridWeb 数据和结构，包括：
+完整灾难恢复覆盖 PostgreSQL 中的全部 FitGridWeb 业务数据，并从已审核的应用迁移重建结构，包括：
 
 - Better Auth 用户、密码哈希、账号和数据库会话；
 - 管理员与普通用户角色、状态；
 - 邀请、网格产品和导入预检记录；
-- PostgreSQL schema、RLS 策略和 Prisma 迁移记录。
+- 由当前已审核版本的 Prisma migrations 重建 PostgreSQL schema、RLS 策略和迁移记录；便携文件本身不携带可执行 DDL。
+
+这里的“完整”指可以恢复全部应用数据与认证数据，不表示接受上传文件中的任意数据库结构。无人值守 server-key 备份与恢复前回滚快照仍是受信任的完整 custom dump；浏览器可上传的便携备份从格式 v2 起严格为 data-only。
 
 备份不包含 VPS root 密码、nginx、sing-box、TLS 私钥、系统日志、Docker 镜像、`/etc/fitgridweb/fitgridweb.env` 或服务器备份密钥。换 VPS 时应用秘密和基础设施配置仍按运维手册单独迁移或重建。
 
@@ -84,13 +86,13 @@ FitGridWeb 已有 `ops/backup.sh` 和 `ops/restore.sh`，能够使用服务器�
 
 执行器按以下顺序工作：
 
-1. 再次校验挑战绑定的准备区转储摘要和 PostgreSQL 转储可读性；
+1. 再次校验挑战绑定的准备区转储摘要，并逐条检查 `pg_restore --list`，只允许已知业务表的 `TABLE DATA` 和安全的 `SEQUENCE SET`；
 2. 使用服务器 `backup.key` 生成仅用于本次操作的恢复前本地回滚快照；
 3. 写入维护状态，停止 app 容器但保持 db 容器运行；
 4. 终止数据库中的应用角色连接；
-5. 使用迁移角色和 `pg_restore --clean --if-exists --no-owner --exit-on-error --single-transaction` 替换生产 schema；
-6. 使用已部署应用镜像执行 Prisma migrations；
-7. 删除恢复数据库中的全部 Better Auth session，使所有用户必须重新登录；
+5. 使用迁移角色删除并重新创建 `public` schema；
+6. 使用已部署、已审核的应用镜像执行 Prisma migrations，建立 schema、RLS 和 migration ledger；
+7. 使用 `pg_restore --data-only --no-owner --no-privileges --exit-on-error --single-transaction` 导入便携数据，再删除全部 Better Auth session，使所有用户必须重新登录；
 8. 启动 app 并等待容器健康，再检查本地与公网健康端点；
 9. 删除上传文件、密码秘密文件和临时明文；保留不含秘密的任务结果。
 
@@ -100,7 +102,7 @@ FitGridWeb 已有 `ops/backup.sh` 和 `ops/restore.sh`，能够使用服务器�
 
 ## 5. 便携备份格式
 
-文件名为 `fitgridweb-YYYYMMDDTHHMMSSZ.fitgridbackup`。格式采用 passphrase 模式的 age 认证加密，明文载荷是确定结构的 tar archive：
+文件名为 `fitgridweb-YYYYMMDDTHHMMSSZ.fitgridbackup`。格式使用官方 `age-plugin-batchpass` 完成 age 认证加密；密码仅通过 `AGE_PASSPHRASE_FD` 指向的受限文件描述符传入，禁止进入 argv、普通环境变量或日志。明文载荷是确定结构的 tar archive：
 
 ```text
 manifest.json
@@ -113,7 +115,8 @@ database.dump.sha256
 ```json
 {
   "format": "fitgridweb-portable-backup",
-  "formatVersion": "1.0.0",
+  "formatVersion": "2.0.0",
+  "dumpMode": "data-only",
   "createdAt": "2026-09-03T06:30:00Z",
   "appImage": "ghcr.io/zhshy7713950/fitgridweb:sha-...",
   "postgresMajor": 17,
@@ -127,7 +130,9 @@ database.dump.sha256
 }
 ```
 
-创建端先产生并验证 PostgreSQL custom-format dump，再写入 SHA-256，最后归档并加密。恢复端先由 age 完成认证解密，再拒绝软链接、绝对路径、`..` 路径、额外文件、重复文件和超限解压，随后验证 dump 摘要与 `pg_restore --list`。任何未识别的 major formatVersion 都必须拒绝，不能猜测兼容。
+创建端执行 `pg_dump --format=custom --data-only --no-owner --no-privileges`，排除 `_prisma_migrations` 数据；先验证 TOC 只含固定业务表的 `TABLE DATA` 和安全 `SEQUENCE SET`，再写入 SHA-256、归档并加密。恢复端先由 age + batchpass 完成认证解密，再拒绝软链接、绝对路径、`..` 路径、额外文件、重复文件和超限解压，随后验证 dump 摘要并再次逐条执行同一 TOC allowlist。v1 完整转储及任何未识别的 major formatVersion 都必须拒绝，不能猜测兼容。
+
+安装器仅在 Ubuntu 24.04 amd64 安装经过固定 SHA-256 校验的官方 age v1.3.2 发布包，并同时验证 `age` 与 `age-plugin-batchpass` 的版本；两者版本已匹配时幂等跳过下载。
 
 网页历史索引另存于 VPS，只包含随机备份 ID、文件基名、创建时间、文件大小、外层 SHA-256 和状态。索引不是恢复所必需；迁移到新 VPS 时仅凭 `.fitgridbackup` 和独立密码即可预检恢复。
 
@@ -176,8 +181,8 @@ VPS 重启后 path unit 自动恢复监听。启动恢复逻辑只清理已确�
 
 - `pg_dump`、tar、age 加解密、SHA-256 和下载全部使用流，不能把 dump 或上传文件整体放入 Node.js 内存。
 - 任务严格串行；备份或恢复运行时拒绝第二个维护任务。
-- 创建任务前检查磁盘空间，要求可用空间至少为当前数据库估算大小的两倍再加 256 MiB；无法可靠估算时拒绝恢复并提示 SSH 检查。
-- 临时文件与最终文件必须位于同一受控文件系统，最终发布使用原子 rename。
+- 创建任务前检查磁盘空间，要求可用空间至少为当前数据库估算大小的四倍再加 256 MiB，以覆盖 dump、密文、解密校验 tar 和解出的校验 dump 同时存在的峰值；无法可靠估算时拒绝创建。
+- 临时文件与最终文件必须位于同一受控文件系统，最终发布使用原子 rename。归档和历史索引在公开 `ready` 前分别完成 GNU `sync -f` 文件系统同步屏障并同步父目录；同步失败即任务失败。这里保证的是目标文件系统级同步，不声称逐文件 `fsync`。
 - 浏览器轮询使用退避且页面不可见时降低频率，不产生此前出现过的高频请求。
 - 下载中断不删除服务端备份；上传中断清理不完整文件。
 

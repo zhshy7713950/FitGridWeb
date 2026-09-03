@@ -10,9 +10,12 @@ const projectDirectory = process.cwd();
 
 type PortableFixtureOptions = {
   ageExit?: number;
+  availableKilobytes?: number;
+  databaseBytes?: number;
   existingBackups?: number;
   publishChownExit?: number;
   publishChmodExit?: number;
+  syncExit?: number;
 };
 
 async function executable(directory: string, name: string, source: string) {
@@ -95,14 +98,37 @@ async function portableFixture(options: PortableFixtureOptions = {}) {
 printf 'docker %s\\n' "$*" >>"$COMMAND_LOG"
 case "$*" in
   *"pg_dump"*) printf 'valid custom dump' ;;
-  *"pg_restore --list"*) cat >/dev/null ;;
-  *"pg_database_size"*) printf '1024\\n' ;;
+  *"pg_restore --list"*)
+    portable_fake_dump=$(cat)
+    case "$portable_fake_dump" in
+      *"unsafe function"*) printf '31; 1255 9001 FUNCTION public steal() fitgrid_migrate\\n' ;;
+      *"unsafe acl"*) printf '32; 0 0 ACL public TABLE users fitgrid_migrate\\n' ;;
+      *"unsafe pre-data"*) printf '33; 1259 9002 TABLE public attacker fitgrid_migrate\\n' ;;
+      *"unsafe prisma migrations"*) printf '34; 0 9003 TABLE DATA public _prisma_migrations fitgrid_migrate\\n' ;;
+      *"unsafe post-data"*) printf '35; 2606 9004 FK CONSTRAINT public accounts accounts_user_id_fkey fitgrid_migrate\\n' ;;
+      *"unsafe ddl"*) printf '36; 1259 9005 INDEX public users_email_key fitgrid_migrate\\n' ;;
+      *"valid sequence"*)
+        printf '37; 0 9006 TABLE DATA public users fitgrid_migrate\\n'
+        printf '38; 0 9007 SEQUENCE SET public safe_sequence fitgrid_migrate\\n' ;;
+      *) printf '39; 0 9008 TABLE DATA public users fitgrid_migrate\\n' ;;
+    esac ;;
+  *"pg_database_size"*) printf '%s\\n' "$DATABASE_BYTES" ;;
   *"server_version_num"*) printf '170006\\n' ;;
   *"COUNT(*)"*) printf '2|24|1|0\\n' ;;
 esac`);
   await executable(bin, "age", `
 printf 'age %s\\n' "$*" >>"$COMMAND_LOG"
 [ "\${AGE_EXIT:-0}" = 0 ] || exit "$AGE_EXIT"
+[ -z "\${AGE_PASSPHRASE:-}" ] || { printf 'AGE_PASSPHRASE must not be exported\\n' >&2; exit 90; }
+case "$*" in
+  "-e -j batchpass"|"-d -j batchpass") : ;;
+  *"-p"*) printf 'interactive passphrase mode is forbidden\\n' >&2; exit 91 ;;
+  *) printf 'batchpass plugin was not selected\\n' >&2; exit 92 ;;
+esac
+case "\${AGE_PASSPHRASE_FD:-}" in ''|*[!0-9]*) printf 'passphrase fd is missing\\n' >&2; exit 93 ;; esac
+eval 'portable_fake_secret=$(cat <&'"$AGE_PASSPHRASE_FD"')'
+[ -n "$portable_fake_secret" ] || { printf 'passphrase fd is unreadable\\n' >&2; exit 94; }
+portable_fake_secret=
 cat`);
   await executable(bin, "chown", `
 printf 'chown %s\\n' "$*" >>"$COMMAND_LOG"
@@ -125,12 +151,21 @@ case "$1" in
   esac ;;
 esac`);
   await executable(bin, "id", "printf '0\\n'");
+  await executable(bin, "df", `
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n'
+printf 'fitgrid 999999999 0 %s 0%% /\\n' "$AVAILABLE_KILOBYTES"`);
+  await executable(bin, "sync", `
+printf 'sync %s\\n' "$*" >>"$COMMAND_LOG"
+[ "\${SYNC_EXIT:-0}" = 0 ] || exit "$SYNC_EXIT"`);
 
   return {
     root, bin, backups, prepared, environmentFile, passphrase, history, statusFile, commandLog,
     ageExit: options.ageExit ?? 0,
+    availableKilobytes: options.availableKilobytes ?? 10 * 1024 * 1024,
+    databaseBytes: options.databaseBytes ?? 1024,
     publishChownExit: options.publishChownExit ?? 0,
     publishChmodExit: options.publishChmodExit ?? 0,
+    syncExit: options.syncExit ?? 0,
   };
 }
 
@@ -141,8 +176,11 @@ function testEnvironment(files: Awaited<ReturnType<typeof portableFixture>>, ext
     ENV_FILE: files.environmentFile,
     COMMAND_LOG: files.commandLog,
     AGE_EXIT: String(files.ageExit),
+    AVAILABLE_KILOBYTES: String(files.availableKilobytes),
+    DATABASE_BYTES: String(files.databaseBytes),
     PUBLISH_CHOWN_EXIT: String(files.publishChownExit),
     PUBLISH_CHMOD_EXIT: String(files.publishChmodExit),
+    SYNC_EXIT: String(files.syncExit),
     FITGRID_BACKUP_TIMESTAMP: "20260903T070000Z",
     TMPDIR: files.root,
     ...extra,
@@ -185,14 +223,24 @@ async function portableInspectFixture(caseName: string) {
   const files = await portableFixture();
   const manifest = JSON.stringify({
     format: "fitgridweb-portable-backup",
-    formatVersion: caseName === "unknown format" ? "2.0.0" : "1.0.0",
+    formatVersion: caseName === "unknown format" ? "9.0.0" : caseName === "legacy full format" ? "1.0.0" : "2.0.0",
+    dumpMode: "data-only",
     createdAt: "2026-09-03T07:00:00Z",
     appImage: "ghcr.io/example/fitgridweb:sha-2ca7f41",
     postgresMajor: 17,
     database: "fitgridweb",
     counts: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0 },
   });
-  const archive = await createTar(files.root, "upload.fitgridbackup", manifest, caseName === "tampered archive" ? "tampered" : "valid custom dump");
+  const archive = await createTar(
+    files.root,
+    "upload.fitgridbackup",
+    manifest,
+    caseName === "tampered archive"
+      ? "tampered"
+      : caseName.startsWith("unsafe ") || caseName === "valid sequence"
+        ? caseName
+        : "valid custom dump",
+  );
   if (caseName === "tampered archive") {
     const payload = path.join(files.root, "upload.fitgridbackup-payload", "database.dump.sha256");
     await writeFile(payload, "0000000000000000000000000000000000000000000000000000000000000000  database.dump\n");
@@ -226,6 +274,34 @@ esac`);
 }
 
 describe("portable backups", () => {
+  it("reserves space for the dump, ciphertext, decrypted tar, and extracted verification dump", async () => {
+    const files = await portableFixture({
+      databaseBytes: 100 * 1024 * 1024,
+      availableKilobytes: 600 * 1024,
+    });
+
+    const result = runPortableCreate(files);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Insufficient free space");
+    expect(await readFile(files.commandLog, "utf8")).not.toContain("pg_dump");
+  });
+
+  it("creates a versioned data-only dump without migration-ledger rows", async () => {
+    const files = await portableFixture();
+    const result = runPortableCreate(files);
+    expect(result.status, result.stderr).toBe(0);
+
+    const commandLog = await readFile(files.commandLog, "utf8");
+    expect(commandLog).toContain(
+      "pg_dump --format=custom --data-only --no-owner --no-privileges --exclude-table-data=public._prisma_migrations",
+    );
+    const archive = path.join(files.backups, "fitgridweb-20260903T070000Z.fitgridbackup");
+    const manifest = spawnSync("tar", ["-xOf", archive, "manifest.json"], { encoding: "utf8" });
+    expect(manifest.status, manifest.stderr).toBe(0);
+    expect(JSON.parse(manifest.stdout)).toMatchObject({ formatVersion: "2.0.0", dumpMode: "data-only" });
+  });
+
   it("publishes one inspected age archive and only then prunes the sixth backup", async () => {
     const files = await portableFixture({ existingBackups: 5 });
     const result = runPortableCreate(files);
@@ -244,8 +320,27 @@ describe("portable backups", () => {
     expect(commandLog).toContain(
       `chown 0:1001 ${files.backups}/fitgridweb-20260903T070000Z.fitgridbackup.partial`,
     );
+    expect(commandLog).toMatch(/chown 0:1001 .*\/\.history\./);
     expect(commandLog.lastIndexOf("age ")).toBeLessThan(commandLog.indexOf("chown 0:1001"));
+    expect(commandLog).toContain(
+      `sync -f ${files.backups}/fitgridweb-20260903T070000Z.fitgridbackup`,
+    );
+    expect(commandLog).toContain(`sync -f ${files.backups}`);
+    expect(commandLog.lastIndexOf(`sync -f ${files.backups}`)).toBeGreaterThan(
+      commandLog.indexOf(`sync -f ${files.backups}/fitgridweb-20260903T070000Z.fitgridbackup`),
+    );
     expect(await recursiveNames(files.root)).not.toContainEqual(expect.stringMatching(/^\.id\./));
+  });
+
+  it("does not publish ready state or history when the filesystem durability barrier fails", async () => {
+    const files = await portableFixture({ syncExit: 73 });
+
+    const result = runPortableCreate(files);
+
+    expect(result.status).toBe(73);
+    expect(await successfulPortableNames(files.backups)).toEqual([]);
+    expect(await readJson(files.history)).toEqual({ entries: [] });
+    expect(await readJson(files.statusFile)).not.toEqual({ state: "ready" });
   });
 
   it("keeps at most five unique successful history entries when old history contains duplicates", async () => {
@@ -300,7 +395,7 @@ describe("portable backups", () => {
     expect(await readJson(files.history)).toEqual({ entries: [] });
   });
 
-  it.each(["wrong password", "tampered archive", "../escape", "unknown format"])(
+  it.each(["wrong password", "tampered archive", "../escape", "unknown format", "legacy full format"])(
     "rejects %s before publishing a prepared dump",
     async (caseName) => {
       const files = await portableInspectFixture(caseName);
@@ -308,6 +403,31 @@ describe("portable backups", () => {
       expect(await recursiveNames(files.prepared)).toEqual([]);
     },
   );
+
+  it.each([
+    "unsafe function",
+    "unsafe acl",
+    "unsafe pre-data",
+    "unsafe post-data",
+    "unsafe ddl",
+    "unsafe prisma migrations",
+  ])(
+    "rejects a data archive containing %s TOC records",
+    async (caseName) => {
+      const files = await portableInspectFixture(caseName);
+      const result = runPortableInspect(files, files.archive);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("data-only allowlist");
+      expect(await recursiveNames(files.prepared)).toEqual([]);
+    },
+  );
+
+  it("accepts data-only table rows and sequence values", async () => {
+    const files = await portableInspectFixture("valid sequence");
+    const result = runPortableInspect(files, files.archive);
+    expect(result.status, result.stderr).toBe(0);
+    expect(await readFile(path.join(files.prepared, "database.dump"), "utf8")).toBe("valid sequence");
+  });
 
   it.each(["hostile checksum filename", "multiple checksum records"])(
     "rejects %s before invoking sha256sum or publishing a prepared dump",
@@ -325,7 +445,11 @@ describe("portable backups", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(await readFile(path.join(files.prepared, "database.dump"), "utf8")).toBe("valid custom dump");
     expect((await stat(path.join(files.prepared, "database.dump"))).mode & 0o777).toBe(0o600);
-    expect(await readJson(path.join(files.root, "result.json"))).toMatchObject({ formatVersion: "1.0.0", postgresMajor: 17 });
+    expect(await readJson(path.join(files.root, "result.json"))).toMatchObject({
+      formatVersion: "2.0.0",
+      dumpMode: "data-only",
+      postgresMajor: 17,
+    });
   });
 
   it("rejects an upload whose name is not a portable-backup filename", async () => {

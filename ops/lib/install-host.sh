@@ -4,9 +4,93 @@ if ! command -v fitgrid_error >/dev/null 2>&1; then
   fitgrid_error() { printf '错误：%s\n' "$*" >&2; }
 fi
 
+FITGRID_AGE_VERSION=v1.3.2
+FITGRID_AGE_LINUX_AMD64_SHA256=cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
+
+install_age_with_batchpass() {
+  age_architecture=$1
+  age_install_directory=${2:-/usr/local/bin}
+  [ "$age_architecture" = amd64 ] || {
+    fitgrid_error "age batchpass 仅支持已校验的 Ubuntu amd64 安装包"
+    return 1
+  }
+
+  if [ -x "$age_install_directory/age" ] \
+    && [ -x "$age_install_directory/age-plugin-batchpass" ] \
+    && [ "$("$age_install_directory/age" --version 2>/dev/null)" = "$FITGRID_AGE_VERSION" ] \
+    && [ "$("$age_install_directory/age-plugin-batchpass" --version 2>/dev/null)" = "$FITGRID_AGE_VERSION" ]; then
+    return 0
+  fi
+
+  age_download_directory=$(mktemp -d) || return 1
+  age_archive=$age_download_directory/age.tar.gz
+  age_release_url="https://github.com/FiloSottile/age/releases/download/$FITGRID_AGE_VERSION/age-$FITGRID_AGE_VERSION-linux-amd64.tar.gz"
+  curl -fsSLo "$age_archive" "$age_release_url" || {
+    age_install_status=$?
+    rm -rf "$age_download_directory"
+    fitgrid_error "age 官方发布包下载失败"
+    return "$age_install_status"
+  }
+  printf '%s  %s\n' "$FITGRID_AGE_LINUX_AMD64_SHA256" "$age_archive" | sha256sum -c - >/dev/null || {
+    age_install_status=$?
+    rm -rf "$age_download_directory"
+    fitgrid_error "age 官方发布包 SHA-256 校验失败"
+    return "$age_install_status"
+  }
+  tar -xzf "$age_archive" -C "$age_download_directory" age/age age/age-plugin-batchpass || {
+    age_install_status=$?
+    rm -rf "$age_download_directory"
+    fitgrid_error "age 官方发布包解压失败"
+    return "$age_install_status"
+  }
+
+  for age_binary in age age-plugin-batchpass; do
+    age_source=$age_download_directory/age/$age_binary
+    [ -f "$age_source" ] && [ ! -L "$age_source" ] || {
+      rm -rf "$age_download_directory"
+      fitgrid_error "age 官方发布包缺少 $age_binary"
+      return 1
+    }
+    [ "$("$age_source" --version 2>/dev/null)" = "$FITGRID_AGE_VERSION" ] || {
+      rm -rf "$age_download_directory"
+      fitgrid_error "age 官方发布包版本不匹配"
+      return 1
+    }
+  done
+
+  install -d -m 0755 -o root -g root "$age_install_directory" || {
+    rm -rf "$age_download_directory"
+    return 1
+  }
+  age_program_tmp=$(mktemp "$age_install_directory/.age.XXXXXX") || {
+    rm -rf "$age_download_directory"
+    return 1
+  }
+  age_plugin_tmp=$(mktemp "$age_install_directory/.age-plugin-batchpass.XXXXXX") || {
+    rm -f "$age_program_tmp"
+    rm -rf "$age_download_directory"
+    return 1
+  }
+  install -m 0755 "$age_download_directory/age/age" "$age_program_tmp" \
+    && install -m 0755 "$age_download_directory/age/age-plugin-batchpass" "$age_plugin_tmp" \
+    && mv "$age_plugin_tmp" "$age_install_directory/age-plugin-batchpass" \
+    && mv "$age_program_tmp" "$age_install_directory/age" || {
+    age_install_status=$?
+    rm -f "$age_program_tmp" "$age_plugin_tmp"
+    rm -rf "$age_download_directory"
+    return "$age_install_status"
+  }
+  rm -rf "$age_download_directory"
+
+  [ "$("$age_install_directory/age" --version 2>/dev/null)" = "$FITGRID_AGE_VERSION" ] \
+    && [ "$("$age_install_directory/age-plugin-batchpass" --version 2>/dev/null)" = "$FITGRID_AGE_VERSION" ] \
+    || { fitgrid_error "age batchpass 安装后版本校验失败"; return 1; }
+}
+
 install_dependencies() {
   apt_root=${1:-/etc/apt}
   release_file=${2:-/etc/os-release}
+  age_install_directory=${3:-/usr/local/bin}
   keyring=$apt_root/keyrings/docker.asc
   source_file=$apt_root/sources.list.d/docker.sources
 
@@ -32,7 +116,8 @@ install_dependencies() {
   mv "$temporary" "$source_file"
   apt-get update
   apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  apt-get install -y --no-install-recommends age jq util-linux
+  apt-get install -y --no-install-recommends jq util-linux
+  install_age_with_batchpass "$architecture" "$age_install_directory" || return 1
   systemctl enable --now docker.service
   systemctl enable --now nginx.service
 }

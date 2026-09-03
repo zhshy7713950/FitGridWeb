@@ -130,6 +130,28 @@ portable_cleanup() {
   return 0
 }
 
+# Ubuntu's GNU coreutils sync -f issues a filesystem-wide durability barrier for
+# the filesystem containing the path. This is intentionally stronger than a
+# best-effort flush of one file and must fail the operation if it is unavailable.
+portable_sync_filesystem() {
+  portable_sync_target=$1
+  sync -f "$portable_sync_target" || {
+    portable_sync_status=$?
+    portable_fail "Could not durably synchronize portable backup storage"
+    return "$portable_sync_status"
+  }
+}
+
+portable_durable_replace() {
+  portable_replace_source=$1
+  portable_replace_destination=$2
+  portable_replace_parent=$(dirname "$portable_replace_destination")
+  portable_sync_filesystem "$portable_replace_source" || return $?
+  mv "$portable_replace_source" "$portable_replace_destination" || return $?
+  portable_sync_filesystem "$portable_replace_destination" || return $?
+  portable_sync_filesystem "$portable_replace_parent"
+}
+
 portable_require_space() {
   portable_directory=$1
   case "$portable_directory" in ''|/) portable_fail "Unsafe portable backup directory"; return 1 ;; esac
@@ -140,7 +162,9 @@ portable_require_space() {
   case "$portable_estimate" in ''|*[!0-9]*) portable_fail "Could not estimate database size"; return 1 ;; esac
   portable_available_kb=$(df -Pk "$portable_directory" | awk 'END { print $4 }')
   case "$portable_available_kb" in ''|*[!0-9]*) portable_fail "Could not determine free space for portable backup"; return 1 ;; esac
-  portable_required_kb=$(awk -v size="$portable_estimate" 'BEGIN { print int((2 * size + 268435456 + 1023) / 1024) }')
+  # Creation can concurrently retain the custom dump, ciphertext, decrypted
+  # verification tar, and extracted verification dump on the same filesystem.
+  portable_required_kb=$(awk -v size="$portable_estimate" 'BEGIN { print int((4 * size + 268435456 + 1023) / 1024) }')
   [ "$portable_available_kb" -ge "$portable_required_kb" ] || {
     portable_fail "Insufficient free space for portable backup"
     return 1
@@ -191,20 +215,24 @@ EOF
     --argjson gridTrades "$portable_trades" \
     --argjson invitations "$portable_invitations" \
     --argjson importPreviews "$portable_previews" \
-    '{format:"fitgridweb-portable-backup",formatVersion:"1.0.0",createdAt:$createdAt,appImage:$appImage,postgresMajor:$postgresMajor,database:$database,counts:{users:$users,gridTrades:$gridTrades,invitations:$invitations,importPreviews:$importPreviews}}' \
+    '{format:"fitgridweb-portable-backup",formatVersion:"2.0.0",dumpMode:"data-only",createdAt:$createdAt,appImage:$appImage,postgresMajor:$postgresMajor,database:$database,counts:{users:$users,gridTrades:$gridTrades,invitations:$invitations,importPreviews:$importPreviews}}' \
     >"$portable_manifest"
 }
 
 portable_age_run() (
   portable_age_passphrase_file=$1
   shift
-  portable_age_passphrase=$(cat "$portable_age_passphrase_file") || exit 1
-  AGE_PASSPHRASE=$portable_age_passphrase
-  export AGE_PASSPHRASE
+  # age's built-in passphrase mode is terminal-only. The official batchpass
+  # plugin accepts a caller-owned descriptor, so the secret never enters argv,
+  # the process environment, or a command substitution.
+  exec 3<"$portable_age_passphrase_file" || exit 1
+  unset AGE_PASSPHRASE
+  AGE_PASSPHRASE_FD=3
+  export AGE_PASSPHRASE_FD
   age "$@"
   portable_age_status=$?
-  unset AGE_PASSPHRASE
-  portable_age_passphrase=
+  unset AGE_PASSPHRASE_FD
+  exec 3<&-
   exit "$portable_age_status"
 )
 
@@ -213,14 +241,14 @@ portable_age_encrypt() {
   portable_encrypt_work=$2
   portable_encrypt_output=$3
   (cd "$portable_encrypt_work" && tar -cf - manifest.json database.dump database.dump.sha256) |
-    (umask 077; portable_age_run "$portable_encrypt_passphrase" -p >"$portable_encrypt_output")
+    (umask 077; portable_age_run "$portable_encrypt_passphrase" -e -j batchpass >"$portable_encrypt_output")
 }
 
 portable_age_decrypt() {
   portable_decrypt_passphrase=$1
   portable_decrypt_archive=$2
   portable_decrypt_output=$3
-  portable_age_run "$portable_decrypt_passphrase" -d <"$portable_decrypt_archive" >"$portable_decrypt_output"
+  portable_age_run "$portable_decrypt_passphrase" -d -j batchpass <"$portable_decrypt_archive" >"$portable_decrypt_output"
 }
 
 portable_validate_members() {
@@ -252,7 +280,8 @@ portable_validate_manifest() {
   portable_current_major=$(portable_postgres_major) || return 1
   jq -e --argjson expectedMajor "$portable_current_major" '
     .format == "fitgridweb-portable-backup" and
-    .formatVersion == "1.0.0" and
+    .formatVersion == "2.0.0" and
+    .dumpMode == "data-only" and
     (.createdAt | type == "string") and
     (.appImage | type == "string") and
     (.database | type == "string") and
@@ -263,6 +292,59 @@ portable_validate_manifest() {
     (.counts.invitations | type == "number") and
     (.counts.importPreviews | type == "number")
   ' "$portable_manifest" >/dev/null || { portable_fail "Portable backup manifest is incompatible"; return 1; }
+}
+
+portable_validate_data_only_toc() {
+  portable_toc=$1
+  LC_ALL=C awk '
+    BEGIN {
+      allowed_table["accounts"] = 1
+      allowed_table["grid_trades"] = 1
+      allowed_table["import_previews"] = 1
+      allowed_table["invitations"] = 1
+      allowed_table["sessions"] = 1
+      allowed_table["users"] = 1
+      allowed_table["verifications"] = 1
+    }
+    /^[[:space:]]*$/ || /^[[:space:]]*;/ { next }
+    {
+      if ($1 !~ /^[0-9]+;$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/) {
+        invalid = 1
+        exit
+      }
+      if ($4 == "TABLE" && $5 == "DATA" && $6 == "public" && allowed_table[$7] && NF >= 8) {
+        accepted++
+        next
+      }
+      if ($4 == "SEQUENCE" && $5 == "SET" && $6 == "public" && $7 ~ /^[a-z_][a-z0-9_]*$/ && NF >= 8) {
+        accepted++
+        next
+      }
+      invalid = 1
+      exit
+    }
+    END { exit (invalid || accepted == 0) }
+  ' "$portable_toc" || {
+    portable_fail "Portable database dump contains records outside the data-only allowlist"
+    return 1
+  }
+}
+
+portable_validate_data_only_dump() {
+  portable_data_dump=$1
+  portable_toc_directory=$2
+  portable_toc_file=$(mktemp "$portable_toc_directory/.database-toc.XXXXXX") || return 1
+  fitgrid_compose exec -T db pg_restore --list <"$portable_data_dump" >"$portable_toc_file" || {
+    portable_toc_status=$?
+    rm -f "$portable_toc_file"
+    return "$portable_toc_status"
+  }
+  portable_validate_data_only_toc "$portable_toc_file" || {
+    portable_toc_status=$?
+    rm -f "$portable_toc_file"
+    return "$portable_toc_status"
+  }
+  rm -f "$portable_toc_file"
 }
 
 portable_validate_plain_archive() {
@@ -282,7 +364,7 @@ portable_validate_plain_archive() {
     return 1
   }
   portable_validate_manifest "$portable_directory/manifest.json" || return 1
-  fitgrid_compose exec -T db pg_restore --list <"$portable_directory/database.dump" >/dev/null
+  portable_validate_data_only_dump "$portable_directory/database.dump" "$portable_directory"
 }
 
 portable_validate_ciphertext() (
@@ -318,8 +400,16 @@ portable_record_success() {
       --arg createdAt "$(portable_timestamp_iso "$portable_created_at")" --argjson size "$portable_archive_size" --arg sha256 "$portable_archive_sha" \
       '{entries:[{id:$id,filename:$filename,createdAt:$createdAt,size:$size,sha256:$sha256,status:"ready"}]}' >"$portable_history_tmp" || { rm -f "$portable_history_tmp"; return 1; }
   fi
-  chmod 640 "$portable_history_tmp"
-  mv "$portable_history_tmp" "$portable_history_file"
+  portable_publish_for_reader "$portable_history_tmp" || {
+    portable_history_status=$?
+    rm -f "$portable_history_tmp"
+    return "$portable_history_status"
+  }
+  portable_durable_replace "$portable_history_tmp" "$portable_history_file" || {
+    portable_history_status=$?
+    rm -f "$portable_history_tmp"
+    return "$portable_history_status"
+  }
 }
 
 prune_portable_backups() {
@@ -336,6 +426,7 @@ prune_portable_backups() {
   portable_old=$(find "$portable_prune_directory" -maxdepth 1 -type f -name 'fitgridweb-*.fitgridbackup' -print | LC_ALL=C sort -r | awk -v keep="$portable_keep" 'NR > keep')
   if [ -n "$portable_old" ]; then
     printf '%s\n' "$portable_old" | while IFS= read -r portable_old_file; do rm -f "$portable_old_file"; done
+    portable_sync_filesystem "$portable_prune_directory" || return $?
   fi
   if [ -f "$portable_prune_history" ]; then
     portable_filtered=$(mktemp "$(dirname "$portable_prune_history")/.history-filter.XXXXXX") || return 1
@@ -347,8 +438,16 @@ prune_portable_backups() {
           [ -f "$portable_prune_directory/$portable_filename" ] && printf '%s\n' "$portable_entry" ;;
       esac
     done | jq -s 'reduce .[] as $entry ([]; if any(.[]; .filename == $entry.filename) then . else . + [$entry] end) | .[:5] | {entries:.}' >"$portable_filtered" || { rm -f "$portable_filtered"; return 1; }
-    chmod 640 "$portable_filtered"
-    mv "$portable_filtered" "$portable_prune_history"
+    portable_publish_for_reader "$portable_filtered" || {
+      portable_prune_status=$?
+      rm -f "$portable_filtered"
+      return "$portable_prune_status"
+    }
+    portable_durable_replace "$portable_filtered" "$portable_prune_history" || {
+      portable_prune_status=$?
+      rm -f "$portable_filtered"
+      return "$portable_prune_status"
+    }
   fi
 }
 
@@ -368,10 +467,11 @@ create_portable_backup() (
   portable_partial="$output_directory/$base.fitgridbackup.partial"
   trap 'portable_create_status=$?; portable_cleanup; exit "$portable_create_status"' EXIT HUP INT TERM
   portable_status "$status_file" dumping
-  fitgrid_compose exec -T db pg_dump --format=custom \
+  fitgrid_compose exec -T db pg_dump --format=custom --data-only --no-owner --no-privileges \
+    --exclude-table-data=public._prisma_migrations \
     --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" >"$portable_work/database.dump"
   [ -s "$portable_work/database.dump" ] || { portable_fail "pg_dump produced an empty file"; exit 1; }
-  fitgrid_compose exec -T db pg_restore --list <"$portable_work/database.dump" >/dev/null
+  portable_validate_data_only_dump "$portable_work/database.dump" "$portable_work"
   (cd "$portable_work" && sha256sum database.dump >database.dump.sha256)
   portable_write_manifest "$portable_work/manifest.json" "$timestamp"
   portable_status "$status_file" encrypting
@@ -381,7 +481,7 @@ create_portable_backup() (
   portable_validate_ciphertext "$portable_partial" "$passphrase_file"
   portable_publish_for_reader "$portable_partial"
   portable_archive_file="$output_directory/$base.fitgridbackup"
-  mv "$portable_partial" "$portable_archive_file"
+  portable_durable_replace "$portable_partial" "$portable_archive_file"
   portable_partial=
   portable_record_success "$history_file" "$base" "$timestamp"
   prune_portable_backups "$output_directory" "$history_file" 5

@@ -107,22 +107,23 @@ create_portable_backup() {
   work=$(mktemp -d "$output_directory/.${base}.XXXXXX")
   trap 'portable_cleanup "$work"' EXIT HUP INT TERM
   portable_status "$status_file" dumping
-  fitgrid_compose exec -T db pg_dump --format=custom \
+  fitgrid_compose exec -T db pg_dump --format=custom --data-only --no-owner --no-privileges \
+    --exclude-table-data=public._prisma_migrations \
     --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" >"$work/database.dump"
-  fitgrid_compose exec -T db pg_restore --list <"$work/database.dump" >/dev/null
+  portable_validate_data_only_dump "$work/database.dump" "$work"
   (cd "$work" && sha256sum database.dump >database.dump.sha256)
   portable_write_manifest "$work/manifest.json" "$timestamp"
   portable_status "$status_file" encrypting
   portable_age_encrypt "$passphrase_file" "$work" "$output_directory/$base.fitgridbackup.partial"
   portable_validate_ciphertext "$output_directory/$base.fitgridbackup.partial" "$passphrase_file"
-  mv "$output_directory/$base.fitgridbackup.partial" "$output_directory/$base.fitgridbackup"
+  portable_durable_replace "$output_directory/$base.fitgridbackup.partial" "$output_directory/$base.fitgridbackup"
   portable_record_success "$history_file" "$base" "$timestamp"
   prune_portable_backups "$output_directory" "$history_file" 5
   portable_status "$status_file" ready
 }
 ```
 
-Use `AGE_PASSPHRASE` only inside the worker process while invoking `age -p`; never place it in argv, and `unset AGE_PASSPHRASE` immediately afterward. `inspect_portable_backup` must reject non-regular members, links, absolute/parent paths, duplicate names, extra names, expansion beyond the upload cap, invalid checksums, unknown `formatVersion`, incompatible PostgreSQL major versions, and unreadable dumps before atomically publishing `PREPARED_DIRECTORY/database.dump` with mode `0600`.
+Use the verified official `age-plugin-batchpass` with exact `age -e -j batchpass` / `age -d -j batchpass` calls. Pass the secret only through the descriptor named by `AGE_PASSPHRASE_FD`; never place it in argv, `AGE_PASSPHRASE`, or logs. `inspect_portable_backup` must reject non-regular members, links, absolute/parent paths, duplicate names, extra names, expansion beyond the upload cap, invalid checksums, legacy/unknown `formatVersion`, incompatible PostgreSQL major versions, and every TOC record outside the v2 data-only allowlist before atomically publishing `PREPARED_DIRECTORY/database.dump` with mode `0600`.
 
 - [ ] **Step 4: Implement the TTY-only wrapper**
 

@@ -59,7 +59,8 @@ async function createPortableArchive(
     path.join(payload, "manifest.json"),
     JSON.stringify({
       format: "fitgridweb-portable-backup",
-      formatVersion: "1.0.0",
+      formatVersion: "2.0.0",
+      dumpMode: "data-only",
       createdAt: "2026-09-03T07:00:00Z",
       appImage,
       postgresMajor: 17,
@@ -91,6 +92,7 @@ async function workerFixture(options: WorkerOptions = {}) {
   const environmentFile = path.join(root, ".env");
   const history = path.join(statuses, "backups.json");
   const commandLog = path.join(root, "commands.log");
+  const dockerArgsLog = path.join(root, "docker-args.log");
   const audit = path.join(rootOps, "audit.jsonl");
   const activeCount = path.join(root, "active-count");
   const maxActive = path.join(root, "max-active");
@@ -106,6 +108,7 @@ async function workerFixture(options: WorkerOptions = {}) {
   ]);
   await writeFile(history, JSON.stringify({ entries: [] }));
   await writeFile(commandLog, "");
+  await writeFile(dockerArgsLog, "");
   await writeFile(activeCount, "0\n");
   await writeFile(maxActive, "0\n");
   await writeFile(backupKey, "server rollback key material");
@@ -141,6 +144,7 @@ async function workerFixture(options: WorkerOptions = {}) {
     bin,
     "docker",
     `
+printf '%s\\n' "$*" >>"$DOCKER_ARGS_LOG"
 lock="$FAKE_ACTIVITY_LOCK"
 while ! mkdir "$lock" 2>/dev/null; do sleep 0.01; done
 active=$(cat "$FAKE_ACTIVE_COUNT")
@@ -168,11 +172,16 @@ case "$*" in
     else
       printf 'portable custom dump'
     fi ;;
-  *"pg_restore --list"*) cat >/dev/null ;;
+  *"pg_restore --list"*) cat >/dev/null; printf '37; 0 9006 TABLE DATA public users fitgrid_migrate\\n' ;;
+  *"--set=migration_user="*) cat >/dev/null; printf 'reset-schema\\n' >>"$COMMAND_LOG" ;;
   *" stop app"*)
     printf 'stop-app\n' >>"$COMMAND_LOG"
     if [ "\${MAINTENANCE_RESTORE_SOURCE:-}" = rollback ] && [ "$FAIL_ROLLBACK_QUIESCE" = true ]; then exit 9; fi ;;
   *"pg_terminate_backend"*) printf 'terminate-app-connections\n' >>"$COMMAND_LOG" ;;
+  *"pg_restore --data-only"*)
+    restored_payload=$(cat)
+    if [ -n "$EXPECTED_UPLOAD_CONTENT" ] && [ "$restored_payload" != "$EXPECTED_UPLOAD_CONTENT" ]; then exit 17; fi
+    printf 'restore-upload\\n' >>"$COMMAND_LOG" ;;
   *"pg_restore --clean"*)
     restored_payload=$(cat)
     if [ "\${MAINTENANCE_RESTORE_SOURCE:-}" = upload ] && [ -n "$EXPECTED_UPLOAD_CONTENT" ] \
@@ -206,6 +215,7 @@ esac
 case "$*" in *"https://"*) printf 'health-ok\n' >>"$COMMAND_LOG" ;; esac`,
   );
   await executable(bin, "age", "cat");
+  await executable(bin, "sync", ":");
   await executable(
     bin,
     "stat",
@@ -308,6 +318,7 @@ exec /bin/mv "$source" "$destination"`,
     ROLLBACK_HEALTH: String(options.rollbackHealth ?? true),
     FAIL_ROLLBACK_QUIESCE: String(options.failRollbackQuiesce ?? false),
     EXPECTED_UPLOAD_CONTENT: "",
+    DOCKER_ARGS_LOG: dockerArgsLog,
     FAKE_ROOT_OWNER: "0",
     RACE_PREPARED_REPLACEMENT: "false",
     LN_LOG: path.join(root, "ln.log"),
@@ -350,7 +361,8 @@ exec /bin/mv "$source" "$destination"`,
       path.join(directory, "manifest.json"),
       JSON.stringify({
         format: "fitgridweb-portable-backup",
-        formatVersion: "1.0.0",
+        formatVersion: "2.0.0",
+        dumpMode: "data-only",
         createdAt: "2026-09-03T07:00:00Z",
         appImage: "ghcr.io/example/fitgridweb:sha-2ca7f41",
         postgresMajor: 17,
@@ -409,6 +421,7 @@ exec /bin/mv "$source" "$destination"`,
     backups,
     transitionsDirectory,
     commandLog,
+    dockerArgsLog,
     audit,
     maxActive,
     env,
@@ -420,6 +433,7 @@ exec /bin/mv "$source" "$destination"`,
     status: (id: string) => readJson(path.join(statuses, `${id}.json`)),
     transitions: async (id: string) => (await readFile(path.join(transitionsDirectory, `${id}.json`), "utf8")).trim().split("\n"),
     commandSequence: async () => (await readFile(commandLog, "utf8")).trim().split("\n").filter(Boolean),
+    dockerCommands: async () => (await readFile(dockerArgsLog, "utf8")).trim().split("\n").filter(Boolean),
     maintenance: () => readJson(path.join(statuses, "maintenance.json")),
     rootMaintenance: () => readJson(path.join(rootOps, "maintenance.json")),
   };
@@ -592,6 +606,31 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(await readFile(path.join(files.root, "ln.log"), "utf8")).toBe("claim\n");
   });
 
+  it("recreates the reviewed schema before restoring only portable table data", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+
+    const result = files.runWorker({ EXPECTED_UPLOAD_CONTENT: "verified prepared custom dump" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await files.commandSequence()).toEqual([
+      "rollback-snapshot",
+      "stop-app",
+      "terminate-app-connections",
+      "reset-schema",
+      "migrate",
+      "restore-upload",
+      "delete-sessions",
+      "start-app",
+      "health-ok",
+    ]);
+    const commands = await files.dockerCommands();
+    const portableRestore = commands.find((command) => command.includes("pg_restore --data-only"));
+    expect(portableRestore).toContain("--no-owner --no-privileges --exit-on-error --single-transaction");
+    expect(portableRestore).not.toContain("--clean");
+  });
+
   it("rolls production back exactly once when restored application health fails", async () => {
     const files = await workerFixture({ restoredHealth: false, rollbackHealth: true });
     await files.prepareRestore();
@@ -604,8 +643,9 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
       "rollback-snapshot",
       "stop-app",
       "terminate-app-connections",
-      "restore-upload",
+      "reset-schema",
       "migrate",
+      "restore-upload",
       "delete-sessions",
       "start-app",
       "health-failed",
@@ -662,8 +702,9 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
       "rollback-snapshot",
       "stop-app",
       "terminate-app-connections",
-      "restore-upload",
+      "reset-schema",
       "migrate",
+      "restore-upload",
       "delete-sessions",
       "start-app",
       "health-failed",

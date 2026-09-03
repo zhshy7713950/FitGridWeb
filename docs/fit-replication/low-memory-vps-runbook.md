@@ -65,7 +65,7 @@ curl --fail --silent --show-error \
 - `/etc/systemd/system/fitgridweb-backup.{timer,service}`：已安装的每日异机备份 unit；只有真实异机挂载通过安装检查时才启用 timer；
 - `/etc/logrotate.d/fitgridweb-ops`：模式 `0600`，轮转 root-only audit 180 天；
 - 用户同意且现有 Swap 不足时：`/swapfile-fitgridweb` 和 `/etc/fstab` 中的一条受管记录；
-- Docker 官方 apt source、Docker Engine/Compose plugin，以及 `age`、`jq`、`util-linux`。
+- Docker 官方 apt source、Docker Engine/Compose plugin、`jq`、`util-linux`，以及通过固定 SHA-256 校验的官方 age v1.3.2 `age`/`age-plugin-batchpass` 二进制对；匹配版本已存在时幂等跳过下载。
 
 全部部署步骤和健康检查成功后，安装器会从当前 `APP_IMAGE` 动态识别镜像仓库，只删除该仓库中不再使用的旧 `sha-<40位SHA>` 镜像，并保留当前运行镜像。镜像仍被容器占用或 Docker 清理失败时只输出警告，不会使用强制删除，也不会回滚已经成功的部署。
 
@@ -168,7 +168,7 @@ sudo systemctl reload nginx
 
 | 路径 | 加密与解密材料 | 保存位置与保留 | 适用场景 |
 |---|---|---|---|
-| 网页或 `backup-portable.sh` 便携备份 | 操作者另设的 12–128 字符密码；age passphrase 模式 | `/var/lib/fitgridweb/portable-backups`，网页与 CLI 共用同一历史，最多 5 份成功文件 | 浏览器下载、上传预检、整库恢复、更换 VPS |
+| 网页或 `backup-portable.sh` 便携备份 | 操作者另设的 12–128 字符密码；官方 age v1.3.2 + `age-plugin-batchpass`，密码仅走文件描述符 | `/var/lib/fitgridweb/portable-backups`，网页与 CLI 共用同一历史，最多 5 份成功文件 | 浏览器下载、上传预检、整库恢复、更换 VPS |
 | `backup.sh` 无人值守异机备份 | `/etc/fitgridweb/backup.key`；AES-256-CBC/PBKDF2 | 本机 `/var/lib/fitgridweb/backups` 按 `BACKUP_RETENTION_DAYS` 清理，并复制到 `BACKUP_REMOTE_DIR`；不进入网页历史、不受 5 份限制 | 每日定时、主机丢失后的异机恢复 |
 
 便携备份密码不是管理员登录密码，也不是 `backup.key`。把 `.fitgridbackup` 与其密码放在不同的受控位置；密码只进受信密码管理器或离线保管，不要放入文件名、命令参数、shell history、工单、聊天或与备份同位置的文本文件。忘记便携密码时无法恢复该文件。服务器密钥也必须通过与异机备份不同的安全通道离机保存。
@@ -177,13 +177,13 @@ sudo systemctl reload nginx
 
 1. 以 `active admin` 登录 `https://你的域名[:非标准HTTPS端口]/fitgrid/admin`，进入“数据保险库”。普通用户、匿名用户和 disabled admin 均不能调用维护接口。
 2. 点击“创建备份”，输入当前管理员密码、独立备份密码和再次确认。独立密码必须为 12–128 个 Unicode 字符且两次相同。页面不会把密码写入浏览器存储；提交后字段会清空。
-3. 等待状态依次经过“正在生成 → 正在加密 → 可以下载”。主机先检查可用空间至少为数据库估算值的两倍再加 256 MiB，完成 custom dump、`pg_restore --list`、内部 SHA-256、age 加密和解密复检后才发布文件。
+3. 等待状态依次经过“正在生成 → 正在加密 → 可以下载”。主机先检查可用空间至少为数据库估算值的四倍再加 256 MiB，以覆盖 dump、密文、解密校验 tar 与解出的校验 dump 同时存在的峰值。v2 只生成 data-only custom dump，排除 `_prisma_migrations`，并逐条限制 TOC；内部 SHA-256、age + batchpass 加密、解密复检、reader 权限与归档/父目录文件系统同步屏障全部成功后才发布历史和 `ready`。同步使用 Ubuntu GNU `sync -f` 的文件系统级屏障，不是逐文件 `fsync`；任一同步失败即任务失败。
 4. “历史备份”只显示成功且文件仍存在、大小匹配的最近 5 份，按时间倒序显示 Asia/Shanghai 时间、IEC 大小、SHA-256 前 12 位和下载按钮。第 6 份通过全部检查后才删除最旧一份；失败文件不占名额。网页和 CLI 创建的便携备份共用这 5 个名额。
 5. 点击“下载”。页面先申请绑定当前管理员与该备份的 60 秒单次令牌，再由浏览器直接流式下载；重放、过期、换管理员或换备份均返回 404。下载不会删除服务器副本。下载后运行 `sha256sum /安全路径/fitgridweb-YYYYMMDDTHHMMSSZ.fitgridbackup`，与历史行完整 SHA-256 的悬停提示逐字比较；前 12 位只用于快速识别。
 6. 恢复时选择文件名形如 `fitgridweb-YYYYMMDDTHHMMSSZ.fitgridbackup` 的文件，输入该文件的独立备份密码，点击“上传并检查”。默认上传上限为 536870912 字节（512 MiB），nginx 与应用都限制大小；上传和解密采用流式处理。
-7. 预检在生产替换前完成。错误密码、损坏密文、非法/额外/重复 tar 成员、路径穿越、内部摘要不匹配、未知格式、PostgreSQL 主版本不匹配或不可读 dump 都会以失败结束，不修改生产数据库。成功页面只显示服务端公开并验证的备份时间、PostgreSQL 主版本、数据库名、用户/网格产品/邀请/导入预检数和完整性结果；当前公开状态不会显示 manifest 的应用镜像或服务器验证的归档大小。
+7. 预检在生产替换前完成。错误密码、损坏密文、非法/额外/重复 tar 成员、路径穿越、内部摘要不匹配、旧 v1/未知格式、PostgreSQL 主版本不匹配、不可读 dump，或 TOC 含 PRE-DATA、POST-DATA、FUNCTION、ACL、DDL、迁移记录及任何 allowlist 外对象，都会以失败结束，不修改生产数据库。成功页面只显示服务端公开并验证的备份时间、PostgreSQL 主版本、数据库名、用户/网格产品/邀请/导入预检数和完整性结果；当前公开状态不会显示 manifest 的应用镜像或服务器验证的归档大小。
 8. 预检挑战固定 10 分钟有效并绑定管理员、请求与已验证 dump 摘要。页面打开不等于无限续期；超时后重新上传预检。点击“恢复全部数据”，再次输入当前管理员密码，并逐字输入 `恢复全部数据`。服务器接受后对话框锁定，预计会短暂离线，页面显示“服务器正在恢复数据，请勿关闭页面”。
-9. 执行器重新校验准备区 dump，先用服务器 `backup.key` 创建并验证本次恢复前回滚快照，之后才停止 `app`、终止运行角色连接、单事务替换 schema、运行 Prisma migration、删除全部 `sessions`、启动应用并检查回环与公网健康。恢复成功会清除所有登录状态并转到 `/fitgrid/login`；临时管理员可能已被备份数据库替换，必须用备份中的管理员登录。
+9. 执行器重新校验准备区 data-only TOC，先用服务器 `backup.key` 创建并验证本次恢复前受信任完整快照，之后才停止 `app`、终止运行角色连接、删除并重建 `public` schema、运行已审核版本的 Prisma migrations，再以 `pg_restore --data-only --no-owner --no-privileges --exit-on-error --single-transaction` 导入业务数据，删除全部 `sessions`、启动应用并检查回环与公网健康。恢复成功会清除所有登录状态并转到 `/fitgrid/login`；临时管理员可能已被备份数据库替换，必须用备份中的管理员登录。若失败，自动回滚仍使用刚创建的受信任完整快照，而不是放宽上传文件 allowlist。
 
 当前恢复执行器的公网健康地址固定为 `https://$DOMAIN/fitgrid/api/v1/health`，没有拼接 `PUBLIC_HTTPS_PORT`。因此网页生产恢复目前只支持公网 443 上可访问该地址的部署；若 FitGridWeb 只在非标准 HTTPS 端口提供服务，不要开始生产恢复，应先修正并重新验收执行器。
 
@@ -205,7 +205,7 @@ systemctl status fitgridweb-maintenance.path --no-pager
 journalctl -u fitgridweb-maintenance.service --since today --no-pager
 ```
 
-CLI 与网页使用相同格式、目录、历史索引和最近 5 份规则。它只生成同机便携副本，不会复制到 `BACKUP_REMOTE_DIR`。不要把密码放入管道、环境变量或命令行，也不要尝试从无 TTY 的 cron/systemd 调用该脚本。
+CLI 与网页使用相同的 v2 data-only 格式、目录、历史索引和最近 5 份规则。它只生成同机便携副本，不会复制到 `BACKUP_REMOTE_DIR`。底层官方 batchpass 插件只从受限文件描述符读取密码；不要把密码放入管道、普通环境变量或命令行，也不要尝试从无 TTY 的 cron/systemd 调用该脚本。
 
 ## 配置真正的异机定时备份
 
