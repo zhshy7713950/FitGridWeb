@@ -400,6 +400,24 @@ describe.sequential("database-free UI demo", () => {
     const mobileBackHref = await page.getByRole("link", { name: "返回网格产品" }).getAttribute("href");
     expect(mobileBackHref).toBe(`${appBasePath}/grids`);
     expectExactlyOneBasePrefix(new URL(mobileBackHref!, baseUrl).pathname);
+    const gridRowPalette = async (size: "small" | "medium" | "large") => (
+      page.locator(`tbody tr[data-grid-size="${size}"]`).evaluate((row) => ({
+        backgrounds: Array.from(row.querySelectorAll("td")).map(
+          (cell) => window.getComputedStyle(cell).backgroundColor,
+        ),
+        labelColor: window.getComputedStyle(row.querySelector("td:nth-child(2) span")!).color,
+      }))
+    );
+    const smallPalette = await gridRowPalette("small");
+    const mediumPalette = await gridRowPalette("medium");
+    const largePalette = await gridRowPalette("large");
+    expect(new Set(mediumPalette.backgrounds).size).toBe(1);
+    expect(new Set(largePalette.backgrounds).size).toBe(1);
+    expect(mediumPalette.backgrounds[0]).not.toBe(smallPalette.backgrounds[0]);
+    expect(largePalette.backgrounds[0]).not.toBe(smallPalette.backgrounds[0]);
+    expect(mediumPalette.backgrounds[0]).not.toBe(largePalette.backgrounds[0]);
+    expect(mediumPalette.labelColor).toBe("rgb(41, 98, 255)");
+    expect(largePalette.labelColor).toBe("rgb(242, 201, 76)");
     const firstCalculationRow = page.getByRole("button", { name: "查看第 1 笔明细" }).locator("xpath=ancestor::tr");
     expect(await firstCalculationRow.locator('[data-trade-side="buy"]').first().getAttribute("data-trade-side"))
       .toBe("buy");

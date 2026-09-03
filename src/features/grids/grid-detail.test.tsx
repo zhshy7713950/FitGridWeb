@@ -172,6 +172,14 @@ describe("GridDetailView", () => {
     expect(summaryCells.map((cell) => cell.getAttribute("colspan"))).toEqual(["3", "3", "4"]);
   });
 
+  it("marks medium and large grid rows for full-row visual emphasis", () => {
+    render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
+
+    expect(screen.getByRole("row", { name: /小网/ })).toHaveAttribute("data-grid-size", "small");
+    expect(screen.getByRole("row", { name: /中网/ })).toHaveAttribute("data-grid-size", "medium");
+    expect(screen.getByRole("row", { name: /大网/ })).toHaveAttribute("data-grid-size", "large");
+  });
+
   it("marks buy values red-side and sell values green-side in the table and row inspector", async () => {
     const user = userEvent.setup();
     render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);

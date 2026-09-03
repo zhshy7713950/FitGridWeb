@@ -53,6 +53,7 @@ const routes: Record<string, RouteModule> = {
 describe("OpenAPI route coverage", () => {
   afterEach(() => {
     delete process.env.APP_BASE_PATH;
+    delete process.env.BETTER_AUTH_URL;
     getRuntimeServices.mockReset();
     requireAdmin.mockReset();
   });
@@ -153,10 +154,11 @@ describe("OpenAPI route coverage", () => {
   });
 
   it.each([
-    [undefined, "https://fitgrid.example/invite/route-contract-token-000000000001"],
-    ["/fitgrid", "https://fitgrid.example/fitgrid/invite/route-contract-token-000000000001"],
-  ])("creates a public invitation URL beneath APP_BASE_PATH=%s", async (basePath, expected) => {
+    [undefined, "https://fitgrid.example", "https://fitgrid.example/invite/route-contract-token-000000000001"],
+    ["/fitgrid", "https://fitgrid.example/fitgrid", "https://fitgrid.example/fitgrid/invite/route-contract-token-000000000001"],
+  ])("creates a public invitation URL beneath APP_BASE_PATH=%s", async (basePath, publicUrl, expected) => {
     if (basePath) process.env.APP_BASE_PATH = basePath;
+    process.env.BETTER_AUTH_URL = publicUrl;
     requireAdmin.mockResolvedValue({ id: "admin-1" });
     getRuntimeServices.mockReturnValue({
       invitations: {
@@ -169,13 +171,13 @@ describe("OpenAPI route coverage", () => {
     });
 
     const response = await adminInvitations.POST(new Request(
-      "https://fitgrid.example/api/v1/admin/invitations?untrusted=/elsewhere",
+      "http://0.0.0.0:3000/api/v1/admin/invitations?untrusted=/elsewhere",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Host: "fitgrid.example",
-          Origin: "https://fitgrid.example",
+          Host: "0.0.0.0:3000",
+          Origin: "http://0.0.0.0:3000",
         },
         body: JSON.stringify({ expiresInHours: 24 }),
       },
@@ -184,4 +186,36 @@ describe("OpenAPI route coverage", () => {
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toMatchObject({ inviteUrl: expected });
   });
+
+  it.each([undefined, "", "not-a-url", "http://fitgrid.example/fitgrid"])(
+    "refuses BETTER_AUTH_URL=%s before persisting an invitation",
+    async (publicUrl) => {
+      if (publicUrl === undefined) delete process.env.BETTER_AUTH_URL;
+      else process.env.BETTER_AUTH_URL = publicUrl;
+      process.env.APP_BASE_PATH = "/fitgrid";
+      requireAdmin.mockResolvedValue({ id: `admin-invalid-url-${String(publicUrl)}` });
+      const create = vi.fn().mockResolvedValue({
+        id: "00000000-0000-4000-8000-000000000002",
+        token: "route-contract-token-000000000002",
+        expiresAt: "2026-09-03T00:00:00.000Z",
+      });
+      getRuntimeServices.mockReturnValue({ invitations: { create } });
+
+      const response = await adminInvitations.POST(new Request(
+        "http://0.0.0.0:3000/api/v1/admin/invitations",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Host: "0.0.0.0:3000",
+            Origin: "http://0.0.0.0:3000",
+          },
+          body: JSON.stringify({ expiresInHours: 24 }),
+        },
+      ));
+
+      expect(response.status).toBe(500);
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
 });

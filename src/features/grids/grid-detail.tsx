@@ -33,6 +33,12 @@ const gridTypeLabel: Record<GridItem["gridType"], string> = {
   3: "大网",
 };
 
+const gridTypeSize: Record<GridItem["gridType"], "small" | "medium" | "large"> = {
+  1: "small",
+  2: "medium",
+  3: "large",
+};
+
 const buyColumns = [
   { key: "buyPrice", label: "买入价格", side: "buy" },
   { key: "buyCount", label: "买入数量", side: "buy" },
@@ -484,6 +490,7 @@ export function GridDetailView({
                 <tr
                   key={`${item.sequence}-${item.gridType}`}
                   className={selected ? styles.selectedRow : undefined}
+                  data-grid-size={gridTypeSize[item.gridType]}
                   onClick={(event) => {
                     rowTriggerRef.current = event.currentTarget.querySelector("button");
                     setSelectedSequence(item.sequence);

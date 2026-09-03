@@ -199,6 +199,14 @@ sequenceDiagram
 6. 切换 DNS，确认新主机现有 nginx vhost 与 TLS 证书正常，并验证 `/fitgrid/api/v1/health`。
 7. 观察至少一个业务高峰。旧站保持只读 72 小时，确认无回滚需求后再按供应商流程销毁磁盘。
 
+迁移包必须包含以下三部分，并分别校验权限与完整性：
+
+- `ops/backup.sh` 生成的加密 PostgreSQL 逻辑备份、SHA-256 校验文件和元数据；禁止直接复制 Docker 数据卷替代 `pg_dump`/`pg_restore`。
+- `/etc/fitgridweb/fitgridweb.env`，其中数据库凭据可在新主机重新生成，但 `BETTER_AUTH_SECRET`、`OWNER_REF_SECRET` 和 `CURSOR_SIGNING_SECRET` 必须原值迁移。
+- `/etc/fitgridweb/backup.key`，通过与数据库备份分离的安全通道传输；没有该密钥无法解密备份。
+
+继续使用原域名且保留 `BETTER_AUTH_SECRET` 时，现有 Better Auth 数据库会话可随数据库迁移继续验证；更换域名时浏览器 Cookie 不会自动跨域迁移，用户需要重新登录。新主机验收前不得同时开放新旧两端写入。
+
 回滚时将 DNS 指回旧站并解除旧站维护模式；若新站已经接受写入，不能简单双向合并，必须先确定唯一权威时间线。
 
 ## 12. 运维安全清单
