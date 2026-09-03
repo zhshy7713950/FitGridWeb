@@ -127,6 +127,7 @@ describe("server image release workflow", () => {
       DATABASE_URL: databaseUrl,
       TEST_DATABASE_URL: databaseUrl,
     });
+    expect(verify.env?.CURSOR_SIGNING_SECRET).toMatch(/^[A-Za-z0-9_-]{32,}$/);
     expect(JSON.stringify(verify.env)).not.toContain("${{ secrets.");
 
     const commands = verify.steps?.flatMap((step) => step.run ? [step.run] : []) ?? [];
