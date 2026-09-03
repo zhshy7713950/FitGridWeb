@@ -84,7 +84,7 @@ validate_maintenance_path() {
   maintenance_path=$1
   maintenance_label=$2
   case $maintenance_path in
-    ""|/|*[!A-Za-z0-9_./-]*|*//*|*/./*|*/../*|*/.|*/..|*/)
+    ""|/|[!/]*|*[!A-Za-z0-9_./-]*|*//*|*/./*|*/../*|*/.|*/..|*/)
       fitgrid_error "$maintenance_label 不是安全的绝对路径"
       return 1
       ;;
@@ -186,6 +186,7 @@ install_maintenance_components() {
   validate_maintenance_path "$maintenance_web" ADMIN_OPS_WEB_DIR || return 1
   validate_maintenance_path "$maintenance_root" ADMIN_OPS_ROOT_DIR || return 1
   validate_maintenance_path "$maintenance_portable" PORTABLE_BACKUP_DIR || return 1
+  validate_maintenance_path "$maintenance_history" PORTABLE_BACKUP_HISTORY_FILE || return 1
   validate_portable_reader_gid "$maintenance_reader_gid" || return 1
   if maintenance_paths_overlap "$maintenance_web" "$maintenance_root" \
     || maintenance_paths_overlap "$maintenance_web" "$maintenance_portable" \

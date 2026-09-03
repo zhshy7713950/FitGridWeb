@@ -118,3 +118,56 @@ The restricted operations-suite run failed only the two pre-existing pseudo-TTY 
 ## Residual risks
 
 - Native `docker compose config` and systemd unit verification could not run because this macOS workspace has neither Docker nor systemd tooling. YAML structure, unit content, shell orchestration, permission handoff, and installation side effects are covered by automated tests; Ubuntu production-equivalent validation remains Task 7.
+
+## Fix Round 1 — absolute host paths
+
+The reviewer found that the shell path validators rejected unsafe characters and dot-segment normalization but did not require a leading `/`. As a result, clean relative values could survive environment generation and, for root/portable paths, reach host mutation. History containment sometimes rejected a relative value later, but under the wrong validation branch.
+
+Tests were added before production changes. Exact RED:
+
+```text
+pnpm test src/server/ops/install-common.test.ts -t 'relative maintenance path'
+Test Files  1 failed (1)
+Tests       1 failed | 13 skipped (14)
+
+pnpm test src/server/ops/install-host.test.ts -t relative
+Test Files  1 failed (1)
+Tests       4 failed | 10 skipped (14)
+```
+
+`safe_absolute_path_or_default` and `validate_maintenance_path` now explicitly reject any value whose first character is not `/`, in addition to their existing root, character, duplicate-separator, dot-segment, and trailing-slash checks. Direct maintenance installation now validates `PORTABLE_BACKUP_HISTORY_FILE` as an absolute canonical path before checking its exact containment under the web status directory. Valid absolute operator paths remain preserved by the existing upgrade regression.
+
+GREEN and full verification:
+
+```text
+pnpm test src/server/ops/install-common.test.ts -t 'relative maintenance path'
+Tests       1 passed | 13 skipped (14)
+
+pnpm test src/server/ops/install-host.test.ts -t relative
+Tests       4 passed | 10 skipped (14)
+
+pnpm test src/server/ops/config.test.ts src/server/ops/install-common.test.ts \
+  src/server/ops/install-host.test.ts
+Test Files  3 passed (3)
+Tests       54 passed (54)
+
+# Task 1–3 regression selection
+Test Files  8 passed (8)
+Tests       130 passed (130)
+
+pnpm test src/server/ops
+Test Files  10 passed (10)
+Tests       139 passed (139)
+
+pnpm test
+Test Files  65 passed | 2 skipped (67)
+Tests       623 passed | 3 skipped (626)
+
+pnpm typecheck  # exit 0
+pnpm lint       # exit 0
+sh -n ops/install-production.sh ops/lib/install-common.sh ops/lib/install-host.sh \
+  ops/lib/install-nginx.sh ops/lib/install-deploy.sh ops/lib/portable-backup.sh \
+  ops/lib/maintenance-jobs.sh ops/maintenance-worker.sh ops/backup.sh \
+  ops/backup-portable.sh  # exit 0
+git diff --check  # exit 0
+```

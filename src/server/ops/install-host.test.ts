@@ -225,6 +225,28 @@ describe("maintenance installation", () => {
     await expect(readFile(files.log, "utf8")).rejects.toThrow();
   });
 
+  it.each([
+    ["ADMIN_OPS_WEB_DIR", "relative/admin-ops/web"],
+    ["ADMIN_OPS_ROOT_DIR", "relative/admin-ops/root"],
+    ["PORTABLE_BACKUP_DIR", "relative/portable-backups"],
+    ["PORTABLE_BACKUP_HISTORY_FILE", "relative/admin-ops/web/status/backups.json"],
+  ])("rejects relative %s before any host mutation", async (key, relativePath) => {
+    const files = await maintenanceFixture();
+    const configured = await readFile(files.environment, "utf8");
+    await writeFile(
+      files.environment,
+      configured.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${relativePath}`),
+    );
+
+    const result = run(
+      `install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}"`,
+      files,
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`${key} 不是安全的绝对路径`);
+    await expect(readFile(files.log, "utf8")).rejects.toThrow();
+  });
+
   it("normalizes only regular portable archives for the app reader group on upgrade", async () => {
     const files = await maintenanceFixture();
     await mkdir(files.portable, { recursive: true });

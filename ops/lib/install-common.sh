@@ -244,7 +244,7 @@ safe_absolute_path_or_default() {
   default_value=$3
   value=$(environment_value "$key" "$file")
   case $value in
-    ""|/|*[!A-Za-z0-9_./-]*|*//*|*/./*|*/../*|*/.|*/..|*/)
+    ""|/|[!/]*|*[!A-Za-z0-9_./-]*|*//*|*/./*|*/../*|*/.|*/..|*/)
       value=$default_value
       ;;
   esac

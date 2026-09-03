@@ -230,6 +230,30 @@ describe("installer environment", () => {
     expect(upgraded).toContain("PORTABLE_BACKUP_READER_GID=2001");
   });
 
+  it("replaces every relative maintenance path with its safe absolute default", async () => {
+    const files = await fixture();
+    const command = `ensure_environment "${files.environment}" "${files.key}" grid.example.com 3300 443 2ca7f41000000000000000000000000000000000`;
+    expect(run(command, files).status).toBe(0);
+    const relative = (await readFile(files.environment, "utf8"))
+      .replace("ADMIN_OPS_WEB_DIR=/var/lib/fitgridweb/admin-ops/web", "ADMIN_OPS_WEB_DIR=var/lib/fitgridweb/admin-ops/web")
+      .replace("ADMIN_OPS_ROOT_DIR=/var/lib/fitgridweb/admin-ops/root", "ADMIN_OPS_ROOT_DIR=var/lib/fitgridweb/admin-ops/root")
+      .replace("PORTABLE_BACKUP_DIR=/var/lib/fitgridweb/portable-backups", "PORTABLE_BACKUP_DIR=var/lib/fitgridweb/portable-backups")
+      .replace(
+        "PORTABLE_BACKUP_HISTORY_FILE=/var/lib/fitgridweb/admin-ops/web/status/backups.json",
+        "PORTABLE_BACKUP_HISTORY_FILE=var/lib/fitgridweb/admin-ops/web/status/backups.json",
+      );
+    await writeFile(files.environment, relative);
+
+    expect(run(command, files).status).toBe(0);
+    const repaired = await readFile(files.environment, "utf8");
+    expect(repaired).toContain("ADMIN_OPS_WEB_DIR=/var/lib/fitgridweb/admin-ops/web");
+    expect(repaired).toContain("ADMIN_OPS_ROOT_DIR=/var/lib/fitgridweb/admin-ops/root");
+    expect(repaired).toContain("PORTABLE_BACKUP_DIR=/var/lib/fitgridweb/portable-backups");
+    expect(repaired).toContain("PORTABLE_BACKUP_HISTORY_FILE=/var/lib/fitgridweb/admin-ops/web/status/backups.json");
+    expect(repaired).not.toMatch(/^ADMIN_OPS_(?:WEB|ROOT)_DIR=var\//m);
+    expect(repaired).not.toMatch(/^PORTABLE_BACKUP_(?:DIR|HISTORY_FILE)=var\//m);
+  });
+
   it("replaces overlapping maintenance roots with isolated defaults", async () => {
     const files = await fixture();
     const command = `ensure_environment "${files.environment}" "${files.key}" grid.example.com 3300 443 2ca7f41000000000000000000000000000000000`;
