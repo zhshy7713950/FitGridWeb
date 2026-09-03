@@ -5,6 +5,7 @@ import { json, parseJsonBody } from "@/server/http/route-factory";
 import { reauthenticateAdmin } from "@/server/maintenance/admin-reauthentication";
 import {
   assertMaintenanceAvailable,
+  assertMaintenanceSameOrigin,
   maintenanceApiHandler,
   maintenanceNotFound,
 } from "@/server/maintenance/http";
@@ -23,6 +24,7 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
   return maintenanceApiHandler(request, async ({ requestId }) => {
     const services = getRuntimeServices();
     const admin = await requireAdmin(request.headers, services.auth);
+    assertMaintenanceSameOrigin(request);
     restoreConfirmationRequests.consume(admin.id);
     const body = bodySchema.parse(await parseJsonBody(request));
     const parsed = maintenanceUuidSchema.safeParse((await context.params).restoreId);

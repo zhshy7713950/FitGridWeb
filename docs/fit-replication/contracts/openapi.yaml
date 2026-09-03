@@ -381,8 +381,8 @@ paths:
         - name: X-FitGrid-Backup-Size
           in: header
           required: true
-          description: 声明的正文大小；应用仍会独立统计实际字节数
-          schema: {type: integer, minimum: 1, maximum: 536870912}
+          description: 声明的正文大小；部署通过 PORTABLE_BACKUP_MAX_BYTES 配置上限，默认 512 MiB，应用仍会独立统计实际字节数
+          schema: {type: integer, minimum: 1, default: 536870912}
       requestBody:
         required: true
         content:

@@ -1,7 +1,11 @@
 import { ApiError } from "@/server/http/api-error";
 import { requireAdmin } from "@/server/auth/session";
 import { json } from "@/server/http/route-factory";
-import { assertMaintenanceAvailable, maintenanceApiHandler } from "@/server/maintenance/http";
+import {
+  assertMaintenanceAvailable,
+  assertMaintenanceSameOrigin,
+  maintenanceApiHandler,
+} from "@/server/maintenance/http";
 import { portableBackupFilenameSchema } from "@/server/maintenance/types";
 import { getRuntimeServices } from "@/server/runtime/services";
 import { restoreInspectionRequests } from "@/server/security/request-protection";
@@ -54,6 +58,7 @@ export async function POST(request: Request): Promise<Response> {
   return maintenanceApiHandler(request, async ({ requestId }) => {
     const services = getRuntimeServices();
     const admin = await requireAdmin(request.headers, services.auth);
+    assertMaintenanceSameOrigin(request);
     restoreInspectionRequests.consume(admin.id);
 
     if (request.headers.get("content-type")?.toLowerCase() !== mediaType) {

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, open, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -85,6 +85,122 @@ describe("administrator backup download", () => {
       code: "BACKUP_NOT_FOUND",
       requestId: REQUEST_ID,
     });
+  });
+
+  it("returns 404 instead of 200 when the archive disappears after token consumption", async () => {
+    const files = await downloadFixture({
+      afterConsume: async (archive) => unlink(archive),
+    });
+    getRuntimeServices.mockReturnValue(files.services);
+
+    const response = await downloadRoute.GET(downloadRequest("issued-download-token"), params());
+    if (response.status === 200) await response.body?.cancel().catch(() => undefined);
+
+    expect(files.tokenService.consume).toHaveBeenCalledOnce();
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ code: "BACKUP_NOT_FOUND" });
+  });
+
+  it("refuses a symlink substituted after token consumption without reading its target", async () => {
+    const files = await downloadFixture({
+      afterConsume: async (archive, root) => {
+        const secret = path.join(root, "outside-secret");
+        await writeFile(secret, "do-not-download", { mode: 0o600 });
+        await unlink(archive);
+        await symlink(secret, archive);
+      },
+    });
+    getRuntimeServices.mockReturnValue(files.services);
+
+    const response = await downloadRoute.GET(downloadRequest("issued-download-token"), params());
+    if (response.status === 200) await response.body?.cancel().catch(() => undefined);
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ code: "BACKUP_NOT_FOUND" });
+  });
+
+  it("refuses a same-size regular file replacement after token consumption", async () => {
+    const files = await downloadFixture({
+      afterConsume: async (archive) => {
+        await unlink(archive);
+        await writeFile(archive, "replacement-file-content!", { mode: 0o600 });
+      },
+    });
+    getRuntimeServices.mockReturnValue(files.services);
+
+    const response = await downloadRoute.GET(downloadRequest("issued-download-token"), params());
+    if (response.status === 200) await response.body?.cancel().catch(() => undefined);
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ code: "BACKUP_NOT_FOUND" });
+  });
+
+  it("closes the already-open archive handle when the web response is cancelled", async () => {
+    const files = await downloadFixture();
+    getRuntimeServices.mockReturnValue(files.services);
+    const probe = await open(files.archivePath, "r");
+    const prototype = Object.getPrototypeOf(probe) as {
+      createReadStream: typeof probe.createReadStream;
+    };
+    await probe.close();
+    const originalCreateReadStream = prototype.createReadStream;
+    let closeStream: (() => void) | undefined;
+    const closed = new Promise<void>((resolve) => {
+      closeStream = resolve;
+    });
+    const createReadStream = vi.spyOn(prototype, "createReadStream").mockImplementation(function (
+      this: typeof probe,
+      options,
+    ) {
+      const stream = Reflect.apply(originalCreateReadStream, this, [options]);
+      stream.once("close", closeStream!);
+      return stream;
+    });
+
+    try {
+      const response = await downloadRoute.GET(downloadRequest("issued-download-token"), params());
+      expect(response.status).toBe(200);
+      expect(createReadStream).toHaveBeenCalledOnce();
+      await response.body?.cancel();
+      await closed;
+    } finally {
+      createReadStream.mockRestore();
+    }
+  });
+
+  it("closes the already-open archive handle when the file stream errors", async () => {
+    const files = await downloadFixture();
+    getRuntimeServices.mockReturnValue(files.services);
+    const probe = await open(files.archivePath, "r");
+    const prototype = Object.getPrototypeOf(probe) as {
+      createReadStream: typeof probe.createReadStream;
+    };
+    await probe.close();
+    const originalCreateReadStream = prototype.createReadStream;
+    let openedStream: ReturnType<typeof probe.createReadStream> | undefined;
+    let closeStream: (() => void) | undefined;
+    const closed = new Promise<void>((resolve) => {
+      closeStream = resolve;
+    });
+    const createReadStream = vi.spyOn(prototype, "createReadStream").mockImplementation(function (
+      this: typeof probe,
+      options,
+    ) {
+      openedStream = Reflect.apply(originalCreateReadStream, this, [options]);
+      openedStream.once("close", closeStream!);
+      return openedStream;
+    });
+
+    try {
+      const response = await downloadRoute.GET(downloadRequest("issued-download-token"), params());
+      expect(response.status).toBe(200);
+      const reading = response.arrayBuffer();
+      openedStream!.destroy(new Error("simulated archive read failure"));
+      await expect(reading).rejects.toThrow("simulated archive read failure");
+      await closed;
+    } finally {
+      createReadStream.mockRestore();
+    }
   });
 
   it("does not burn a token when rejecting a Range request", async () => {
@@ -175,16 +291,19 @@ async function downloadFixture({
   realTokens = false,
   maintenanceActive = false,
   getBackupFile,
+  afterConsume,
 }: {
   session?: unknown;
   realTokens?: boolean;
   maintenanceActive?: boolean;
   getBackupFile?: ReturnType<typeof vi.fn>;
+  afterConsume?: (archivePath: string, root: string) => Promise<void>;
 } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "fitgrid-route-download-"));
   roots.push(root);
   const archivePath = path.join(root, "fitgridweb-20260903T070000Z.fitgridbackup");
   await writeFile(archivePath, "encrypted-portable-backup", { mode: 0o600 });
+  const archiveInfo = await stat(archivePath);
   const consumed = new Set<string>();
   const actualTokenService = {
     issue: vi.fn(({ adminId, backupId }: { adminId: string; backupId: string }) =>
@@ -198,7 +317,7 @@ async function downloadFixture({
   };
   const tokenService = realTokens ? actualTokenService : {
     issue: vi.fn().mockReturnValue("issued-download-token"),
-    consume: vi.fn().mockResolvedValue(undefined),
+    consume: vi.fn(async () => afterConsume?.(archivePath, root)),
   };
   const getSession = vi.fn().mockResolvedValue(session);
   const file = {
@@ -208,9 +327,12 @@ async function downloadFixture({
     createdAt: "2026-09-03T07:00:00.000Z",
     size: 25,
     sha256: "a".repeat(64),
+    dev: archiveInfo.dev,
+    ino: archiveInfo.ino,
   };
   const resolvedGetBackupFile = getBackupFile ?? vi.fn().mockResolvedValue(file);
   return {
+    archivePath,
     getSession,
     getBackupFile: resolvedGetBackupFile,
     tokenService,

@@ -50,7 +50,9 @@ describe("/api/v1/admin/backups", () => {
     expect(services.auth.api.verifyPassword).not.toHaveBeenCalled();
   });
 
-  it("rejects cross-site creation before resolving runtime services", async () => {
+  it("authenticates before rejecting cross-site creation and never touches the spool", async () => {
+    const services = servicesFor();
+    getRuntimeServices.mockReturnValue(services);
     const response = await POST(backupRequest(undefined, { Origin: "https://evil.example" }));
 
     expect(response.status).toBe(403);
@@ -58,7 +60,9 @@ describe("/api/v1/admin/backups", () => {
       code: "CROSS_SITE_REQUEST",
       requestId: REQUEST_ID,
     });
-    expect(getRuntimeServices).not.toHaveBeenCalled();
+    expect(services.auth.api.getSession).toHaveBeenCalledOnce();
+    expect(services.maintenance.getMaintenanceMode).not.toHaveBeenCalled();
+    expect(services.maintenance.createBackup).not.toHaveBeenCalled();
   });
 
   it.each([

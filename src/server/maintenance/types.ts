@@ -73,6 +73,8 @@ export interface PortableBackupSummary {
 export interface PortableBackupFile extends PortableBackupSummary {
   name: string;
   path: string;
+  dev: number;
+  ino: number;
 }
 
 export interface MaintenanceMode {

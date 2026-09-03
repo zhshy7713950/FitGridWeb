@@ -557,15 +557,19 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
     };
   }
 
-  private async readableArchive(filename: string, expectedSize: number): Promise<boolean> {
+  private async archiveIdentity(
+    filename: string,
+    expectedSize: number,
+  ): Promise<{ dev: number; ino: number } | null> {
     const archive = path.join(this.configuration.portableBackupDirectory, filename);
     try {
       const info = await lstat(archive);
-      if (!info.isFile() || info.isSymbolicLink() || info.size !== expectedSize) return false;
+      if (!info.isFile() || info.isSymbolicLink() || info.size !== expectedSize) return null;
       const resolved = await realpath(archive);
-      return path.dirname(resolved) === path.resolve(this.configuration.portableBackupDirectory);
+      if (path.dirname(resolved) !== path.resolve(this.configuration.portableBackupDirectory)) return null;
+      return { dev: info.dev, ino: info.ino };
     } catch {
-      return false;
+      return null;
     }
   }
 
@@ -586,7 +590,7 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
     for (const entry of [...entries].sort((left, right) => right.createdAt.localeCompare(left.createdAt))) {
       if (entry.status !== "ready" || seen.has(entry.id)) continue;
       seen.add(entry.id);
-      if (!await this.readableArchive(entry.filename, entry.size)) continue;
+      if (!await this.archiveIdentity(entry.filename, entry.size)) continue;
       result.push({ id: entry.id, createdAt: entry.createdAt, size: entry.size, sha256: entry.sha256 });
       if (result.length === 5) break;
     }
@@ -596,7 +600,9 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
   async getBackupFile(backupId: string): Promise<PortableBackupFile> {
     const id = safeInput(portableBackupIdSchema, backupId);
     const entry = (await this.historyEntries()).find((candidate) => candidate.id === id && candidate.status === "ready");
-    if (!entry || !await this.readableArchive(entry.filename, entry.size)) throw notFound();
+    if (!entry) throw notFound();
+    const identity = await this.archiveIdentity(entry.filename, entry.size);
+    if (!identity) throw notFound();
     return {
       id: entry.id,
       name: entry.filename,
@@ -604,6 +610,7 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
       createdAt: entry.createdAt,
       size: entry.size,
       sha256: entry.sha256,
+      ...identity,
     };
   }
 }

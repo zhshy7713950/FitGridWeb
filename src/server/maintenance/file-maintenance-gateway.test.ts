@@ -589,6 +589,35 @@ describe("FileMaintenanceGateway", () => {
     ]);
   });
 
+  it("returns the validated archive identity for a post-token open check", async () => {
+    const files = await fixture();
+    const filename = "fitgridweb-20260903T070000Z.fitgridbackup";
+    const archive = path.join(files.portableBackupDirectory, filename);
+    await writeFile(archive, "portable-archive", { mode: 0o600 });
+    const info = await stat(archive);
+    await writeFile(files.portableBackupHistoryFile, JSON.stringify({
+      entries: [{
+        id: "backup-identity",
+        filename,
+        createdAt: "2026-09-03T07:00:00Z",
+        size: info.size,
+        sha256: "a".repeat(64),
+        status: "ready",
+      }],
+    }));
+
+    await expect(files.gateway.getBackupFile("backup-identity")).resolves.toEqual({
+      id: "backup-identity",
+      name: filename,
+      path: archive,
+      createdAt: "2026-09-03T07:00:00Z",
+      size: info.size,
+      sha256: "a".repeat(64),
+      dev: info.dev,
+      ino: info.ino,
+    });
+  });
+
   it("fails closed on malformed history instead of exposing disk contents", async () => {
     const files = await fixture();
     await writeFile(files.portableBackupHistoryFile, JSON.stringify({

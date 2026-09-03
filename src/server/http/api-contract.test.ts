@@ -142,6 +142,11 @@ describe("OpenAPI route coverage", () => {
       paths: Record<string, Record<string, {
         responses?: Record<string, { $ref?: string; headers?: Record<string, unknown> }>;
         requestBody?: { content?: Record<string, unknown> };
+        parameters?: Array<{
+          name?: string;
+          description?: string;
+          schema?: { default?: number; maximum?: number };
+        }>;
       }>>;
       components: { schemas: Record<string, { required?: string[]; enum?: string[] }> };
     };
@@ -158,6 +163,13 @@ describe("OpenAPI route coverage", () => {
     });
     expect(document.paths["/admin/restores/uploads"]?.post?.requestBody?.content)
       .toHaveProperty("application/vnd.fitgrid.backup");
+    const declaredSize = document.paths["/admin/restores/uploads"]?.post?.parameters
+      ?.find((parameter) => parameter.name === "X-FitGrid-Backup-Size");
+    expect(declaredSize).toMatchObject({
+      description: expect.stringContaining("部署"),
+      schema: { default: 536_870_912 },
+    });
+    expect(declaredSize?.schema?.maximum).toBeUndefined();
     expect(document.paths["/admin/restores/uploads"]?.post?.responses).toMatchObject({
       "413": expect.any(Object),
       "415": expect.any(Object),

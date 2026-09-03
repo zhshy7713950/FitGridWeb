@@ -3,7 +3,11 @@ import { z } from "zod";
 import { requireAdmin } from "@/server/auth/session";
 import { json, parseJsonBody } from "@/server/http/route-factory";
 import { reauthenticateAdmin } from "@/server/maintenance/admin-reauthentication";
-import { assertMaintenanceAvailable, maintenanceApiHandler } from "@/server/maintenance/http";
+import {
+  assertMaintenanceAvailable,
+  assertMaintenanceSameOrigin,
+  maintenanceApiHandler,
+} from "@/server/maintenance/http";
 import { getRuntimeServices } from "@/server/runtime/services";
 import { backupCreationRequests } from "@/server/security/request-protection";
 
@@ -32,6 +36,7 @@ export async function POST(request: Request): Promise<Response> {
   return maintenanceApiHandler(request, async ({ requestId }) => {
     const services = getRuntimeServices();
     const admin = await requireAdmin(request.headers, services.auth);
+    assertMaintenanceSameOrigin(request);
     backupCreationRequests.consume(admin.id);
     const body = bodySchema.parse(await parseJsonBody(request));
     assertMaintenanceAvailable(await services.maintenance.getMaintenanceMode());
@@ -48,6 +53,7 @@ export async function GET(request: Request): Promise<Response> {
   return maintenanceApiHandler(request, async ({ requestId }) => {
     const services = getRuntimeServices();
     await requireAdmin(request.headers, services.auth);
+    assertMaintenanceSameOrigin(request);
     assertMaintenanceAvailable(await services.maintenance.getMaintenanceMode());
     const items = (await services.maintenance.listBackups())
       .slice()
