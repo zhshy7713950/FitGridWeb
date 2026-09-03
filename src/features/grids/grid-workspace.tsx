@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type UIEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type MouseEvent, type UIEvent } from "react";
 
 import { ExportDialog } from "@/features/data-transfer/export-dialog";
 
@@ -48,6 +49,7 @@ export function GridWorkspaceView({
 }: {
   controller: GridTradeListController;
 }) {
+  const router = useRouter();
   const [showRefreshOverlay, setShowRefreshOverlay] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const refreshFeedback = useRef<Promise<void> | null>(null);
@@ -102,6 +104,17 @@ export function GridWorkspaceView({
     if (target.scrollHeight - target.scrollTop - target.clientHeight <= 240) {
       void controller.loadMore();
     }
+  }
+
+  function openProduct(event: MouseEvent<HTMLTableRowElement>, id: string) {
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest("a, button, input, select, textarea, [role='button']")
+    ) {
+      return;
+    }
+    router.push(`/grids/${id}`);
   }
 
   const hasQuery = controller.query.trim().length > 0;
@@ -231,7 +244,7 @@ export function GridWorkspaceView({
             </thead>
             <tbody>
               {controller.items.map((item) => (
-                <tr key={item.id}>
+                <tr key={item.id} onClick={(event) => openProduct(event, item.id)}>
                   <td className={styles.productName}>
                     <Link href={`/grids/${item.id}`}>{displayName(item)}</Link>
                   </td>

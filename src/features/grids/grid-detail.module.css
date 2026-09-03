@@ -6,6 +6,8 @@
   --detail-action: #2962FF;
   --detail-long: #22AB94;
   --detail-short: #F23645;
+  --detail-buy: #F23645;
+  --detail-sell: #22AB94;
   --detail-muted: color-mix(in srgb, var(--detail-text) 56%, transparent);
 
   min-width: 0;
@@ -225,6 +227,15 @@
   background: var(--detail-surface);
 }
 
+.pageStatusIndicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--detail-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
 .tableRegion {
   max-width: 100%;
   overflow: auto;
@@ -286,6 +297,29 @@
 
 .financialTable tbody tr:hover td {
   background: color-mix(in srgb, var(--detail-action) 5%, transparent);
+}
+
+.financialTable tbody tr {
+  cursor: pointer;
+}
+
+.financialTable tbody tr:focus-within td {
+  background: color-mix(in srgb, var(--detail-action) 8%, transparent);
+}
+
+.financialTable [data-trade-side="buy"],
+.inspectorValues [data-trade-side="buy"] {
+  color: var(--detail-buy);
+}
+
+.financialTable [data-trade-side="sell"],
+.inspectorValues [data-trade-side="sell"] {
+  color: var(--detail-sell);
+}
+
+.financialTable [data-trade-side] strong,
+.inspectorValues [data-trade-side] dt {
+  color: inherit;
 }
 
 .financialTable tbody tr.selectedRow td {

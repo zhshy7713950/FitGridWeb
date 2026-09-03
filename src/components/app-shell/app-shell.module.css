@@ -57,7 +57,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 14px;
-  padding: 0 18px;
+  padding: 0 18px 0 12px;
   border-bottom: 1px solid var(--line);
   color: var(--text);
   background: var(--surface);
@@ -68,6 +68,32 @@
   display: none;
   color: var(--text);
   font-weight: 750;
+}
+
+.backAction {
+  min-height: 32px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: transparent;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.backAction:hover {
+  border-color: var(--action);
+  background: color-mix(in srgb, var(--action) 8%, transparent);
+}
+
+.backAction:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
 }
 
 .username {
@@ -176,6 +202,12 @@
 
   .mobileBrand {
     display: inline;
+  }
+
+  .backAction {
+    min-height: 40px;
+    padding-inline: 8px;
+    font-size: 11px;
   }
 
   .connection {

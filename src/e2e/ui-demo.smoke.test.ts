@@ -321,7 +321,7 @@ describe.sequential("database-free UI demo", () => {
 
   it("retains the complete grid workflow at desktop and mobile breakpoints", async () => {
     const { page, consoleErrors } = await newPage();
-    await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle" });
     const ladder = await page.locator("svg").first().boundingBox();
     const heading = await page.getByRole("heading", { name: /让每一道网格\s*都有清晰依据/ }).boundingBox();
     expect(ladder).not.toBeNull();
@@ -395,12 +395,22 @@ describe.sequential("database-free UI demo", () => {
     await page.getByRole("button", { name: "刷新" }).click();
     await expect.poll(() => page.getByRole("status", { name: "正在刷新…" }).count()).toBe(1);
     await expect.poll(() => page.getByRole("status", { name: "正在刷新…" }).count()).toBe(0);
-    await page.getByRole("link", { name: "黄金 ETF" }).click();
+    await page.getByRole("cell", { name: "518880", exact: true }).click();
     await page.waitForURL(`${baseUrl}/grids/demo-grid-01`);
-    await page.getByRole("button", { name: "查看第 1 笔明细" }).click();
+    const mobileBackHref = await page.getByRole("link", { name: "返回网格产品" }).getAttribute("href");
+    expect(mobileBackHref).toBe(`${appBasePath}/grids`);
+    expectExactlyOneBasePrefix(new URL(mobileBackHref!, baseUrl).pathname);
+    const firstCalculationRow = page.getByRole("button", { name: "查看第 1 笔明细" }).locator("xpath=ancestor::tr");
+    expect(await firstCalculationRow.locator('[data-trade-side="buy"]').first().getAttribute("data-trade-side"))
+      .toBe("buy");
+    expect(await firstCalculationRow.locator('[data-trade-side="sell"]').first().getAttribute("data-trade-side"))
+      .toBe("sell");
+    await firstCalculationRow.locator('[data-trade-side="sell"]').first().click();
     const mobileInspector = page.getByRole("dialog", { name: "网格行明细" });
     expect(await mobileInspector.isVisible()).toBe(true);
     expect(await mobileInspector.textContent()).toContain("1 / 3");
+    expect(await mobileInspector.locator('[data-trade-side="buy"]').count()).toBeGreaterThan(0);
+    expect(await mobileInspector.locator('[data-trade-side="sell"]').count()).toBeGreaterThan(0);
     await page.getByRole("button", { name: "关闭" }).click();
     await expect.poll(() => mobileInspector.count()).toBe(0);
     await page.getByRole("link", { name: /网格产品 \/ 518880/ }).click();
@@ -425,6 +435,8 @@ describe.sequential("database-free UI demo", () => {
 
     await page.getByRole("link", { name: "新建产品" }).click();
     await page.waitForURL(`${baseUrl}/grids/new`);
+    expect(await page.getByRole("link", { name: "返回网格产品" }).getAttribute("href"))
+      .toBe(`${appBasePath}/grids`);
     await page.getByLabel("产品名称").fill("Smoke 新建产品");
     await page.getByLabel("产品代码").fill("SMOKE-NEW-01");
     await Promise.all([
@@ -437,6 +449,8 @@ describe.sequential("database-free UI demo", () => {
 
     await page.getByRole("link", { name: "编辑产品" }).click();
     await page.waitForURL(`${baseUrl}/grids/demo-grid-created-01/edit`);
+    expect(await page.getByRole("link", { name: "返回产品详情" }).getAttribute("href"))
+      .toBe(`${appBasePath}/grids/demo-grid-created-01`);
     await page.getByLabel("产品名称").fill("Smoke 编辑产品");
     await Promise.all([
       page.waitForURL(`${baseUrl}/grids/demo-grid-created-01`),
@@ -456,6 +470,11 @@ describe.sequential("database-free UI demo", () => {
 
     await page.getByRole("link", { name: "黄金 ETF" }).click();
     await page.waitForURL(`${baseUrl}/grids/demo-grid-01`);
+    const accountBarBox = await page.getByRole("banner").boundingBox();
+    const desktopBackBox = await page.getByRole("link", { name: "返回网格产品" }).boundingBox();
+    expect(accountBarBox).not.toBeNull();
+    expect(desktopBackBox).not.toBeNull();
+    expect(Math.round(desktopBackBox!.x - accountBarBox!.x)).toBe(12);
     await page.getByRole("button", { name: "查看第 1 笔明细" }).click();
     expect(await page.getByRole("dialog", { name: "网格行明细" }).isVisible()).toBe(true);
     await page.getByRole("button", { name: "关闭" }).click();

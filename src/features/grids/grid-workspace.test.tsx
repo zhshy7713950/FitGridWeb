@@ -5,6 +5,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
 import type { GridTradeListController } from "./use-grid-trades";
+
+const navigation = vi.hoisted(() => ({
+  push: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+
 import { GridWorkspaceView } from "./grid-workspace";
 
 const product = {
@@ -46,6 +53,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  navigation.push.mockReset();
   document.body.style.removeProperty("overflow");
 });
 
@@ -89,6 +97,16 @@ it("links each product name to its stable detail route and offers all account ac
   );
   await userEvent.click(screen.getByRole("button", { name: "数据备份" }));
   expect(screen.getByRole("dialog", { name: "数据备份" })).toBeInTheDocument();
+});
+
+it("opens a product detail when a non-link cell in its row is clicked", async () => {
+  const user = userEvent.setup();
+  render(<GridWorkspaceView controller={controller()} />);
+
+  await user.click(screen.getByText("518880"));
+
+  expect(navigation.push).toHaveBeenCalledTimes(1);
+  expect(navigation.push).toHaveBeenCalledWith(`/grids/${product.id}`);
 });
 
 it("passes app-relative import hrefs to Next Link even when a base path is configured", () => {

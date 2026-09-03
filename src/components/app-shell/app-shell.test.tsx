@@ -139,4 +139,36 @@ describe("AppShell", () => {
 
     expect(screen.queryByRole("link", { current: "page" })).not.toBeInTheDocument();
   });
+
+  it.each([
+    ["/grids/grid-1", "返回网格产品", "/grids"],
+    ["/grids/new", "返回网格产品", "/grids"],
+    ["/grids/import", "返回网格产品", "/grids"],
+    ["/grids/grid-1/edit", "返回产品详情", "/grids/grid-1"],
+  ])("shows the hierarchical back link at %s", (pathname, label, href) => {
+    usePathname.mockReturnValue(pathname);
+
+    render(
+      <AppShell user={{ id: "u1", username: "admin", role: "admin", status: "active" }}>
+        <h1>当前页面</h1>
+      </AppShell>,
+    );
+
+    expect(screen.getByRole("link", { name: label })).toHaveAttribute("href", href);
+  });
+
+  it.each(["/grids", "/settings/security", "/admin"])(
+    "does not show a hierarchical back link on the primary page %s",
+    (pathname) => {
+      usePathname.mockReturnValue(pathname);
+
+      render(
+        <AppShell user={{ id: "u1", username: "admin", role: "admin", status: "active" }}>
+          <h1>当前页面</h1>
+        </AppShell>,
+      );
+
+      expect(screen.queryByRole("link", { name: /^返回/ })).not.toBeInTheDocument();
+    },
+  );
 });
