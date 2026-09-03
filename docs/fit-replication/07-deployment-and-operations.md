@@ -69,7 +69,17 @@ flowchart TB
 | `MIGRATION_DATABASE_URL` | 迁移连接 | 权限高于运行账号，单独保护 |
 | `BETTER_AUTH_SECRET` | 会话签名/加密秘密 | 至少 32 随机字节 |
 | `OWNER_REF_SECRET` | 用户备份 ownerRef HMAC | 与认证秘密分离 |
+| `CURSOR_SIGNING_SECRET` | 分页游标签名 | 与其他应用秘密分别保管；安装器生成独立值 |
+| `BACKUP_DIR` | server-key 备份本机目录 | 默认 `/var/lib/fitgridweb/backups` |
+| `BACKUP_REMOTE_DIR` | 无人值守备份异机目标 | 首次为空；必须是与根设备不同的真实挂载 |
 | `BACKUP_ENCRYPTION_KEY_FILE` | 备份加密密钥路径 | 主机 root 可读，不放环境值或 Git |
+| `BACKUP_RETENTION_DAYS` | server-key 本机保留天数 | 默认 180；不控制远端保留 |
+| `ADMIN_OPS_WEB_DIR` | app/worker 交换区 | 默认 `/var/lib/fitgridweb/admin-ops/web` |
+| `ADMIN_OPS_ROOT_DIR` | worker 权威状态 | 默认 `/var/lib/fitgridweb/admin-ops/root`，不得挂入 app |
+| `PORTABLE_BACKUP_DIR` | 最近便携备份 | 默认 `/var/lib/fitgridweb/portable-backups`，app 只读 |
+| `PORTABLE_BACKUP_HISTORY_FILE` | 网页/CLI 共用历史 | 必须是 web status 下的 `backups.json` |
+| `PORTABLE_BACKUP_MAX_BYTES` | 上传及展开上限 | 默认 536870912 字节（512 MiB） |
+| `PORTABLE_BACKUP_READER_GID` | app 读取已发布备份的补充组 | 默认非 root 数字 GID 1001 |
 | `LOG_LEVEL` | 日志级别 | 生产默认 `info` |
 
 更换 `BETTER_AUTH_SECRET` 会使既有会话失效；更换 `OWNER_REF_SECRET` 会改变未来导出的匿名 ownerRef。轮换前必须记录影响。
@@ -134,80 +144,55 @@ journalctl -u fitgridweb --since=-10m
 - 恢复数据库会丢弃备份时间点后的写入，必须由运维负责人明确确认恢复点。
 - 回滚完成后重新跑隔离与算法冒烟测试。
 
-## 9. 备份策略
+## 9. 完整备份策略与权限边界
 
-用户 JSON 导出是个人可迁移文件，不替代灾难恢复备份。生产备份覆盖认证、会话、邀请、产品和迁移元数据。
+用户 JSON 导出是单账号迁移文件，不替代完整灾难恢复。完整备份覆盖 Better Auth 用户/密码哈希/会话、角色与状态、邀请、网格产品、导入预检、schema、RLS 和 Prisma 迁移记录；不包含 nginx、TLS 私钥、系统日志、Docker 镜像、`fitgridweb.env`、VPS 凭据或应用秘密。
 
-### 备份内容与格式
+实现提供两条不同路径：
 
-- 每日使用与 PostgreSQL 主版本匹配的 `pg_dump --format=custom`。
-- 文件名含 UTC 时间、数据库名和应用版本，不含用户名或其他个人信息。
-- 同时生成 SHA-256 校验文件和一份不含秘密的元数据文件。
-- 备份在离开主机前加密；至少保留一份不同故障域的副本。
-- 备份目录、加密密钥和远端凭据仅 root 可读。
+- 便携路径：管理员页面或 root TTY 运行 `sudo /opt/fitgridweb/ops/backup-portable.sh`，使用独立 12–128 字符 passphrase 的 age 文件 `fitgridweb-YYYYMMDDTHHMMSSZ.fitgridbackup`。明文 tar 只含 `manifest.json`、`database.dump`、`database.dump.sha256`。文件通过 dump 可读性、内部 checksum、加密后解密复检和 reader 权限发布后，才加入 `/var/lib/fitgridweb/portable-backups` 与共享网页历史；成功历史最多 5 条。
+- 无人值守路径：`/opt/fitgridweb/ops/backup.sh` 使用 root-only `/etc/fitgridweb/backup.key` 做 AES-256-CBC/PBKDF2 加密，生成 `.dump.enc`、`.dump.enc.sha256`、`.json` 并复制到真实 `BACKUP_REMOTE_DIR`。timer 每天 02:30、persistent、最多随机延迟 10 分钟。该路径不写网页历史，也不受 5 份限制；本机默认 180 天清理只发生在远端复制及远端 checksum 成功之后，远端保留由存储侧负责。
 
-建议保留策略：7 个每日、4 个每周、6 个月度备份。主机每日 02:30 执行 `ops/backup.sh`，失败必须通知管理员；清理旧备份只在新备份生成、校验并完成异机复制后进行。
+应用容器只获得 UID/GID 1001 的 web spool 可写挂载和便携目录只读挂载；没有 Docker socket、migration URL、服务器环境文件、backup key 或 root 状态树。`fitgridweb-maintenance.path` 监视固定 inbox，root oneshot worker 串行处理固定 schema 的 `backup`、`inspect-restore`、`restore`，审计写入 `/var/lib/fitgridweb/admin-ops/root/audit.jsonl` 并由 logrotate 保存 180 个 daily rotation。
 
-### 每次备份的成功条件
+真实异机 timer 只应在 `BACKUP_REMOTE_DIR` 为安全绝对路径、非 `/`、现有非 symlink 可写目录、`realpath` 成功且 `findmnt` 设备不同于 `/` 时启用。安装器首次默认禁用；挂载后来失效时 unit 不会自动识别，必须监控并立即 `systemctl disable --now fitgridweb-backup.timer`。完整配置、checksum 和 enable/disable 命令见 [2 GiB 手册](low-memory-vps-runbook.md#配置真正的异机定时备份)。
 
-1. `pg_dump` 退出码为 0。
-2. 文件非空且 `pg_restore --list` 可读取。
-3. SHA-256 校验成功。
-4. 加密副本成功写入异机位置。
-5. 日志只记录文件标识、大小、耗时和结果，不记录内容或秘密。
+固定检查命令：
 
-## 10. 恢复演练
-
-至少每季度在隔离环境执行一次，恢复不是只验证“备份文件存在”。
-
-1. 新建空 PostgreSQL 实例，版本与生产兼容。
-2. 验证校验和，解密到权限受限的临时目录。
-3. 使用 `pg_restore --clean --if-exists` 仅针对演练数据库恢复。
-4. 启动与备份版本匹配的应用，再按升级流程迁移到目标版本。
-5. 校验用户数、每用户产品数、唯一约束、RLS 策略和迁移版本。
-6. 用 A/B 账号执行跨账号 404、同代码共存、搜索和导出隔离测试。
-7. 抽样重算产品并对照 `android-v2.1.0` 黄金结果。
-8. 记录恢复点、RPO、RTO、校验结果和操作者；演练库随后安全销毁。
-
-恢复脚本必须要求显式目标数据库，拒绝空值、`postgres` 默认维护库和当前生产连接，避免误覆盖。
-
-## 11. 更换 VPS
-
-```mermaid
-sequenceDiagram
-    participant O as 运维人员
-    participant Old as 旧 VPS
-    participant New as 新 VPS
-    participant DNS as DNS
-    O->>DNS: 提前降低 TTL
-    O->>New: 安装 Docker、部署同版应用
-    O->>Old: 开启维护模式并完成最终备份
-    Old->>New: 加密传输备份与校验文件
-    O->>New: 恢复、迁移、隔离与算法验收
-    O->>DNS: 切换 A/AAAA
-    O->>New: 监控 HTTPS、错误率与写入
-    O->>Old: 保持只读至少 72 小时
+```bash
+systemctl status fitgridweb-maintenance.path --no-pager
+systemctl status fitgridweb-backup.timer --no-pager
+journalctl -u fitgridweb-maintenance.service --since today --no-pager
+journalctl -u fitgridweb-backup.service --since today --no-pager
 ```
 
-迁移步骤：
+## 10. 网页整库恢复与故障模型
 
-1. 至少提前一个 TTL 周期降低 DNS TTL，记录旧服务器应用 SHA、数据库版本和迁移版本。
-2. 在新 VPS 部署相同应用版本但不对公网提供写入。
-3. 旧站进入维护模式，等待在途写请求结束后执行最终完整备份。
-4. 通过加密通道传输备份；环境变量和密钥单独安全传递，不打包进仓库。
-5. 在新站恢复并运行必要迁移，执行健康、账号隔离、算法、导入导出验收。
-6. 切换 DNS，确认新主机现有 nginx vhost 与 TLS 证书正常，并验证 `/fitgrid/api/v1/health`。
-7. 观察至少一个业务高峰。旧站保持只读 72 小时，确认无回滚需求后再按供应商流程销毁磁盘。
+管理员在 `/fitgrid/admin` 的“数据保险库”完成：当前密码重新验证并创建便携备份 → 最近 5 份中申请 60 秒、单次、绑定管理员/备份的下载 → 上传 `.fitgridbackup` 与独立密码 → 隔离预检 → 在固定 10 分钟挑战内再次输入当前密码和准确短语 `恢复全部数据`。预检成功只公开备份时间、PostgreSQL 主版本、数据库和四项计数；manifest 内的 app image 与浏览器文件大小不作为公开服务器证明。
 
-迁移包必须包含以下三部分，并分别校验权限与完整性：
+恢复执行顺序固定为：重新验证准备 dump 摘要/可读性 → 创建、加密、解密复检恢复前快照 → root 权威维护标记 → 停 `app` → 终止运行角色连接 → `pg_restore --clean --if-exists --no-owner --exit-on-error --single-transaction` → Prisma migration → 删除全部 `sessions` → 启动 `app` → 回环及公网健康。成功后所有用户重新登录，且触发恢复的临时管理员可能已不存在。
 
-- `ops/backup.sh` 生成的加密 PostgreSQL 逻辑备份、SHA-256 校验文件和元数据；禁止直接复制 Docker 数据卷替代 `pg_dump`/`pg_restore`。
-- `/etc/fitgridweb/fitgridweb.env`，其中数据库凭据可在新主机重新生成，但 `BETTER_AUTH_SECRET`、`OWNER_REF_SECRET` 和 `CURSOR_SIGNING_SECRET` 必须原值迁移。
-- `/etc/fitgridweb/backup.key`，通过与数据库备份分离的安全通道传输；没有该密钥无法解密备份。
+任一步失败只自动回滚一次。回滚成功仍报告原 restore `failed/RESTORE_FAILED` 与 `rolledBack=true`；回滚失败、中断或关键状态发布失败进入 `intervention-required`。权威 `/var/lib/fitgridweb/admin-ops/root/maintenance.json` 保持 active，重启不会自动继续。保留目录 `/var/lib/fitgridweb/admin-ops/root/intervention/{jobId}` 含 identifier-only `job.json`，若快照已生成还含 server-key 加密的 `rollback.dump.enc`；密码、上传和明文不会作为恢复材料保留。
 
-继续使用原域名且保留 `BETTER_AUTH_SECRET` 时，现有 Better Auth 数据库会话可随数据库迁移继续验证；更换域名时浏览器 Cookie 不会自动跨域迁移，用户需要重新登录。新主机验收前不得同时开放新旧两端写入。
+没有通用安全的原地解除 intervention 命令。操作员应保留 job/request ID，读取 unit 状态、journal、root marker、公开 job status 和 intervention 文件权限；不得编辑 marker、删除 evidence、随意 chmod/chown、重复恢复或直接把加密文件交给 `pg_restore`。无法证明故障主机的唯一权威状态时，在新隔离主机从最后已验证备份恢复并验收。精确诊断命令和警告见 [2 GiB 手册](low-memory-vps-runbook.md#恢复失败自动回滚和人工介入)。
 
-回滚时将 DNS 指回旧站并解除旧站维护模式；若新站已经接受写入，不能简单双向合并，必须先确定唯一权威时间线。
+当前 worker 公网健康探针固定访问 `https://$DOMAIN/fitgrid/api/v1/health`，因此自动生产恢复要求该地址在 443 可达；仅使用非标准 HTTPS 端口的部署在修复并重验探针前不得执行网页生产恢复。
+
+## 11. 季度演练与 VPS 更换
+
+至少每季度在独立、可销毁且不共享生产 project/volume/env/port/mount/DNS 的环境执行真实恢复。仓库脚本固定 Compose project 名 `fitgridweb`，所以不能靠外层传一个 `fitgridweb-drill` 名称在生产 Docker 主机上隔离；脚本级演练应使用没有既有 FitGrid 资源的独立 VM/VPS。演练必须记录真实备份恢复点、最后包含写入、确认/完成时间、实测 RPO/RTO、实际 image digest/PostgreSQL `version()`、外层 checksum、恢复前后计数、session 清除、A/B RLS/404、Android v2.1.0 重算、健康、2 GiB 内存和准确销毁清单。没有测量就标“未测量”，不能把配置值或单元测试冒充生产结果。
+
+更换 VPS 的强制顺序是：
+
+1. 提前降低 DNS TTL，记录并评审旧站完整 SHA、镜像、PostgreSQL/迁移版本和恢复点；冻结写入，创建最终 portable backup，下载并核对外层 SHA-256，密码分渠道传递。
+2. 新 VPS 安装完全相同 reviewed SHA 和对应 GHCR SHA image，在空库创建临时管理员；DNS 暂不切换。
+3. 通过 TLS 有效的受控运维访问登录新站，上传、预检 portable backup 并核对时间、PostgreSQL 主版本、数据库及四项计数，再精确确认整库恢复。
+4. 恢复后用备份中原有管理员登录；临时管理员被整库替换且所有 session 已清除。
+5. 需要连续性时，`BETTER_AUTH_SECRET`、`OWNER_REF_SECRET`、`CURSOR_SIGNING_SECRET` 通过与备份不同的安全通道分别迁移；不要覆盖新主机数据库凭据/路径/key。重启并再次登录验证。
+6. 验证回环/公网健康、管理员、A/B 隔离、已知 grids、Android v2.1.0 重算、导入导出、maintenance path、真实 off-host backup/checksum，之后才切换 DNS。
+7. 旧 VPS 至少 72 小时不再接受写入并保留原磁盘/卷。仓库没有通用只读切换脚本；没有经审核的代理只读规则时，应停旧应用而不是让双写发生。若新站已接受写入，回退前先选定唯一权威时间线，不能自动双向合并。
+
+便携恢复不需要旧 `backup.key`；恢复 `backup.sh` 历史则必须另行迁移对应 key。禁止直接复制 Docker volume 替代逻辑备份/恢复。完整逐步流程与记录模板见 [2 GiB 手册](low-memory-vps-runbook.md#完整更换-vps)。
 
 ## 12. 运维安全清单
 
