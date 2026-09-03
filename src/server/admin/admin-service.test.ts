@@ -230,6 +230,35 @@ describe("PrismaAdminRepository", () => {
     expect(transaction).toHaveBeenCalledTimes(3);
   });
 
+  it("retries a PostgreSQL adapter TransactionWriteConflict", async () => {
+    const tx = {
+      user: {
+        findUnique: vi.fn(async () => managedDatabaseUser()),
+        count: vi.fn(async () => 2),
+        update: vi.fn(async () => managedDatabaseUser({ status: "disabled" })),
+      },
+      session: { deleteMany: vi.fn(async () => ({ count: 1 })) },
+    };
+    const conflict = Object.assign(new Error("TransactionWriteConflict"), {
+      name: "DriverAdapterError",
+      cause: {
+        kind: "TransactionWriteConflict",
+        originalCode: "40001",
+        originalMessage: "could not serialize access due to read/write dependencies among transactions",
+      },
+    });
+    const transaction = vi
+      .fn()
+      .mockRejectedValueOnce(conflict)
+      .mockImplementation(async (callback: (client: typeof tx) => unknown) => callback(tx));
+    const repository = new PrismaAdminRepository({ $transaction: transaction } as unknown as PrismaClient);
+
+    await expect(repository.updateStatusAtomically("member", "disabled")).resolves.toMatchObject({
+      kind: "updated",
+    });
+    expect(transaction).toHaveBeenCalledTimes(2);
+  });
+
   it("stops retrying after three P2034 conflicts", async () => {
     const conflict = Object.assign(new Error("write conflict"), { code: "P2034" });
     const transaction = vi.fn(async () => {

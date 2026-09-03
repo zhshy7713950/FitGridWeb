@@ -51,6 +51,18 @@ function response(user: ManagedUser) {
   };
 }
 
+function isSerializableConflict(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  if ("code" in error && error.code === "P2034") return true;
+  if (!("cause" in error) || typeof error.cause !== "object" || error.cause === null) {
+    return false;
+  }
+  return "kind" in error.cause
+    && error.cause.kind === "TransactionWriteConflict"
+    && "originalCode" in error.cause
+    && error.cause.originalCode === "40001";
+}
+
 export class AdminService {
   constructor(
     private readonly repository: AdminRepository,
@@ -147,9 +159,7 @@ export class PrismaAdminRepository implements AdminRepository {
           { isolationLevel: "Serializable" },
         );
       } catch (error) {
-        const isSerializableConflict =
-          typeof error === "object" && error !== null && "code" in error && error.code === "P2034";
-        if (!isSerializableConflict || attempt === maxAttempts) throw error;
+        if (!isSerializableConflict(error) || attempt === maxAttempts) throw error;
       }
     }
     throw new Error("unreachable serializable transaction retry state");

@@ -37,6 +37,7 @@ jobs:
       NEXT_BASE_PATH: /fitgrid
       DATABASE_URL: postgresql://fitgrid_ci:fitgrid_ci_local@localhost:5432/fitgridweb_test
       TEST_DATABASE_URL: postgresql://fitgrid_ci:fitgrid_ci_local@localhost:5432/fitgridweb_test
+      CURSOR_SIGNING_SECRET: fitgrid-ci-cursor-signing-secret-2026
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
