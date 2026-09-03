@@ -3,11 +3,9 @@ import { constants } from "node:fs";
 import {
   lstat,
   link,
-  mkdir,
   open,
   readdir,
   realpath,
-  rmdir,
   unlink,
 } from "node:fs/promises";
 import path from "node:path";
@@ -16,6 +14,12 @@ import { z } from "zod";
 
 import { ApiError } from "@/server/http/api-error";
 
+import { readBoundedUtf8 } from "./bounded-file";
+import {
+  acquireKernelLock,
+  KernelLockBusyError,
+  type KernelLockEndpoint,
+} from "./kernel-lock";
 import {
   type ConfirmRestoreInput,
   type CreateBackupInput,
@@ -98,6 +102,30 @@ const admissionSchema = z.strictObject({
   jobId: maintenanceUuidSchema,
   createdAt: isoDateSchema,
 });
+const publishedJobSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    schemaVersion: z.literal(1),
+    id: maintenanceUuidSchema,
+    type: z.literal("backup"),
+    actorId: maintenanceUuidSchema,
+    requestId: maintenanceRequestIdSchema,
+  }),
+  z.strictObject({
+    schemaVersion: z.literal(1),
+    id: maintenanceUuidSchema,
+    type: z.literal("inspect-restore"),
+    actorId: maintenanceUuidSchema,
+    requestId: maintenanceRequestIdSchema,
+  }),
+  z.strictObject({
+    schemaVersion: z.literal(1),
+    id: maintenanceUuidSchema,
+    type: z.literal("restore"),
+    actorId: maintenanceUuidSchema,
+    requestId: maintenanceRequestIdSchema,
+    restoreId: maintenanceUuidSchema,
+  }),
+]);
 
 const historyEntrySchema = z.strictObject({
   id: portableBackupIdSchema,
@@ -118,6 +146,7 @@ export interface FileMaintenanceGatewayConfiguration {
   maxUploadBytes: number;
   idGenerator?: () => string;
   clock?: () => number;
+  submissionLockEndpoint?: KernelLockEndpoint;
 }
 
 function stateInvalid(): ApiError {
@@ -165,9 +194,10 @@ async function readValidatedJson<T>(
   let handle;
   try {
     handle = await open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const maxBytes = options.maxBytes ?? 256 * 1024;
     const info = await handle.stat();
-    if (!info.isFile() || info.size > (options.maxBytes ?? 256 * 1024)) throw stateInvalid();
-    const text = await handle.readFile({ encoding: "utf8" });
+    if (!info.isFile() || info.size > maxBytes) throw stateInvalid();
+    const text = await readBoundedUtf8(handle, maxBytes);
     return schema.parse(JSON.parse(text));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -205,17 +235,31 @@ async function syncDirectory(directory: string): Promise<void> {
   }
 }
 
-async function publishJsonNoReplace(directory: string, name: string, value: unknown): Promise<void> {
+async function publishJsonNoReplace<T>(
+  directory: string,
+  name: string,
+  value: T,
+  schema: z.ZodType<T>,
+): Promise<void> {
   const temporary = path.join(directory, `.${name}.${randomUUID()}.tmp`);
   const target = path.join(directory, name);
-  let targetPublished = false;
+  const validated = schema.parse(value);
+  let linked = false;
   try {
-    await writeExclusive(temporary, `${JSON.stringify(value)}\n`);
+    await writeExclusive(temporary, `${JSON.stringify(validated)}\n`);
     await link(temporary, target);
-    targetPublished = true;
-    await syncDirectory(directory);
+    linked = true;
+    try {
+      await syncDirectory(directory);
+    } catch {
+      // link(2) is the publication boundary. The worker may already have claimed
+      // the target, so a later fsync failure is ambiguous and must be accepted.
+      // Re-read only the fixed-schema target when it is still visible; regardless
+      // of the result, never turn a potentially accepted submission into a retry.
+      await readValidatedJson(target, schema, { missing: "null" }).catch(() => null);
+    }
   } catch (error) {
-    if (targetPublished) await unlink(target).catch(() => undefined);
+    if (linked) return;
     throw error;
   } finally {
     await unlink(temporary).catch(() => undefined);
@@ -233,7 +277,6 @@ function publicStatus(status: DiskStatus): MaintenanceJobStatus {
     ...(status.rolledBack !== undefined ? { rolledBack: status.rolledBack } : {}),
     ...(status.expiresAt !== undefined ? { expiresAt: status.expiresAt } : {}),
     ...(status.backupCreatedAt ? { backupCreatedAt: status.backupCreatedAt } : {}),
-    ...(status.appImage ? { appImage: status.appImage } : {}),
     ...(status.postgresMajor !== undefined ? { postgresMajor: status.postgresMajor } : {}),
     ...(status.database ? { database: status.database } : {}),
     ...(status.preview ? { preview: status.preview } : {}),
@@ -280,14 +323,16 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
   }
 
   private async acquireSubmissionLock(): Promise<() => Promise<void>> {
-    const lockDirectory = path.join(this.inbox, ".submission-lock");
     try {
-      await mkdir(lockDirectory, { mode: 0o700 });
+      return await acquireKernelLock(
+        this.configuration.adminOpsDirectory,
+        "maintenance-submit",
+        this.configuration.submissionLockEndpoint,
+      );
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") throw busy();
+      if (error instanceof KernelLockBusyError) throw busy();
       throw stateInvalid();
     }
-    return () => rmdir(lockDirectory).catch(() => undefined);
   }
 
   private async assertIdle(): Promise<void> {
@@ -335,9 +380,9 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
         schemaVersion: 1,
         jobId: job.id,
         createdAt: new Date(this.clock()).toISOString(),
-      });
+      }, admissionSchema);
       admissionPublished = true;
-      await publishJsonNoReplace(this.inbox, `${job.id}.json`, job);
+      await publishJsonNoReplace(this.inbox, `${job.id}.json`, job, publishedJobSchema);
     } catch (error) {
       await Promise.all([
         ...cleanup,

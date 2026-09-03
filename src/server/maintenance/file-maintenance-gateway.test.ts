@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
 import {
+  appendFile,
   lstat,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   readdir,
   realpath,
@@ -14,7 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FileMaintenanceGateway } from "./file-maintenance-gateway";
 
@@ -29,7 +32,10 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-async function fixture(ids: string[] = [JOB_A, JOB_B]) {
+async function fixture(
+  ids: string[] = [JOB_A, JOB_B],
+  overrides: Record<string, unknown> = {},
+) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "fitgrid-gateway-")));
   roots.push(root);
   const adminOpsDirectory = path.join(root, "admin-ops");
@@ -49,6 +55,7 @@ async function fixture(ids: string[] = [JOB_A, JOB_B]) {
     portableBackupHistoryFile,
     maxUploadBytes: 128,
     idGenerator: () => ids[index++] ?? randomUUID(),
+    ...overrides,
   });
 
   return {
@@ -84,6 +91,85 @@ async function fixture(ids: string[] = [JOB_A, JOB_B]) {
 }
 
 describe("FileMaintenanceGateway", () => {
+  it("accepts a linked job when directory fsync fails after the worker claims its visible target", async () => {
+    const files = await fixture();
+    const probe = await open(files.adminOpsDirectory, "r");
+    const prototype = Object.getPrototypeOf(probe) as { sync: () => Promise<void>; stat: () => Promise<Awaited<ReturnType<typeof probe.stat>>> };
+    await probe.close();
+    const originalSync = prototype.sync;
+    let directorySyncs = 0;
+    const sync = vi.spyOn(prototype, "sync").mockImplementation(async function (this: typeof prototype) {
+      const info = await this.stat();
+      if (info.isDirectory() && ++directorySyncs === 2) {
+        await rm(path.join(files.adminOpsDirectory, "inbox", `${JOB_A}.json`));
+        throw new Error("simulated inbox directory fsync failure");
+      }
+      return Reflect.apply(originalSync, this, []);
+    });
+
+    try {
+      await expect(files.gateway.createBackup({
+        actorId: ADMIN_ID,
+        requestId: "claimed-before-fsync",
+        passphrase: "abcdefghijkl",
+      })).resolves.toEqual({
+        id: JOB_A,
+        type: "backup",
+        state: "queued",
+        requestId: "claimed-before-fsync",
+      });
+      expect(await readFile(path.join(files.adminOpsDirectory, "inbox", `${JOB_A}.secret`), "utf8"))
+        .toBe("abcdefghijkl");
+      expect(JSON.parse(await readFile(
+        path.join(files.adminOpsDirectory, "status", "active-job.json"),
+        "utf8",
+      ))).toMatchObject({ jobId: JOB_A });
+    } finally {
+      sync.mockRestore();
+    }
+  });
+
+  it("uses a crash-released kernel lock and never steals a live holder", async () => {
+    const portProbe = await import("node:net").then(({ createServer }) => createServer());
+    const port = await new Promise<number>((resolve, reject) => {
+      portProbe.once("error", reject);
+      portProbe.listen(0, "127.0.0.1", () => {
+        const address = portProbe.address();
+        if (!address || typeof address === "string") reject(new Error("missing test port"));
+        else resolve(address.port);
+      });
+    });
+    await new Promise<void>((resolve) => portProbe.close(() => resolve()));
+    const child = spawn(process.execPath, [
+      "-e",
+      `require("node:net").createServer().listen(${port},"127.0.0.1",()=>process.stdout.write("ready\\n"))`,
+    ], { stdio: ["ignore", "pipe", "inherit"] });
+    await new Promise<void>((resolve, reject) => {
+      child.once("error", reject);
+      child.stdout.once("data", () => resolve());
+    });
+    const files = await fixture([JOB_A], {
+      submissionLockEndpoint: { type: "tcp", host: "127.0.0.1", port },
+    });
+
+    try {
+      await expect(files.gateway.createBackup({
+        actorId: ADMIN_ID,
+        requestId: "live-lock",
+        passphrase: "abcdefghijkl",
+      })).rejects.toMatchObject({ status: 409, code: "MAINTENANCE_BUSY" });
+    } finally {
+      child.kill("SIGKILL");
+      await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    }
+
+    await expect(files.gateway.createBackup({
+      actorId: ADMIN_ID,
+      requestId: "after-crash",
+      passphrase: "abcdefghijkl",
+    })).resolves.toMatchObject({ id: JOB_A, state: "queued" });
+  });
+
   it("queues a backup with a private secret and an identifier-only job published last", async () => {
     const files = await fixture();
 
@@ -331,6 +417,67 @@ describe("FileMaintenanceGateway", () => {
       status: 500,
       code: "MAINTENANCE_STATE_INVALID",
     });
+  });
+
+  it("omits an untrusted manifest app image from the public status DTO", async () => {
+    const files = await fixture();
+    const hostile = "image:password=portable-secret@/var/lib/private-host/database";
+    await writeFile(path.join(files.adminOpsDirectory, "status", `${JOB_A}.json`), JSON.stringify({
+      schemaVersion: 1,
+      id: JOB_A,
+      type: "inspect-restore",
+      actorId: ADMIN_ID,
+      requestId: "hostile-preview",
+      state: "awaiting-confirmation",
+      updatedAt: "2026-09-03T07:00:00Z",
+      expiresAt: 2_000_000_000,
+      backupCreatedAt: "2026-09-03T06:30:00Z",
+      appImage: hostile,
+      postgresMajor: 17,
+      database: "fitgridweb",
+      preview: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0 },
+    }));
+
+    const serialized = JSON.stringify(await files.gateway.getJob(JOB_A));
+    expect(serialized).not.toContain(hostile);
+    expect(serialized).not.toContain("portable-secret");
+    expect(serialized).not.toContain("private-host");
+  });
+
+  it("rejects a status that grows beyond the read limit after its open-handle stat", async () => {
+    const files = await fixture();
+    const statusPath = path.join(files.adminOpsDirectory, "status", `${JOB_A}.json`);
+    await writeFile(statusPath, JSON.stringify({
+      schemaVersion: 1,
+      id: JOB_A,
+      type: "backup",
+      actorId: ADMIN_ID,
+      requestId: "growing-status",
+      state: "ready",
+      updatedAt: "2026-09-03T07:00:00Z",
+    }));
+    const probe = await open(statusPath, "r");
+    const prototype = Object.getPrototypeOf(probe) as { stat: () => Promise<Awaited<ReturnType<typeof probe.stat>>> };
+    await probe.close();
+    const originalStat = prototype.stat;
+    let grown = false;
+    const statSpy = vi.spyOn(prototype, "stat").mockImplementation(async function (this: typeof prototype) {
+      const info = await Reflect.apply(originalStat, this, []);
+      if (!grown && info.isFile()) {
+        grown = true;
+        await appendFile(statusPath, Buffer.alloc(300 * 1024, 0x20));
+      }
+      return info;
+    });
+
+    try {
+      await expect(files.gateway.getJob(JOB_A)).rejects.toMatchObject({
+        status: 500,
+        code: "MAINTENANCE_STATE_INVALID",
+      });
+    } finally {
+      statSpy.mockRestore();
+    }
   });
 
   it("rejects a structurally valid status with an impossible job state", async () => {

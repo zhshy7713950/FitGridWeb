@@ -58,7 +58,6 @@ export interface MaintenanceJobStatus {
   rolledBack?: boolean;
   expiresAt?: number;
   backupCreatedAt?: string;
-  appImage?: string;
   postgresMajor?: number;
   database?: string;
   preview?: RestorePreview;

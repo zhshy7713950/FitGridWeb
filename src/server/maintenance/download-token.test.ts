@@ -1,4 +1,14 @@
-import { mkdir, mkdtemp, realpath, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -12,6 +22,7 @@ const OTHER_ADMIN = "22222222-2222-4222-8222-222222222222";
 const BACKUP_ID = "backup-20260903";
 const OTHER_BACKUP = "backup-20260902";
 const NOW = 1_788_400_000;
+const MARKER_LIMIT = 256;
 const roots: string[] = [];
 
 afterEach(async () => {
@@ -62,6 +73,79 @@ describe("persistent download tokens", () => {
     expect(settled.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(settled.filter((result) => result.status === "rejected"))
       .toEqual([expect.objectContaining({ reason: expect.objectContaining({ status: 404 }) })]);
+  });
+
+  it("prunes only expired validated markers before consuming a new token", async () => {
+    const files = await tokenFixture();
+    const expiredDigest = "a".repeat(64);
+    const liveDigest = "b".repeat(64);
+    await writeFile(path.join(files.markerDirectory, `${expiredDigest}.used`), JSON.stringify({
+      schemaVersion: 1,
+      digest: expiredDigest,
+      exp: NOW,
+    }), { mode: 0o600 });
+    await writeFile(path.join(files.markerDirectory, `${liveDigest}.used`), JSON.stringify({
+      schemaVersion: 1,
+      digest: liveDigest,
+      exp: NOW + 1,
+    }), { mode: 0o600 });
+    const service = new DownloadTokenService({ secret: SECRET, markerDirectory: files.markerDirectory });
+    const token = service.issue({ adminId: ADMIN_ID, backupId: BACKUP_ID, now: NOW });
+
+    await expect(service.consume(token, ADMIN_ID, BACKUP_ID, NOW)).resolves.toBeUndefined();
+    await expect(lstat(path.join(files.markerDirectory, `${expiredDigest}.used`)))
+      .rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(path.join(files.markerDirectory, `${liveDigest}.used`), "utf8"))
+      .toContain(liveDigest);
+  });
+
+  it("rejects admission when the fixed live-marker capacity is full", async () => {
+    const files = await tokenFixture();
+    await Promise.all(Array.from({ length: MARKER_LIMIT }, async (_, index) => {
+      const digest = createHash("sha256").update(`live-${index}`).digest("hex");
+      await writeFile(path.join(files.markerDirectory, `${digest}.used`), JSON.stringify({
+        schemaVersion: 1,
+        digest,
+        exp: NOW + 60,
+      }), { mode: 0o600 });
+    }));
+    const service = new DownloadTokenService({ secret: SECRET, markerDirectory: files.markerDirectory });
+    const token = service.issue({ adminId: ADMIN_ID, backupId: BACKUP_ID, now: NOW });
+
+    await expect(service.consume(token, ADMIN_ID, BACKUP_ID, NOW)).rejects.toMatchObject({
+      status: 503,
+      code: "DOWNLOAD_TOKEN_STORE_FULL",
+    });
+    expect(await readdir(files.markerDirectory)).toHaveLength(MARKER_LIMIT);
+  });
+
+  it("fails closed on malformed or symlink token markers without deleting them", async () => {
+    const malformedFiles = await tokenFixture();
+    const malformedDigest = "c".repeat(64);
+    const malformed = path.join(malformedFiles.markerDirectory, `${malformedDigest}.used`);
+    await writeFile(malformed, "not-json", { mode: 0o600 });
+    const malformedService = new DownloadTokenService({ secret: SECRET, markerDirectory: malformedFiles.markerDirectory });
+    const malformedToken = malformedService.issue({ adminId: ADMIN_ID, backupId: BACKUP_ID, now: NOW });
+    await expect(malformedService.consume(malformedToken, ADMIN_ID, BACKUP_ID, NOW)).rejects.toMatchObject({
+      status: 500,
+      code: "DOWNLOAD_TOKEN_STATE_INVALID",
+    });
+    expect(await readFile(malformed, "utf8")).toBe("not-json");
+
+    const symlinkFiles = await tokenFixture();
+    const outside = path.join(symlinkFiles.root, "outside-marker");
+    await writeFile(outside, "outside");
+    const symlinkDigest = "d".repeat(64);
+    const markerLink = path.join(symlinkFiles.markerDirectory, `${symlinkDigest}.used`);
+    await symlink(outside, markerLink);
+    const symlinkService = new DownloadTokenService({ secret: SECRET, markerDirectory: symlinkFiles.markerDirectory });
+    const symlinkToken = symlinkService.issue({ adminId: ADMIN_ID, backupId: BACKUP_ID, now: NOW });
+    await expect(symlinkService.consume(symlinkToken, ADMIN_ID, BACKUP_ID, NOW)).rejects.toMatchObject({
+      status: 500,
+      code: "DOWNLOAD_TOKEN_STATE_INVALID",
+    });
+    expect(await readFile(outside, "utf8")).toBe("outside");
+    expect((await lstat(markerLink)).isSymbolicLink()).toBe(true);
   });
 
   it("rejects expiry, tampering, malformed payloads, and invalid identifiers as indistinguishable 404s", async () => {
