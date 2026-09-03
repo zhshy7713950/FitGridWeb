@@ -198,3 +198,103 @@ Terminal replay records are intentionally retained independently of public statu
 - Hard-link pinning assumes prepared and work directories reside on the same filesystem beneath `ADMIN_OPS_ROOT_DIR`, which is part of the configured layout. A cross-filesystem customization would fail closed at the link step.
 - Completed UUID records intentionally accumulate to preserve replay protection. Rotation or archival policy is operational follow-up work and must preserve the no-reuse invariant.
 - Intervention recovery remains manual by design. This task preserves the verified encrypted snapshot and evidence but does not implement an operator-facing recovery command.
+
+## Fix Round 2
+
+### Summary
+
+Addressed both findings from the re-review of `283f547..1d957ee`:
+
+1. A completed-ledger publication failure now converts every otherwise-terminal job into `intervention-required`. For a successful destructive restore, the worker reasserts authoritative maintenance, replaces the public success status with `TERMINAL_STATE_WRITE_FAILED`, retains the verified encrypted rollback snapshot plus the strict identifier-only claimed job, removes all plaintext/prepared/work data, exits non-zero, and blocks reboot admission. Intervention job records also independently reject UUID replay if an operator later clears maintenance.
+2. The authoritative marker moved to root-only `${ADMIN_OPS_ROOT_DIR}/maintenance.json` with mode `0600`. `${ADMIN_OPS_DIR}/status/maintenance.json` remains the fixed Task 3 UI/API mirror at mode `0640`, but admission and reboot recovery never consult it. Each worker run re-synchronizes an existing root marker to the mirror before its admission checks.
+
+Cleanup was reassessed across terminal-ledger failures. Inspection failure now destroys the prepared plaintext, upload, passphrase, and working directory while retaining only the identifier-only job record. Restore failure retains only the encrypted rollback snapshot and identifier-only job. Backup secrets continue to be unlinked by the exit cleanup.
+
+### Files Changed
+
+- `ops/lib/maintenance-jobs.sh`
+  - Split authoritative marker publication from public mirror publication.
+  - Added exact shared marker schema validation and fail-closed root marker reads.
+  - Added root-to-public mirror synchronization without any public-to-root data flow.
+  - Converted terminal-ledger failures to durable intervention state and generalized intervention retention without retaining secrets or plaintext.
+  - Extended replay rejection to root-only intervention job records.
+- `ops/maintenance-worker.sh`
+  - Synchronizes the mirror from root state and distinguishes authoritative active, inactive/absent, and invalid states before admission.
+- `src/server/ops/maintenance-worker.test.ts`
+  - Added completed-ledger rename fault injection after successful restore, cleanup fault injection after inspection, active-root/public-delete/public-forge reboot coverage, and inactive-root/public-forge admission coverage.
+  - Set the shell integration file to a 15-second per-test budget after full-suite process contention measured two valid cases at 5.014s and 5.375s; no behavioral assertion was changed.
+- `.superpowers/sdd/2026-09-03-admin-backup-recovery/task-2-report.md`
+  - Recorded Round 2 evidence and invariants.
+
+### TDD RED/GREEN Evidence
+
+Initial focused regressions were added before production changes:
+
+```text
+pnpm test src/server/ops/maintenance-worker.test.ts \
+  -t 'completed ledger|root-owned active|root-owned inactive|interrupted in-maintenance'
+Test Files  1 failed (1)
+Tests       4 failed | 24 skipped (28)
+```
+
+The completed-ledger fault left the public status at `succeeded`; both worker-published root marker checks failed with `ENOENT`; and reboot recovery trusted the forged public inactive marker and reported `STALE_JOB`. After implementation, the identical command was GREEN:
+
+```text
+Test Files  1 passed (1)
+Tests       4 passed | 24 skipped (28)
+```
+
+The cleanup reassessment added a separate inspection-ledger regression. RED showed that `prepared/{jobId}` still existed:
+
+```text
+pnpm test src/server/ops/maintenance-worker.test.ts \
+  -t 'completed ledger cannot publish after inspection'
+Test Files  1 failed (1)
+Tests       1 failed | 28 skipped (29)
+```
+
+After forcing prepared cleanup on terminal-ledger failure, the identical command was GREEN:
+
+```text
+Test Files  1 passed (1)
+Tests       1 passed | 28 skipped (29)
+```
+
+### Final Verification
+
+```text
+pnpm test src/server/ops/maintenance-worker.test.ts
+Test Files  1 passed (1)
+Tests       29 passed (29)
+
+pnpm test src/server/ops/portable-backup.test.ts src/server/ops/maintenance-worker.test.ts
+Test Files  2 passed (2)
+Tests       44 passed (44)
+
+pnpm test
+Test Files  65 passed | 2 skipped (67)
+Tests       597 passed | 3 skipped (600)
+
+pnpm typecheck  # exit 0
+pnpm lint       # exit 0
+sh -n ops/lib/maintenance-jobs.sh ops/maintenance-worker.sh  # exit 0
+git diff --check  # exit 0
+```
+
+The first full-suite attempt produced `595 passed`, `3 skipped`, and two Task 2 timeouts at 5.014s and 5.375s while the same cases passed in focused runs. The test file now uses the same 15-second integration budget already used by its serialization test. The unchanged cases then passed together in `7.83s`, and the full rerun above was green.
+
+### Authority and Publication Invariants
+
+- Authoritative path: `${ADMIN_OPS_ROOT_DIR}/maintenance.json`, atomic rename, UID 0, mode `0600`, exact schema `{schemaVersion:1, active:boolean, jobId?:UUID, updatedAt:string}`. `jobId` is required only when active.
+- Public mirror path: `${ADMIN_OPS_DIR}/status/maintenance.json`, atomic rename, mode `0640`, same exact schema. It is mounted/readable for Task 3 UI/API use but has no authority over host execution.
+- Data flow is one-way: root marker to public mirror. Deleting the mirror or forging it inactive cannot clear root maintenance; forging it active cannot block jobs when root explicitly records inactive maintenance.
+- Missing root marker means no restore has established maintenance state yet. An existing malformed, symlinked, non-root-owned, or incorrectly permissioned root marker is neither active nor inactive: it is invalid, and the worker preserves claimed state and exits non-zero.
+- A terminal result is not safely complete until its root-owned completed UUID record exists. Publication failure re-enters maintenance/intervention and preserves a root-only intervention job record, which also supplies replay protection independently of the completed ledger.
+
+### Security Considerations and Residual Risks
+
+- The ledger-failure regression verifies the final status is intervention—not success—and that reboot performs no further database/application commands.
+- The retained restore intervention directory contains exactly `job.json` (`0400`) and the verified encrypted `rollback.dump.enc` (`0400`) beneath a `0700` directory. Prepared dump, linked claim, plaintext rollback dump, verification dump, upload, and passwords are absent.
+- The retained inspection intervention directory contains only `job.json`; its decrypted prepared data, upload, secret, and work directory are removed.
+- The public mirror remains writable by its deployment owner and therefore may temporarily lie between worker invocations. This is acceptable only because it is explicitly informational; the root worker refreshes it before admission and never branches on its contents.
+- Root marker loss by a root-capable actor is outside the UID-1001 threat boundary. Invalid existing root state fails closed, while an absent marker preserves first-install compatibility.

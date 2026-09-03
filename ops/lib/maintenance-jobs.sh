@@ -229,45 +229,135 @@ portable_status() {
   maintenance_write_status "$2"
 }
 
-maintenance_write_marker() {
-  maintenance_active=$1
-  maintenance_marker_job=${2:-}
-  maintenance_marker="$ADMIN_OPS_DIR/status/maintenance.json"
-  maintenance_marker_tmp=$(mktemp "$ADMIN_OPS_DIR/status/.maintenance.XXXXXX") || return 1
+maintenance_render_marker() {
+  maintenance_marker_output=$1
+  maintenance_active=$2
+  maintenance_marker_job=${3:-}
   maintenance_updated_at=$(maintenance_now_iso)
   jq -n \
     --arg active "$maintenance_active" \
     --arg jobId "$maintenance_marker_job" \
     --arg updatedAt "$maintenance_updated_at" '
       {
+        schemaVersion: 1,
         active: ($active == "true"),
         jobId: (if $jobId == "" then null else $jobId end),
         updatedAt: $updatedAt
       } | with_entries(select(.value != null))
-    ' >"$maintenance_marker_tmp" || { rm -f "$maintenance_marker_tmp"; return 1; }
-  chmod 640 "$maintenance_marker_tmp" || { rm -f "$maintenance_marker_tmp"; return 1; }
-  if ! mv "$maintenance_marker_tmp" "$maintenance_marker"; then
-    rm -f "$maintenance_marker_tmp"
-    return 1
-  fi
-  jq -e --arg active "$maintenance_active" --arg jobId "$maintenance_marker_job" '
+    ' >"$maintenance_marker_output"
+}
+
+maintenance_validate_marker_schema() {
+  jq -e '
+    type == "object" and
+    .schemaVersion == 1 and
+    (.active | type == "boolean") and
+    (.updatedAt | type == "string") and
+    (
+      if .active then
+        (keys | sort) == ["active", "jobId", "schemaVersion", "updatedAt"] and
+        (.jobId | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
+      else
+        (keys | sort) == ["active", "schemaVersion", "updatedAt"]
+      end
+    )
+  ' "$1" >/dev/null 2>&1
+}
+
+maintenance_marker_matches() {
+  maintenance_marker_candidate=$1
+  maintenance_expected_active=$2
+  maintenance_expected_job=${3:-}
+  maintenance_validate_marker_schema "$maintenance_marker_candidate" || return 1
+  jq -e --arg active "$maintenance_expected_active" --arg jobId "$maintenance_expected_job" '
     if $active == "true" then .active == true and .jobId == $jobId
     else .active == false and (has("jobId") | not)
     end
-  ' "$maintenance_marker" >/dev/null 2>&1
+  ' "$maintenance_marker_candidate" >/dev/null 2>&1
+}
+
+maintenance_write_authoritative_marker() {
+  maintenance_active=$1
+  maintenance_marker_job=${2:-}
+  maintenance_authoritative_marker="$ADMIN_OPS_ROOT_DIR/maintenance.json"
+  maintenance_marker_tmp=$(mktemp "$ADMIN_OPS_ROOT_DIR/.maintenance.XXXXXX") || return 1
+  maintenance_render_marker "$maintenance_marker_tmp" "$maintenance_active" "$maintenance_marker_job" \
+    || { rm -f "$maintenance_marker_tmp"; return 1; }
+  chmod 600 "$maintenance_marker_tmp" || { rm -f "$maintenance_marker_tmp"; return 1; }
+  if ! mv "$maintenance_marker_tmp" "$maintenance_authoritative_marker"; then
+    rm -f "$maintenance_marker_tmp"
+    return 1
+  fi
+  maintenance_require_root_file "$maintenance_authoritative_marker" 600 \
+    && maintenance_marker_matches "$maintenance_authoritative_marker" "$maintenance_active" "$maintenance_marker_job"
+}
+
+# Fixed web mirror for Task 3/API consumers. This file is informational only;
+# admission and reboot recovery never consult it.
+maintenance_write_public_marker() {
+  maintenance_active=$1
+  maintenance_marker_job=${2:-}
+  maintenance_public_marker="$ADMIN_OPS_DIR/status/maintenance.json"
+  maintenance_marker_tmp=$(mktemp "$ADMIN_OPS_DIR/status/.maintenance.XXXXXX") || return 1
+  maintenance_render_marker "$maintenance_marker_tmp" "$maintenance_active" "$maintenance_marker_job" \
+    || { rm -f "$maintenance_marker_tmp"; return 1; }
+  chmod 640 "$maintenance_marker_tmp" || { rm -f "$maintenance_marker_tmp"; return 1; }
+  if ! mv "$maintenance_marker_tmp" "$maintenance_public_marker"; then
+    rm -f "$maintenance_marker_tmp"
+    return 1
+  fi
+  maintenance_marker_matches "$maintenance_public_marker" "$maintenance_active" "$maintenance_marker_job"
+}
+
+maintenance_write_marker() {
+  maintenance_active=$1
+  maintenance_marker_job=${2:-}
+  maintenance_write_authoritative_marker "$maintenance_active" "$maintenance_marker_job" || return 1
+  maintenance_write_public_marker "$maintenance_active" "$maintenance_marker_job"
+}
+
+maintenance_authoritative_marker_state() {
+  maintenance_authoritative_marker="$ADMIN_OPS_ROOT_DIR/maintenance.json"
+  if [ ! -e "$maintenance_authoritative_marker" ] && [ ! -L "$maintenance_authoritative_marker" ]; then
+    return 1
+  fi
+  maintenance_require_root_file "$maintenance_authoritative_marker" 600 || return 2
+  maintenance_validate_marker_schema "$maintenance_authoritative_marker" || return 2
+  jq -e '.active == true' "$maintenance_authoritative_marker" >/dev/null 2>&1 && return 0
+  return 1
 }
 
 maintenance_is_active_for() {
   maintenance_expected_job=$1
-  maintenance_marker="$ADMIN_OPS_DIR/status/maintenance.json"
-  [ -f "$maintenance_marker" ] && [ ! -L "$maintenance_marker" ] || return 1
-  jq -e --arg jobId "$maintenance_expected_job" '.active == true and .jobId == $jobId' "$maintenance_marker" >/dev/null 2>&1
+  maintenance_authoritative_state=0
+  maintenance_authoritative_marker_state || maintenance_authoritative_state=$?
+  case "$maintenance_authoritative_state" in
+    0)
+      jq -e --arg jobId "$maintenance_expected_job" '.jobId == $jobId' \
+        "$ADMIN_OPS_ROOT_DIR/maintenance.json" >/dev/null 2>&1 ;;
+    1) return 1 ;;
+    *) return 2 ;;
+  esac
 }
 
 maintenance_any_active() {
-  maintenance_marker="$ADMIN_OPS_DIR/status/maintenance.json"
-  [ -f "$maintenance_marker" ] && [ ! -L "$maintenance_marker" ] || return 1
-  jq -e '.active == true' "$maintenance_marker" >/dev/null 2>&1
+  maintenance_authoritative_marker_state
+}
+
+maintenance_sync_public_marker() {
+  maintenance_authoritative_marker="$ADMIN_OPS_ROOT_DIR/maintenance.json"
+  if [ ! -e "$maintenance_authoritative_marker" ] && [ ! -L "$maintenance_authoritative_marker" ]; then
+    return 0
+  fi
+  maintenance_authoritative_state=0
+  maintenance_authoritative_marker_state || maintenance_authoritative_state=$?
+  case "$maintenance_authoritative_state" in
+    0)
+      maintenance_authoritative_job=$(jq -er '.jobId' "$maintenance_authoritative_marker") || return 1
+      maintenance_write_public_marker true "$maintenance_authoritative_job" ;;
+    1) maintenance_write_public_marker false ;;
+    *) return 1 ;;
+  esac
 }
 
 maintenance_audit() {
@@ -349,8 +439,12 @@ maintenance_record_terminal() {
 
 maintenance_replay_exists() {
   maintenance_replay_file=$(maintenance_terminal_file)
-  [ -e "$maintenance_replay_file" ] || [ -L "$maintenance_replay_file" ] || return 1
-  maintenance_require_root_file "$maintenance_replay_file" 400 || return 0
+  if [ -e "$maintenance_replay_file" ] || [ -L "$maintenance_replay_file" ]; then
+    maintenance_require_root_file "$maintenance_replay_file" 400 || return 0
+    return 0
+  fi
+  maintenance_replay_intervention="$ADMIN_OPS_ROOT_DIR/intervention/$maintenance_job_id/job.json"
+  [ -e "$maintenance_replay_intervention" ] || [ -L "$maintenance_replay_intervention" ] || return 1
   return 0
 }
 
@@ -368,8 +462,10 @@ maintenance_cleanup_current() {
       rm -f "$maintenance_current_prepared"
     fi
   fi
-  if [ -n "${maintenance_current_claim:-}" ] && ! maintenance_is_active_for "${maintenance_job_id:-invalid}"; then
-    rm -f "$maintenance_current_claim"
+  if [ -n "${maintenance_current_claim:-}" ]; then
+    maintenance_cleanup_marker_state=0
+    maintenance_is_active_for "${maintenance_job_id:-invalid}" || maintenance_cleanup_marker_state=$?
+    [ "$maintenance_cleanup_marker_state" -ne 1 ] || rm -f "$maintenance_current_claim"
   fi
   maintenance_current_secret=
   maintenance_current_upload=
@@ -604,28 +700,34 @@ maintenance_verify_health() {
   return 1
 }
 
-maintenance_retain_intervention_snapshot() {
+maintenance_retain_intervention_state() {
   maintenance_intervention_directory="$ADMIN_OPS_ROOT_DIR/intervention/$maintenance_job_id"
-  [ ! -e "$maintenance_intervention_directory" ] && [ ! -L "$maintenance_intervention_directory" ] || return 1
-  mkdir "$maintenance_intervention_directory" || return 1
-  chmod 700 "$maintenance_intervention_directory" || return 1
-  [ -f "$maintenance_rollback_encrypted" ] && [ ! -L "$maintenance_rollback_encrypted" ] || return 1
-  mv "$maintenance_rollback_encrypted" "$maintenance_intervention_directory/rollback.dump.enc" || return 1
-  chmod 400 "$maintenance_intervention_directory/rollback.dump.enc" || return 1
+  if [ ! -e "$maintenance_intervention_directory" ] && [ ! -L "$maintenance_intervention_directory" ]; then
+    mkdir "$maintenance_intervention_directory" || return 1
+    chmod 700 "$maintenance_intervention_directory" || return 1
+  else
+    maintenance_require_root_directory "$maintenance_intervention_directory" 700 || return 1
+  fi
+  if [ -n "${maintenance_rollback_encrypted:-}" ] \
+    && [ -f "$maintenance_rollback_encrypted" ] && [ ! -L "$maintenance_rollback_encrypted" ]; then
+    mv "$maintenance_rollback_encrypted" "$maintenance_intervention_directory/rollback.dump.enc" || return 1
+    chmod 400 "$maintenance_intervention_directory/rollback.dump.enc" || return 1
+  fi
   if [ -n "${maintenance_current_claim:-}" ] && [ -f "$maintenance_current_claim" ]; then
     mv "$maintenance_current_claim" "$maintenance_intervention_directory/job.json" || return 1
     chmod 400 "$maintenance_intervention_directory/job.json" || return 1
     maintenance_current_claim=
   fi
+  maintenance_require_root_file "$maintenance_intervention_directory/job.json" 400
 }
 
 maintenance_enter_intervention() {
   maintenance_intervention_code=$1
   maintenance_write_marker true "$maintenance_job_id" || :
   maintenance_write_status intervention-required "$maintenance_intervention_code" false || :
-  maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" intervention-required "$maintenance_intervention_code" "$maintenance_bound_sha" || :
-  if ! maintenance_retain_intervention_snapshot; then
-    maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" intervention-required INTERVENTION_PERSIST_FAILED "$maintenance_bound_sha" || :
+  maintenance_audit "${maintenance_job_type:-job}" "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" intervention-required "$maintenance_intervention_code" "${maintenance_bound_sha:-}" || :
+  if ! maintenance_retain_intervention_state; then
+    maintenance_audit "${maintenance_job_type:-job}" "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" intervention-required INTERVENTION_PERSIST_FAILED "${maintenance_bound_sha:-}" || :
   fi
   return 1
 }
@@ -750,7 +852,8 @@ maintenance_process_claimed_job() {
     *) maintenance_job_status=1 ;;
   esac
   if ! maintenance_record_terminal; then
-    maintenance_audit "$maintenance_job_type" "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" intervention-required TERMINAL_STATE_WRITE_FAILED || :
+    maintenance_cleanup_prepared=true
+    maintenance_enter_intervention TERMINAL_STATE_WRITE_FAILED || :
     maintenance_job_status=1
   fi
   maintenance_cleanup_current
@@ -769,7 +872,13 @@ maintenance_recover_claimed_jobs() {
       maintenance_current_work=
       maintenance_current_prepared="$ADMIN_OPS_ROOT_DIR/prepared/${maintenance_restore_id:-$maintenance_job_id}"
       maintenance_cleanup_prepared=true
-      if [ "$maintenance_job_type" = restore ] && maintenance_is_active_for "$maintenance_job_id"; then
+      maintenance_recovery_marker_state=0
+      maintenance_is_active_for "$maintenance_job_id" || maintenance_recovery_marker_state=$?
+      if [ "$maintenance_recovery_marker_state" -eq 2 ]; then
+        maintenance_recovery_status=1
+        continue
+      fi
+      if [ "$maintenance_job_type" = restore ] && [ "$maintenance_recovery_marker_state" -eq 0 ]; then
         maintenance_write_status intervention-required RESTORE_INTERRUPTED false
         maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" intervention-required RESTORE_INTERRUPTED
         maintenance_interrupted_directory="$ADMIN_OPS_ROOT_DIR/intervention/$maintenance_job_id"

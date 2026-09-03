@@ -9,6 +9,7 @@ import {
   readdir,
   stat,
   symlink,
+  unlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -262,6 +263,10 @@ if [ -n "$FAIL_STATUS_STATE" ] \
   exit 9
 fi
 case "$destination" in
+  "$ROOT_OPS_DIRECTORY"/completed/*.json)
+    if [ "$FAIL_COMPLETED_LEDGER" = true ]; then exit 9; fi ;;
+esac
+case "$destination" in
   "$STATUS_DIRECTORY"/*.json)
     case "$destination" in
       */maintenance.json) : ;;
@@ -283,6 +288,7 @@ exec /bin/mv "$source" "$destination"`,
     ENV_FILE: environmentFile,
     COMMAND_LOG: commandLog,
     STATUS_DIRECTORY: statuses,
+    ROOT_OPS_DIRECTORY: rootOps,
     TRANSITIONS_DIRECTORY: transitionsDirectory,
     ATOMIC_ERRORS: path.join(root, "atomic-errors"),
     FAKE_ACTIVITY_LOCK: path.join(root, "activity-lock"),
@@ -304,6 +310,7 @@ exec /bin/mv "$source" "$destination"`,
     FAIL_MARKER_FILE: path.join(root, "fail-marker-once"),
     FAIL_STATUS_STATE: "",
     FAIL_STATUS_FILE: path.join(root, "fail-status-once"),
+    FAIL_COMPLETED_LEDGER: "false",
     TMPDIR: root,
   };
 
@@ -406,10 +413,11 @@ exec /bin/mv "$source" "$destination"`,
     transitions: async (id: string) => (await readFile(path.join(transitionsDirectory, `${id}.json`), "utf8")).trim().split("\n"),
     commandSequence: async () => (await readFile(commandLog, "utf8")).trim().split("\n").filter(Boolean),
     maintenance: () => readJson(path.join(statuses, "maintenance.json")),
+    rootMaintenance: () => readJson(path.join(rootOps, "maintenance.json")),
   };
 }
 
-describe("host maintenance worker", () => {
+describe("host maintenance worker", { timeout: 15_000 }, () => {
   it("serializes jobs and reports backup stages through atomic status renames", async () => {
     const files = await workerFixture();
     await files.enqueue({ schemaVersion: 1, id: JOB_A, type: "backup", actorId: ADMIN, requestId: "01JBACKUPA" }, "backup password a");
@@ -641,6 +649,111 @@ describe("host maintenance worker", () => {
     expect(await stat(path.join(files.rootOps, "intervention", RESTORE_JOB, "rollback.dump.enc"))).toBeDefined();
   });
 
+  it("fails closed and retains recovery state when the completed ledger cannot publish after restore", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+
+    const result = files.runWorker({ FAIL_COMPLETED_LEDGER: "true" });
+
+    expect(result.status).not.toBe(0);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({
+      state: "intervention-required",
+      code: "TERMINAL_STATE_WRITE_FAILED",
+    });
+    expect(await files.rootMaintenance()).toMatchObject({ schemaVersion: 1, active: true, jobId: RESTORE_JOB });
+    expect(await files.maintenance()).toMatchObject({ schemaVersion: 1, active: true, jobId: RESTORE_JOB });
+    expect((await stat(path.join(files.rootOps, "maintenance.json"))).mode & 0o777).toBe(0o600);
+    expect((await stat(path.join(files.statuses, "maintenance.json"))).mode & 0o777).toBe(0o640);
+    const intervention = path.join(files.rootOps, "intervention", RESTORE_JOB);
+    expect((await readdir(intervention)).sort()).toEqual(["job.json", "rollback.dump.enc"]);
+    expect(await readFile(path.join(intervention, "rollback.dump.enc"), "utf8")).toBe("rollback custom dump");
+    expect((await stat(path.join(intervention, "rollback.dump.enc"))).mode & 0o777).toBe(0o400);
+    expect((await stat(path.join(intervention, "job.json"))).mode & 0o777).toBe(0o400);
+    await expect(stat(path.join(files.rootOps, "completed", `${RESTORE_JOB}.json`))).rejects.toThrow();
+    await expect(stat(path.join(files.prepared, INSPECT_JOB))).rejects.toThrow();
+    expect(await readdir(files.inbox)).toEqual([]);
+    expect(await readdir(files.uploads)).toEqual([]);
+    expect(await readdir(path.join(files.rootOps, "claimed"))).toEqual([]);
+    expect(await readdir(path.join(files.rootOps, "work"))).toEqual([]);
+
+    const commandsBeforeReboot = await files.commandSequence();
+    expect(files.runWorker().status).not.toBe(0);
+    expect(await files.commandSequence()).toEqual(commandsBeforeReboot);
+  });
+
+  it("removes prepared plaintext and passwords when the completed ledger cannot publish after inspection", async () => {
+    const files = await workerFixture();
+    await files.enqueueInspect();
+
+    const result = files.runWorker({ FAIL_COMPLETED_LEDGER: "true" });
+
+    expect(result.status).not.toBe(0);
+    expect(await files.status(INSPECT_JOB)).toMatchObject({
+      state: "intervention-required",
+      code: "TERMINAL_STATE_WRITE_FAILED",
+    });
+    expect(await files.rootMaintenance()).toMatchObject({ schemaVersion: 1, active: true, jobId: INSPECT_JOB });
+    expect(await readdir(path.join(files.rootOps, "intervention", INSPECT_JOB))).toEqual(["job.json"]);
+    await expect(stat(path.join(files.prepared, INSPECT_JOB))).rejects.toThrow();
+    expect(await readdir(files.inbox)).toEqual([]);
+    expect(await readdir(files.uploads)).toEqual([]);
+    expect(await readdir(path.join(files.rootOps, "claimed"))).toEqual([]);
+    expect(await readdir(path.join(files.rootOps, "work"))).toEqual([]);
+  });
+
+  it("uses root-owned active maintenance after the public mirror is deleted or forged inactive", async () => {
+    const files = await workerFixture({ restoredHealth: false, rollbackHealth: false });
+    await files.prepareRestore();
+    await files.enqueueRestore();
+    expect(files.runWorker().status).not.toBe(0);
+    expect(await files.rootMaintenance()).toMatchObject({ schemaVersion: 1, active: true, jobId: RESTORE_JOB });
+
+    await unlink(path.join(files.statuses, "maintenance.json"));
+    await files.enqueue({ schemaVersion: 1, id: JOB_A, type: "backup", actorId: ADMIN, requestId: "01JBLOCKED" });
+    const commandsBeforeReboot = await files.commandSequence();
+    expect(files.runWorker().status).not.toBe(0);
+    expect(await files.commandSequence()).toEqual(commandsBeforeReboot);
+    expect(await readdir(files.inbox)).toEqual([`${JOB_A}.json`]);
+    expect(await files.maintenance()).toMatchObject({ schemaVersion: 1, active: true, jobId: RESTORE_JOB });
+
+    await writeFile(path.join(files.statuses, "maintenance.json"), JSON.stringify({
+      schemaVersion: 1,
+      active: false,
+      updatedAt: "2026-09-03T00:00:00Z",
+    }));
+    expect(files.runWorker().status).not.toBe(0);
+    expect(await readdir(files.inbox)).toEqual([`${JOB_A}.json`]);
+    expect(await files.rootMaintenance()).toMatchObject({ schemaVersion: 1, active: true, jobId: RESTORE_JOB });
+    expect(await files.maintenance()).toMatchObject({ schemaVersion: 1, active: true, jobId: RESTORE_JOB });
+  });
+
+  it("admits jobs from root-owned inactive maintenance despite a forged active public mirror", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+    expect(files.runWorker().status).toBe(0);
+    expect(await files.rootMaintenance()).toMatchObject({ schemaVersion: 1, active: false });
+
+    await writeFile(path.join(files.statuses, "maintenance.json"), JSON.stringify({
+      schemaVersion: 1,
+      active: true,
+      jobId: JOB_B,
+      updatedAt: "2026-09-03T00:00:00Z",
+    }));
+    await files.enqueue(
+      { schemaVersion: 1, id: JOB_A, type: "backup", actorId: ADMIN, requestId: "01JROOTAUTH" },
+      "backup password",
+    );
+
+    const result = files.runWorker({ FITGRID_BACKUP_TIMESTAMP: "20260903T080000Z" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await files.status(JOB_A)).toMatchObject({ state: "ready" });
+    expect(await files.rootMaintenance()).toMatchObject({ schemaVersion: 1, active: false });
+    expect(await files.maintenance()).toMatchObject({ schemaVersion: 1, active: false });
+  });
+
   it.each([
     ["invalid JSON", "{not-json", `${JOB_A}.json`],
     ["unknown operation", JSON.stringify({ schemaVersion: 1, id: JOB_A, type: "shell", actorId: ADMIN, requestId: "01JBAD" }), `${JOB_A}.json`],
@@ -737,13 +850,25 @@ describe("host maintenance worker", () => {
       requestId: "01JINTERRUPTED",
       restoreId: INSPECT_JOB,
     }));
-    await writeFile(path.join(files.statuses, "maintenance.json"), JSON.stringify({ active: true, jobId: RESTORE_JOB }));
+    await writeFile(path.join(files.rootOps, "maintenance.json"), JSON.stringify({
+      schemaVersion: 1,
+      active: true,
+      jobId: RESTORE_JOB,
+      updatedAt: "2026-09-03T00:00:00Z",
+    }));
+    await chmod(path.join(files.rootOps, "maintenance.json"), 0o600);
+    await writeFile(path.join(files.statuses, "maintenance.json"), JSON.stringify({
+      schemaVersion: 1,
+      active: false,
+      updatedAt: "2026-09-03T00:00:00Z",
+    }));
 
     const result = files.runWorker();
 
     expect(result.status).not.toBe(0);
     expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "intervention-required", code: "RESTORE_INTERRUPTED" });
     expect(await files.maintenance()).toMatchObject({ active: true, jobId: RESTORE_JOB });
+    expect(await files.rootMaintenance()).toMatchObject({ active: true, jobId: RESTORE_JOB });
     expect(await files.commandSequence()).toEqual([]);
     const intervention = path.join(files.rootOps, "intervention", RESTORE_JOB);
     expect(await readdir(intervention)).toEqual(["job.json"]);

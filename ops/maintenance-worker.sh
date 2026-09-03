@@ -33,13 +33,15 @@ trap 'maintenance_worker_status=$?; maintenance_cleanup_current; exit "$maintena
 
 maintenance_worker_status=0
 maintenance_recover_claimed_jobs || maintenance_worker_status=1
-if maintenance_any_active; then
-  exit 1
-fi
+maintenance_sync_public_marker || exit 1
+maintenance_authority_state=0
+maintenance_any_active || maintenance_authority_state=$?
+case "$maintenance_authority_state" in 0) exit 1 ;; 1) : ;; *) exit 1 ;; esac
 maintenance_drain_inbox || maintenance_worker_status=1
-if maintenance_any_active; then
-  exit 1
-fi
+maintenance_sync_public_marker || exit 1
+maintenance_authority_state=0
+maintenance_any_active || maintenance_authority_state=$?
+case "$maintenance_authority_state" in 0) exit 1 ;; 1) : ;; *) exit 1 ;; esac
 maintenance_expire_prepared || maintenance_worker_status=1
 maintenance_purge_terminal_orphans || maintenance_worker_status=1
 exit "$maintenance_worker_status"
