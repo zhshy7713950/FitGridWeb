@@ -1,5 +1,6 @@
 import { apiPath } from "@/lib/app-paths";
 import { requestJson, requestResponse } from "@/lib/api-client";
+import { isUiDemoMode } from "@/lib/ui-demo";
 
 import type {
   ConfirmRestoreInput,
@@ -11,10 +12,26 @@ import type {
 
 const backupMediaType = "application/vnd.fitgrid.backup";
 
+type DemoMaintenanceData = typeof import("./demo-maintenance-data");
+
+const loadDemoMaintenanceData = process.env.NODE_ENV === "production"
+  ? null
+  : () => import("./demo-maintenance-data");
+
+function demoMaintenanceData(): Promise<DemoMaintenanceData> {
+  if (!loadDemoMaintenanceData) {
+    return Promise.reject(new Error("UI demo maintenance data is unavailable in production"));
+  }
+  return loadDemoMaintenanceData();
+}
+
 export function createPortableBackup(
   input: CreatePortableBackupInput,
   signal?: AbortSignal,
 ): Promise<QueuedMaintenanceJob> {
+  if (isUiDemoMode()) {
+    return demoMaintenanceData().then((demo) => demo.createDemoPortableBackup(input, signal));
+  }
   return requestJson("/admin/backups", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -24,6 +41,9 @@ export function createPortableBackup(
 }
 
 export function listPortableBackups(signal?: AbortSignal): Promise<PortableBackupList> {
+  if (isUiDemoMode()) {
+    return demoMaintenanceData().then((demo) => demo.listDemoPortableBackups(signal));
+  }
   return requestJson("/admin/backups", { signal });
 }
 
@@ -31,6 +51,9 @@ export function getMaintenanceJob(
   jobId: string,
   signal?: AbortSignal,
 ): Promise<MaintenanceJobStatus> {
+  if (isUiDemoMode()) {
+    return demoMaintenanceData().then((demo) => demo.getDemoMaintenanceJob(jobId, signal));
+  }
   return requestJson(
     `/admin/maintenance/jobs/${encodeURIComponent(jobId)}`,
     { signal },
@@ -42,6 +65,9 @@ export async function issueBackupDownload(
   backupId: string,
   signal?: AbortSignal,
 ): Promise<string> {
+  if (isUiDemoMode()) {
+    return demoMaintenanceData().then((demo) => demo.issueDemoBackupDownload(backupId, signal));
+  }
   const { token } = await requestJson<{ token: string }>(
     `/admin/backups/${encodeURIComponent(backupId)}/download-token`,
     { method: "POST", signal },
@@ -56,6 +82,11 @@ export function uploadRestoreForInspection(
   passphrase: string,
   signal?: AbortSignal,
 ): Promise<QueuedMaintenanceJob> {
+  if (isUiDemoMode()) {
+    return demoMaintenanceData().then((demo) => (
+      demo.uploadDemoRestoreForInspection(file, passphrase, signal)
+    ));
+  }
   const streamingRequest: RequestInit & { duplex: "half" } = {
     method: "POST",
     headers: {
@@ -78,6 +109,9 @@ export function confirmRestore(
   input: ConfirmRestoreInput,
   signal?: AbortSignal,
 ): Promise<QueuedMaintenanceJob> {
+  if (isUiDemoMode()) {
+    return demoMaintenanceData().then((demo) => demo.confirmDemoRestore(restoreId, input, signal));
+  }
   return requestJson(`/admin/restores/${encodeURIComponent(restoreId)}/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -87,6 +121,9 @@ export function confirmRestore(
 }
 
 export async function checkMaintenanceHealth(signal?: AbortSignal): Promise<boolean> {
+  if (isUiDemoMode()) {
+    return demoMaintenanceData().then((demo) => demo.checkDemoMaintenanceHealth(signal));
+  }
   try {
     const response = await requestResponse("/health", { signal });
     const body = await response.json() as { status?: string; database?: string };

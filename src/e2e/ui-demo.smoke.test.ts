@@ -280,6 +280,33 @@ describe.sequential("database-free UI demo", () => {
     expect(await page.getByText("管理员权限已验证").isVisible()).toBe(true);
     expect(await page.getByText(/产品数量/).count()).toBe(0);
     expect(await page.getByRole("button", { name: /查看产品/ }).count()).toBe(0);
+    expect(await page.getByRole("heading", { name: "数据保险库" }).isVisible()).toBe(true);
+    const history = page.getByRole("list", { name: "历史备份" });
+    await expect.poll(() => history.getByRole("listitem").count()).toBe(2);
+
+    await page.getByRole("button", { name: "创建备份" }).click();
+    const backupVaultDialog = page.getByRole("dialog", { name: "创建便携备份" });
+    await backupVaultDialog.getByLabel("当前管理员密码").fill("current-password");
+    await backupVaultDialog.getByLabel("独立备份密码").fill("portable-password");
+    await backupVaultDialog.getByLabel("再次确认备份密码").fill("portable-password");
+    await backupVaultDialog.getByRole("button", { name: "确认创建" }).click();
+    const executionRail = page.getByRole("list", { name: "备份执行阶段" });
+    await expect.poll(
+      () => executionRail.locator('[aria-current="step"]').textContent(),
+      { timeout: 5_000 },
+    )
+      .toContain("正在生成");
+    await expect.poll(
+      () => executionRail.locator('[aria-current="step"]').textContent(),
+      { timeout: 5_000 },
+    )
+      .toContain("正在加密");
+    await expect.poll(
+      () => executionRail.locator('[aria-current="step"]').textContent(),
+      { timeout: 5_000 },
+    )
+      .toContain("可以下载");
+    await expect.poll(() => history.getByRole("listitem").count()).toBe(3);
 
     await page.getByRole("button", { name: "创建邀请" }).click();
     const invitationInput = page.getByLabel("新邀请链接");
