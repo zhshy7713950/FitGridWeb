@@ -5,13 +5,13 @@
 
 ## 状态摘要
 
-- 服务端主体和自动化覆盖已实现；本机门禁已执行，但当前完整结果包含下述 1 个可复现 UI-demo 产品失败，不能整体标记为通过。
+- 服务端主体和自动化覆盖已实现；Task 6 修复后，本机可运行的产品测试门禁及 typecheck、lint、diff check 已通过，生产等价环境门控仍须单独完成。
 - Better Auth 使用 `sessions` 表保存标准数据库会话；浏览器只接收 `HttpOnly`、`Secure`、`SameSite=Lax` Cookie，不向前端返回长期 token。
 - 产品查询、冲突检测、游标、导入与导出均绑定会话 owner；`grid_trades` 和 `import_previews` 同时启用 `FORCE ROW LEVEL SECURITY`。
 - OpenAPI 中 16 个路径的每个 operationId 都有 Route Handler；Android 与 Web 导出均通过发布的 JSON Schema。
 - 已实现 `/fitgrid` 固定生产子路径、Better Auth Cookie Path、GHCR 完整 SHA 流水线、2 GiB 低内存 Compose、现有 nginx 安全集成、迁移前置/应用回滚和 systemd 开机恢复。
-- 管理员数据保险库、age 便携备份、最近 5 份下载历史、流式上传预检、整库恢复/单次自动回滚、root-only intervention state、维护 path unit 和可选异机 timer 已实现，相关自动化套件已运行；但完整本机测试门禁当前并非全绿：可复现的 Task 6 `dev:ui` 数据保险库配置问题会令 UI-demo smoke 捕获一次 HTTP 500。它是待修复的产品/demo 配置问题，不是环境跳过。
-- 与上述本机测试失败分开，本次 Task 7 主机没有 Docker、age、systemd、`pg_restore` 或 `TEST_DATABASE_URL`，因此真实 PostgreSQL RLS、GHCR 镜像拉取、HTTPS 部署、VPS 重启、真实加解密和生产等价恢复演练仍是发布前环境门控；`pnpm typecheck`、`pnpm lint`、`pnpm build` 和 `git diff --check` 均通过。
+- 管理员数据保险库、age 便携备份、最近 5 份下载历史、流式上传预检、整库恢复/单次自动回滚、root-only intervention state、维护 path unit 和可选异机 timer 已实现。提交 `7825546` 和 `cb99a76` 已修复 `dev:ui` 的 DataVault HTTP 500 与下载导航/文件名缺口；管理员专项测试 76/76、精确 UI-demo smoke 5/5、完整 `pnpm test --maxWorkers=4` 为 777 passed + 3 skipped，typecheck、lint、diff check 均通过。
+- 与上述本机自动化通过分开，本次 Task 7 主机没有 Docker、age、systemd、`pg_restore` 或 `TEST_DATABASE_URL`，因此真实 PostgreSQL RLS、GHCR 镜像拉取、HTTPS 部署、VPS 重启、真实加解密和生产等价恢复演练仍是发布前环境门控；这些项目没有因 Task 6 修复而获得生产验收。
 
 ## 前端基础
 
@@ -93,11 +93,11 @@
 | OPS-07 | 文档要求同一 reviewed SHA、临时管理员、portable upload/preview/restore、备份内管理员、三项秘密连续性、验收、DNS 和旧 VPS 只读 72 小时 | 操作顺序已文档化；需双 VPS 实跑 |
 | OPS-08 | 环境文件 600；web/root/portable 权限边界；密码/上传/状态/audit 清理与脱敏；下载 token 单次持久化 | 自动化通过；需容器挂载、Git、journal/logrotate 和实际文件权限人工审计 |
 | OPS-09 | `fitgridweb.service` 仅启动/停止 `db app`；maintenance path 与 off-host timer 分离；容器 `unless-stopped` | unit/installer 契约通过；需 `systemctl restart`、path 激活、timer 和整机 reboot 验收 |
-| OPS-10 | 管理员数据保险库与 root TTY 便携备份共享最多 5 份；raw-stream upload、10 分钟 challenge、精确短语、恢复后 logout | 专项 API/UI/shell 自动化通过；完整本机门禁仍有上述 Task 6 UI-demo 500；需 HTTPS 浏览器端到端下载/上传/恢复实跑 |
+| OPS-10 | 管理员数据保险库与 root TTY 便携备份共享最多 5 份；raw-stream upload、10 分钟 challenge、精确短语、恢复后 logout | 专项 API/UI/shell 与本机完整产品测试门禁通过；需 HTTPS 生产浏览器端到端下载/上传/恢复实跑 |
 
 ## 2026-09-03 Task 7 验证记录
 
-下列 `pnpm test` 结果来自 Fix Round 1 纯文档修订之前的 Task 7 验证运行，保留当时的准确计数和已知失败；其余 typecheck、lint、build 与 diff check 已在 Fix Round 1 修订后重新执行：
+下列是提交 `7825546`、`cb99a76` 之前的历史诊断记录，不代表当前分支状态。`pnpm test` 的失败计数来自 Fix Round 1 前的 Task 7 运行；其余 typecheck、lint、build 与 diff check 当时通过并在 Fix Round 1 后复跑：
 
 ```text
 pnpm test
@@ -111,9 +111,32 @@ pnpm build      # exit 0；23/23 static pages generated
 git diff --check  # exit 0
 ```
 
-受限 sandbox 内第一次 `pnpm test` 得到 73 files/734 tests passed、2 files/8 tests skipped、4 files/18 tests failed；失败均来自内核权限门禁：loopback `listen EPERM`、维护/download-token kernel lock 不可用、伪 TTY `stty: TIOCGETD`。允许本机 loopback/PTY 后，一次完整 run 曾得到 77 files/757 tests passed、2 files/3 tests skipped、exit 0。Fix Round 1 前的最后一次 full run 得到上方单一失败：`src/e2e/ui-demo.smoke.test.ts` 的管理员邀请场景捕获到一个 HTTP 500 console error；相同 case 的 focused rerun仍为 1 failed/4 skipped。Fix Round 1 和 Fix Round 2 都是纯文档修订，没有在其后重跑产品测试套件。
+受限 sandbox 内第一次 `pnpm test` 得到 73 files/734 tests passed、2 files/8 tests skipped、4 files/18 tests failed；失败均来自内核权限门禁：loopback `listen EPERM`、维护/download-token kernel lock 不可用、伪 TTY `stty: TIOCGETD`。允许本机 loopback/PTY 后，一次完整 run 曾得到 77 files/757 tests passed、2 files/3 tests skipped、exit 0。Fix Round 1 前的最后一次 full run 得到上方单一失败：`src/e2e/ui-demo.smoke.test.ts` 的管理员邀请场景捕获到一个 HTTP 500 console error；相同 case 的 focused rerun为 1 failed/4 skipped。Fix Round 1 和 Fix Round 2 是纯文档修订，之后的 Task 6 产品修复已重新运行下述门禁。
 
-根因已定位到本任务基线：demo `AdminWorkspace` 挂载 live `<DataVault />`，其 mount effect 请求 `/api/v1/admin/backups`，而 `dev:ui` 按设计清空 `BETTER_AUTH_SECRET`/maintenance 配置，`getRuntimeServices()` 因此返回 500；现有 smoke test 要求 console error 为空。Task 7 没有修改 Task 6 产品代码，该 gate 留给 Task 6/final fix 修复并重新跑完整套件。backup/maintenance 单元与集成套件在上述 Fix Round 1 前的 full run 中没有失败。
+历史根因是 demo `AdminWorkspace` 挂载 live `<DataVault />` 后请求未配置的维护 API；提交 `7825546` 增加仅限非生产 `dev:ui` 的确定性维护适配器，消除了 HTTP 500。提交 `cb99a76` 又把归档下载与登录导航分离，修复了浏览器下载的通用文件名和离开管理页问题。
+
+Task 6 修复后的精确证据：
+
+```text
+pnpm test src/features/admin
+Test Files  6 passed (6)
+Tests       76 passed (76)
+
+pnpm test src/e2e/ui-demo.smoke.test.ts
+Test Files  1 passed (1)
+Tests       5 passed (5)
+Duration    24.75s
+
+pnpm test --maxWorkers=4
+Test Files  78 passed | 2 skipped (80)
+Tests       777 passed | 3 skipped (780)
+
+pnpm typecheck  # exit 0
+pnpm lint       # exit 0
+git diff --check  # exit 0
+```
+
+精确 UI-demo smoke 在真实 `pnpm dev:ui` 进程中验证备份的“正在生成 → 正在加密 → 可以下载”三阶段、实际浏览器下载文件名 `fitgridweb-portable-backup.fitgridbackup`、下载后仍停留在 `/admin`，并在全部 5 个场景中保持零 console error。此证据是无数据库/Better Auth/host maintenance 配置的开发演示验证，不是 VPS 或生产恢复验证。
 
 生产等价 Docker restore drill：**未执行，环境门控**。检查结果为 `docker`、`age`、`systemctl`、`pg_restore` 均不可用；主机是 Darwin arm64，不是 Ubuntu 24.04。由于仓库脚本内部固定 Compose project 名 `fitgridweb`，也不能在共享主机上仅用外层 `fitgridweb-drill` 名称证明隔离。本次没有创建、检查或删除任何 Docker project/volume，也没有触碰 VPS。
 
