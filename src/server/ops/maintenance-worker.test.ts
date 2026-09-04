@@ -148,6 +148,7 @@ async function workerFixture(options: WorkerOptions = {}) {
   const history = path.join(statuses, "backups.json");
   const commandLog = path.join(root, "commands.log");
   const dockerArgsLog = path.join(root, "docker-args.log");
+  const healthUrlLog = path.join(root, "health-urls.log");
   const flockArgsLog = path.join(root, "flock-args.log");
   const audit = path.join(rootOps, "audit.jsonl");
   const activeCount = path.join(root, "active-count");
@@ -166,6 +167,7 @@ async function workerFixture(options: WorkerOptions = {}) {
   await writeFile(history, JSON.stringify({ entries: [] }));
   await writeFile(commandLog, "");
   await writeFile(dockerArgsLog, "");
+  await writeFile(healthUrlLog, "");
   await writeFile(flockArgsLog, "");
   await writeFile(activeCount, "0\n");
   await writeFile(maxActive, "0\n");
@@ -177,6 +179,8 @@ async function workerFixture(options: WorkerOptions = {}) {
     environmentFile,
     [
       "DOMAIN=grid.example.com",
+      "PUBLIC_HTTPS_PORT=443",
+      "PUBLIC_PORT_SUFFIX=",
       "APP_PORT=3000",
       "APP_IMAGE=ghcr.io/example/fitgridweb:sha-2ca7f41",
       "POSTGRES_DB=fitgridweb",
@@ -286,6 +290,7 @@ esac`,
     bin,
     "curl",
     `
+printf '%s\n' "$*" >>"$HEALTH_URL_LOG"
 if [ "$REQUIRE_FENCE_DURING_HEALTH" = true ] && [ ! -f "$MAINTENANCE_FENCE_FILE" ]; then
   printf 'health-unfenced\n' >>"$COMMAND_LOG"
   exit 23
@@ -305,6 +310,11 @@ case "\${MAINTENANCE_HEALTH_PHASE:-}" in
     fi ;;
   rollback)
     if [ "$ROLLBACK_HEALTH" != true ]; then
+      printf 'health-failed\n' >>"$COMMAND_LOG"
+      exit 22
+    fi ;;
+  snapshot-recovery)
+    if [ "$SNAPSHOT_RECOVERY_HEALTH" != true ]; then
       printf 'health-failed\n' >>"$COMMAND_LOG"
       exit 22
     fi ;;
@@ -483,11 +493,13 @@ exec /bin/mv "$source" "$destination"`,
     FITGRID_HEALTH_ATTEMPTS: "1",
     RESTORED_HEALTH: String(options.restoredHealth ?? true),
     ROLLBACK_HEALTH: String(options.rollbackHealth ?? true),
+    SNAPSHOT_RECOVERY_HEALTH: "true",
     FAIL_ROLLBACK_QUIESCE: String(options.failRollbackQuiesce ?? false),
     EXPECTED_UPLOAD_CONTENT: "",
     EXPORT_SQL_LOG: path.join(root, "export.sql"),
     RESTORE_SQL_LOG: path.join(root, "restore.sql"),
     DOCKER_ARGS_LOG: dockerArgsLog,
+    HEALTH_URL_LOG: healthUrlLog,
     MAINTENANCE_ROOT_UID: String(testRootUid),
     MAINTENANCE_ROOT_GID: String(testRootGid),
     WEB_DIRECTORY: web,
@@ -653,6 +665,7 @@ exec /bin/mv "$source" "$destination"`,
     transitions: async (id: string) => (await readFile(path.join(transitionsDirectory, `${id}.json`), "utf8")).trim().split("\n"),
     commandSequence: async () => (await readFile(commandLog, "utf8")).trim().split("\n").filter(Boolean),
     dockerCommands: async () => (await readFile(dockerArgsLog, "utf8")).trim().split("\n").filter(Boolean),
+    healthUrls: async () => (await readFile(healthUrlLog, "utf8")).trim().split("\n").filter(Boolean),
     maintenance: () => readJson(path.join(statuses, "maintenance.json")),
     rootMaintenance: () => readJson(path.join(rootOps, "maintenance.json")),
   };
@@ -675,6 +688,22 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
       .toEqual(["-n 9", "-w 30 9"]);
     expect(await readdir(files.inbox)).toEqual([`${JOB_A}.json`, `${JOB_A}.secret`]);
     await expect(stat(path.join(files.statuses, `${JOB_A}.json`))).rejects.toThrow();
+  });
+
+  it.each([
+    ["ordinary", false],
+    ["boot recovery", true],
+  ])("reconciles published archives before %s work", async (_caseName, recovery) => {
+    const files = await workerFixture();
+    const filename = "fitgridweb-20260903T070000Z.fitgridbackup";
+    await writeFile(path.join(files.backups, filename), "published-before-history");
+
+    const result = recovery ? files.runRecovery() : files.runWorker();
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(await readFile(path.join(files.statuses, "backups.json"), "utf8")).entries)
+      .toMatchObject([{ filename, status: "ready" }]);
+    expect((await readFile(files.flockArgsLog, "utf8")).trim()).toBe(recovery ? "-w 30 9" : "-n 9");
   });
 
   it("serializes jobs and reports backup stages through atomic status renames", async () => {
@@ -937,9 +966,9 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
 
     expect(result.status, result.stderr).toBe(0);
     expect(await files.commandSequence()).toEqual([
-      "rollback-snapshot",
       "stop-app",
       "terminate-app-connections",
+      "rollback-snapshot",
       "reset-schema",
       "migrate",
       "restore-upload",
@@ -996,15 +1025,20 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(result.status, result.stderr).toBe(0);
     const sequence = await files.commandSequence();
     const stop = sequence.indexOf("stop-app");
+    const snapshot = sequence.indexOf("rollback-snapshot");
     const reset = sequence.indexOf("reset-schema");
-    for (const barrier of ["sync-rollback-cipher", "sync-work", "sync-fence", "sync-marker"]) {
+    for (const barrier of ["sync-fence", "sync-marker"]) {
       expect(sequence.indexOf(barrier), `${barrier}: ${sequence.join(", ")}`).toBeGreaterThan(-1);
       expect(sequence.indexOf(barrier)).toBeLessThan(stop);
+    }
+    for (const barrier of ["sync-rollback-cipher", "sync-work"]) {
+      expect(sequence.indexOf(barrier), `${barrier}: ${sequence.join(", ")}`).toBeGreaterThan(-1);
+      expect(sequence.indexOf(barrier)).toBeGreaterThan(snapshot);
       expect(sequence.indexOf(barrier)).toBeLessThan(reset);
     }
   });
 
-  it("does not mutate the database when the rollback durability barrier fails", async () => {
+  it("restarts and verifies the unchanged app before reporting a snapshot failure", async () => {
     const files = await workerFixture();
     await files.prepareRestore();
     await files.enqueueRestore();
@@ -1012,9 +1046,60 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     const result = files.runWorker({ FAIL_SYNC_TARGET: "rollback.dump.enc" });
 
     expect(result.status).not.toBe(0);
-    expect(await files.commandSequence()).toEqual(["rollback-snapshot"]);
+    expect(await files.commandSequence()).toEqual([
+      "stop-app",
+      "terminate-app-connections",
+      "rollback-snapshot",
+      "start-app",
+      "health-ok",
+    ]);
     expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "failed", code: "SNAPSHOT_FAILED" });
+    expect(await files.maintenance()).toMatchObject({ active: false });
     await expect(stat(files.fence)).rejects.toThrow();
+  });
+
+  it("requires intervention when the old app cannot be verified after a snapshot failure", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+
+    const result = files.runWorker({
+      FAIL_SYNC_TARGET: "rollback.dump.enc",
+      SNAPSHOT_RECOVERY_HEALTH: "false",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(await files.commandSequence()).toEqual([
+      "stop-app",
+      "terminate-app-connections",
+      "rollback-snapshot",
+      "start-app",
+      "health-failed",
+    ]);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({
+      state: "intervention-required",
+      code: "SNAPSHOT_RECOVERY_FAILED",
+    });
+    expect(await files.rootMaintenance()).toMatchObject({ active: true, jobId: RESTORE_JOB });
+    expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
+  });
+
+  it("checks the configured non-standard public HTTPS port after restore", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+
+    const environment = await readFile(files.environmentFile, "utf8");
+    await writeFile(files.environmentFile, environment
+      .replace("PUBLIC_HTTPS_PORT=443", "PUBLIC_HTTPS_PORT=10256")
+      .replace("PUBLIC_PORT_SUFFIX=", "PUBLIC_PORT_SUFFIX=:10256"));
+
+    const result = files.runWorker();
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await files.healthUrls()).toContain(
+      "--fail --silent --show-error --max-time 10 https://grid.example.com:10256/fitgrid/api/v1/health",
+    );
   });
 
   it("enters intervention when the fence cannot become durable before marker activation", async () => {
@@ -1032,14 +1117,16 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(await files.rootMaintenance()).toMatchObject({ active: true, jobId: RESTORE_JOB });
     expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
     expect((await readdir(path.join(files.rootOps, "intervention", RESTORE_JOB))).sort())
-      .toEqual(["job.json", "rollback.dump.enc"]);
-    expect(await files.commandSequence()).toEqual(["rollback-snapshot"]);
+      .toEqual(["job.json"]);
+    expect(await files.commandSequence()).toEqual([]);
   });
 
   it.each([
-    ["active marker", { FAIL_ACTIVE_MARKER: "true" }, "MARKER_ACTIVATION_FAILED"],
-    ["restoring status", { FAIL_STATUS_STATE: "restoring" }, "STATUS_PUBLISH_FAILED"],
-  ])("does not touch the live database when %s publication fails", async (_failure, failureEnv, code) => {
+    ["active marker", { FAIL_ACTIVE_MARKER: "true" }, "MARKER_ACTIVATION_FAILED", []],
+    ["restoring status", { FAIL_STATUS_STATE: "restoring" }, "STATUS_PUBLISH_FAILED", [
+      "stop-app", "terminate-app-connections", "rollback-snapshot",
+    ]],
+  ])("does not touch the live database when %s publication fails", async (_failure, failureEnv, code, commands) => {
     const files = await workerFixture();
     await files.prepareRestore();
     await files.enqueueRestore();
@@ -1050,7 +1137,7 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "intervention-required", code });
     expect(await files.rootMaintenance()).toMatchObject({ active: true, jobId: RESTORE_JOB });
     expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
-    expect(await files.commandSequence()).toEqual(["rollback-snapshot"]);
+    expect(await files.commandSequence()).toEqual(commands);
   });
 
   it.each([
@@ -1069,7 +1156,11 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
       state: "intervention-required",
       code: "AUDIT_PERSIST_FAILED",
     });
-    expect(await files.commandSequence()).toEqual(["rollback-snapshot"]);
+    expect(await files.commandSequence()).toEqual([
+      "stop-app",
+      "terminate-app-connections",
+      "rollback-snapshot",
+    ]);
     expect(await files.rootMaintenance()).toMatchObject({ active: true, jobId: RESTORE_JOB });
     expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
     expect(await stat(path.join(files.rootOps, "intervention", RESTORE_JOB, "rollback.dump.enc"))).toBeDefined();
@@ -1084,9 +1175,9 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
 
     expect(result.status, result.stderr).toBe(0);
     expect(await files.commandSequence()).toEqual([
-      "rollback-snapshot",
       "stop-app",
       "terminate-app-connections",
+      "rollback-snapshot",
       "reset-schema",
       "migrate",
       "restore-upload",
@@ -1120,9 +1211,9 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(result.status).not.toBe(0);
     expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "intervention-required", code });
     expect(await files.commandSequence()).toEqual([
-      "rollback-snapshot",
       "stop-app",
       "terminate-app-connections",
+      "rollback-snapshot",
       "reset-schema",
       "migrate",
       "restore-upload",
@@ -1214,9 +1305,9 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(result.status).not.toBe(0);
     expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "intervention-required", code: "ROLLBACK_FAILED" });
     expect(await files.commandSequence()).toEqual([
-      "rollback-snapshot",
       "stop-app",
       "terminate-app-connections",
+      "rollback-snapshot",
       "reset-schema",
       "migrate",
       "restore-upload",
@@ -1569,7 +1660,7 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     await expect(stat(claim)).rejects.toThrow();
     await expect(stat(path.join(files.statuses, "active-job.json"))).rejects.toThrow();
     await expect(stat(files.fence)).rejects.toThrow();
-    expect(await files.commandSequence()).toEqual(["rollback-snapshot"]);
+    expect(await files.commandSequence()).toEqual([]);
   });
 
   it("preserves rollback evidence on TERM during destructive restore and intervenes on boot", async () => {

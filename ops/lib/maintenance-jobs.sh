@@ -938,10 +938,14 @@ maintenance_verify_health() {
   MAINTENANCE_HEALTH_PHASE=$maintenance_health_phase
   export MAINTENANCE_HEALTH_PHASE
   maintenance_attempts=${FITGRID_HEALTH_ATTEMPTS:-12}
+  maintenance_public_suffix=${PUBLIC_PORT_SUFFIX:-}
+  if [ -z "$maintenance_public_suffix" ] && [ "${PUBLIC_HTTPS_PORT:-443}" != 443 ]; then
+    maintenance_public_suffix=":${PUBLIC_HTTPS_PORT}"
+  fi
   maintenance_count=1
   while [ "$maintenance_count" -le "$maintenance_attempts" ]; do
     if curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:${APP_PORT:-3000}/fitgrid/api/v1/health" >/dev/null \
-      && curl --fail --silent --show-error --max-time 10 "https://$DOMAIN/fitgrid/api/v1/health" >/dev/null; then
+      && curl --fail --silent --show-error --max-time 10 "https://$DOMAIN$maintenance_public_suffix/fitgrid/api/v1/health" >/dev/null; then
       return 0
     fi
     maintenance_count=$((maintenance_count + 1))
@@ -1054,6 +1058,30 @@ maintenance_finalize_successful_rollback() {
   fi
 }
 
+maintenance_finalize_snapshot_failure() {
+  if ! maintenance_write_status failed SNAPSHOT_FAILED; then
+    maintenance_enter_intervention STATUS_PUBLISH_FAILED
+    return 1
+  fi
+  if ! maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" failed SNAPSHOT_FAILED "$maintenance_bound_sha"; then
+    maintenance_enter_intervention AUDIT_PERSIST_FAILED
+    return 1
+  fi
+  if ! maintenance_record_terminal; then
+    maintenance_enter_intervention TERMINAL_STATE_WRITE_FAILED
+    return 1
+  fi
+  if ! maintenance_write_marker false; then
+    maintenance_enter_intervention MARKER_CLEAR_FAILED
+    return 1
+  fi
+  if ! maintenance_clear_fence; then
+    maintenance_enter_intervention FENCE_CLEAR_FAILED
+    return 1
+  fi
+  return 1
+}
+
 maintenance_attempt_rollback() {
   if ! maintenance_write_status rollback; then
     maintenance_enter_intervention STATUS_PUBLISH_FAILED
@@ -1100,12 +1128,6 @@ maintenance_handle_restore() {
     maintenance_enter_intervention STATUS_PUBLISH_FAILED || :
     return 1
   fi
-  if ! maintenance_snapshot_before_restore; then
-    maintenance_write_status failed SNAPSHOT_FAILED
-    maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" failed SNAPSHOT_FAILED "$maintenance_bound_sha"
-    return 1
-  fi
-
   if ! maintenance_write_fence; then
     maintenance_enter_intervention FENCE_ACTIVATION_FAILED || :
     return 1
@@ -1113,6 +1135,24 @@ maintenance_handle_restore() {
   if ! maintenance_write_marker true "$maintenance_job_id"; then
     maintenance_enter_intervention MARKER_ACTIVATION_FAILED || :
     return 1
+  fi
+  MAINTENANCE_RESTORE_SOURCE=upload
+  export MAINTENANCE_RESTORE_SOURCE
+  if ! fitgrid_compose stop app || ! maintenance_terminate_runtime_connections; then
+    maintenance_enter_intervention SNAPSHOT_QUIESCE_FAILED || :
+    return 1
+  fi
+  if ! maintenance_snapshot_before_restore; then
+    rm -f "$maintenance_current_work/rollback.dump" \
+      "$maintenance_current_work/rollback.dump.enc" \
+      "$maintenance_current_work/rollback.verify.dump"
+    if ! fitgrid_compose up --no-build -d --wait app \
+      || ! maintenance_verify_health snapshot-recovery; then
+      maintenance_enter_intervention SNAPSHOT_RECOVERY_FAILED || :
+      return 1
+    fi
+    maintenance_finalize_snapshot_failure
+    return $?
   fi
   if ! maintenance_write_status restoring; then
     maintenance_enter_intervention STATUS_PUBLISH_FAILED || :
@@ -1122,11 +1162,7 @@ maintenance_handle_restore() {
     maintenance_enter_intervention AUDIT_PERSIST_FAILED || :
     return 1
   fi
-  MAINTENANCE_RESTORE_SOURCE=upload
-  export MAINTENANCE_RESTORE_SOURCE
-  if fitgrid_compose stop app \
-    && maintenance_terminate_runtime_connections \
-    && maintenance_reset_portable_schema
+  if maintenance_reset_portable_schema
   then
     if ! maintenance_write_status migrating; then
       maintenance_enter_intervention STATUS_PUBLISH_FAILED || :
