@@ -49,14 +49,14 @@ const FILE_NAME = "fitgridweb-20260903T070000Z.fitgridbackup";
 
 let root: string;
 let archivePath: string;
-let archiveIdentity: { dev: number; ino: number };
+let archiveIdentity: { dev: number; ino: number; ctimeMs: number };
 
 beforeAll(async () => {
   root = await mkdtemp(path.join(tmpdir(), "fitgrid-origin-routes-"));
   archivePath = path.join(root, FILE_NAME);
   await writeFile(archivePath, "portable-archive", { mode: 0o600 });
   const info = await stat(archivePath);
-  archiveIdentity = { dev: info.dev, ino: info.ino };
+  archiveIdentity = { dev: info.dev, ino: info.ino, ctimeMs: info.ctimeMs };
 });
 
 afterAll(async () => {
