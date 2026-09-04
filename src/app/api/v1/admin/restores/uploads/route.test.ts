@@ -26,6 +26,57 @@ afterEach(() => {
 });
 
 describe("POST /api/v1/admin/restores/uploads", () => {
+  it("strictly decodes a UTF-8 base64url passphrase before writing the upload", async () => {
+    const services = servicesFor();
+    getRuntimeServices.mockReturnValue(services);
+    const body = chunkedBody([new Uint8Array(3)]);
+    const request = uploadRequest(body, {
+      "X-FitGrid-Backup-Passphrase": "5Lit5paH5aSH5Lu95a-G56CB8J-UkOWuieWFqOaBouWkjeWNgeS6jA",
+      "X-FitGrid-Backup-Passphrase-Encoding": "base64url-utf8",
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(202);
+    expect(services.maintenance.writeUpload).toHaveBeenCalledWith(
+      expect.objectContaining({ passphrase: "中文备份密码🔐安全恢复十二" }),
+      body,
+    );
+  });
+
+  it.each([
+    ["missing encoding", "", "cG9ydGFibGUtcGFzc3dvcmQ"],
+    ["unknown encoding", "base64", "cG9ydGFibGUtcGFzc3dvcmQ"],
+    ["non-base64url alphabet", "base64url-utf8", "YWJjZGVmZ2hpamts+g"],
+    ["impossible base64url length", "base64url-utf8", "aaaaaaaaaaaaa"],
+    ["non-canonical base64url", "base64url-utf8", "YWJjZGVmZ2hpamtsZh"],
+    ["invalid UTF-8", "base64url-utf8", "________________"],
+    ["decoded NUL", "base64url-utf8", "YWJjZGVmZ2hpamtsAA"],
+    ["decoded newline", "base64url-utf8", "YWJjZGVmZ2hpamtsCg"],
+    ["decoded value below 12 code points", "base64url-utf8", "YWJjZGVmZ2hpams"],
+    [
+      "decoded value above 128 code points",
+      "base64url-utf8",
+      "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh",
+    ],
+  ])("rejects %s without reading the body", async (_label, encoding, encodedPassphrase) => {
+    const services = servicesFor();
+    getRuntimeServices.mockReturnValue(services);
+    const body = observableBody();
+    const response = await POST(uploadRequest(body, {
+      "X-FitGrid-Backup-Passphrase": encodedPassphrase,
+      "X-FitGrid-Backup-Passphrase-Encoding": encoding,
+    }));
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "BACKUP_PASSPHRASE_INVALID",
+      requestId: REQUEST_ID,
+    });
+    expect(body.readCount()).toBe(0);
+    expect(services.maintenance.writeUpload).not.toHaveBeenCalled();
+  });
+
   it("streams the raw body object directly to the maintenance gateway", async () => {
     const services = servicesFor();
     getRuntimeServices.mockReturnValue(services);
@@ -183,7 +234,8 @@ function uploadRequest(
         Host: "fitgrid.example",
         Origin: "https://fitgrid.example",
         "Content-Type": "application/vnd.fitgrid.backup",
-        "X-FitGrid-Backup-Passphrase": "portable-password",
+        "X-FitGrid-Backup-Passphrase": "cG9ydGFibGUtcGFzc3dvcmQ",
+        "X-FitGrid-Backup-Passphrase-Encoding": "base64url-utf8",
         "X-FitGrid-Backup-Size": "3",
         "X-Request-Id": REQUEST_ID,
         ...overrides,

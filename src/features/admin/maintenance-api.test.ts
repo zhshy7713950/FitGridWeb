@@ -256,7 +256,7 @@ describe("administrator maintenance client", () => {
     }, { status: 202 }));
     vi.stubGlobal("fetch", fetcher);
 
-    await uploadRestoreForInspection(file, "portable-password");
+    await uploadRestoreForInspection(file, "中文备份密码🔐安全恢复十二");
 
     expect(file.stream).toHaveBeenCalledTimes(1);
     expect(fetcher).toHaveBeenCalledTimes(1);
@@ -269,7 +269,10 @@ describe("administrator maintenance client", () => {
     expect((init as RequestInit & { duplex?: string }).duplex).toBe("half");
     const headers = new Headers(init.headers);
     expect(headers.get("Content-Type")).toBe("application/vnd.fitgrid.backup");
-    expect(headers.get("X-FitGrid-Backup-Passphrase")).toBe("portable-password");
+    expect(headers.get("X-FitGrid-Backup-Passphrase")).toBe(
+      "5Lit5paH5aSH5Lu95a-G56CB8J-UkOWuieWFqOaBouWkjeWNgeS6jA",
+    );
+    expect(headers.get("X-FitGrid-Backup-Passphrase-Encoding")).toBe("base64url-utf8");
     expect(headers.get("X-FitGrid-Backup-Size")).toBe("8192");
   });
 

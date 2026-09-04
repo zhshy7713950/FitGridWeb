@@ -11,6 +11,7 @@ import { getRuntimeServices } from "@/server/runtime/services";
 import { restoreInspectionRequests } from "@/server/security/request-protection";
 
 const mediaType = "application/vnd.fitgrid.backup";
+const passphraseEncoding = "base64url-utf8";
 const defaultMaxUploadBytes = 536_870_912;
 
 function uploadLimit(): number {
@@ -37,11 +38,31 @@ function declaredSize(request: Request, maximum: number): number {
   return size;
 }
 
+function invalidPassphrase(): never {
+  throw new ApiError(422, "BACKUP_PASSPHRASE_INVALID", "备份密码必须包含 12–128 个字符");
+}
+
 function passphrase(request: Request): string {
-  const value = request.headers.get("x-fitgrid-backup-passphrase") ?? "";
+  if (request.headers.get("x-fitgrid-backup-passphrase-encoding") !== passphraseEncoding) {
+    return invalidPassphrase();
+  }
+  const encoded = request.headers.get("x-fitgrid-backup-passphrase") ?? "";
+  if (!/^[A-Za-z0-9_-]+$/.test(encoded) || encoded.length % 4 === 1) {
+    return invalidPassphrase();
+  }
+  const bytes = Buffer.from(encoded, "base64url");
+  if (bytes.toString("base64url") !== encoded) {
+    return invalidPassphrase();
+  }
+  let value: string;
+  try {
+    value = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return invalidPassphrase();
+  }
   const length = Array.from(value).length;
   if (length < 12 || length > 128 || /[\n\r\0]/.test(value)) {
-    throw new ApiError(422, "BACKUP_PASSPHRASE_INVALID", "备份密码必须包含 12–128 个字符");
+    return invalidPassphrase();
   }
   return value;
 }

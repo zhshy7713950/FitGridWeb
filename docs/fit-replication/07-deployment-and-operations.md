@@ -157,6 +157,8 @@ journalctl -u fitgridweb --since=-10m
 
 应用容器只获得 UID/GID 1001 的 web spool 可写挂载和便携目录只读挂载；没有 Docker socket、migration URL、服务器环境文件、backup key 或 root 状态树。`fitgridweb-maintenance.path` 监视固定 inbox，root oneshot worker 串行处理固定 schema 的 `backup`、`inspect-restore`、`restore`，审计写入 `/var/lib/fitgridweb/admin-ops/root/audit.jsonl` 并由 logrotate 保存 180 个 daily rotation。
 
+上述管理员授权边界不覆盖 app-process RCE；如果应用进程已被攻陷，必须按主机入侵事件响应，不能仅依赖网页的管理员重新验证。root worker 不接受任意命令或用户路径，且便携备份数据不会成为 shell、SQL、DDL 或 `pg_restore` 的可执行输入；这是执行面的限制，不是对已攻陷 app 的完整隔离声明。
+
 真实异机 timer 只应在 `BACKUP_REMOTE_DIR` 为安全绝对路径、非 `/`、现有非 symlink 可写目录、`realpath` 成功且 `findmnt` 设备不同于 `/` 时启用。该检查只由安装/升级流程执行；systemd timer/service 不执行此挂载检查，单独运行 `systemctl enable --now fitgridweb-backup.timer` 也不会验证目录。首次安装的远端路径默认为空，因此 timer 禁用；任何手工启用或重新启用之前都必须重新执行路径、可写、设备、手工备份和远端 checksum 检查。挂载后来失效时 unit 不会自动识别，必须监控并立即 `systemctl disable --now fitgridweb-backup.timer`。完整命令见 [2 GiB 手册](low-memory-vps-runbook.md#配置真正的异机定时备份)。
 
 固定检查命令：

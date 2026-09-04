@@ -11,6 +11,7 @@ import type {
 } from "./types";
 
 const backupMediaType = "application/vnd.fitgrid.backup";
+const backupPassphraseEncoding = "base64url-utf8";
 
 type DemoMaintenanceData = typeof import("./demo-maintenance-data");
 
@@ -23,6 +24,12 @@ function demoMaintenanceData(): Promise<DemoMaintenanceData> {
     return Promise.reject(new Error("UI demo maintenance data is unavailable in production"));
   }
   return loadDemoMaintenanceData();
+}
+
+function encodeBackupPassphrase(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  const binary = String.fromCharCode(...bytes);
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
 export function createPortableBackup(
@@ -91,7 +98,8 @@ export function uploadRestoreForInspection(
     method: "POST",
     headers: {
       "Content-Type": backupMediaType,
-      "X-FitGrid-Backup-Passphrase": passphrase,
+      "X-FitGrid-Backup-Passphrase": encodeBackupPassphrase(passphrase),
+      "X-FitGrid-Backup-Passphrase-Encoding": backupPassphraseEncoding,
       "X-FitGrid-Backup-Size": String(file.size),
     },
     body: file.stream(),

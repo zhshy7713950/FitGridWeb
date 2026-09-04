@@ -169,7 +169,7 @@ describe("data vault backup custody", () => {
     expect(issueDownload).toHaveBeenCalledWith("backup-a", expect.any(AbortSignal));
     expect(download).toHaveBeenCalledWith(
       "/fitgrid/api/v1/admin/backups/a/download?token=t",
-      "fitgridweb-portable-backup.fitgridbackup",
+      "fitgridweb-20260903T070000Z.fitgridbackup",
     );
     expect(navigate).not.toHaveBeenCalled();
   });
@@ -194,17 +194,17 @@ describe("data vault backup custody", () => {
 
     downloadMaintenanceArchive(
       "data:application/vnd.fitgrid.backup;base64,Rml0R3JpZA==",
-      "fitgridweb-portable-backup.fitgridbackup",
+      "fitgridweb-20260903T070000Z.fitgridbackup",
     );
 
     expect(clickedAnchor).not.toBeNull();
     expect(clickedAnchor!.href).toBe(
       "data:application/vnd.fitgrid.backup;base64,Rml0R3JpZA==",
     );
-    expect(clickedAnchor!.download).toBe("fitgridweb-portable-backup.fitgridbackup");
+    expect(clickedAnchor!.download).toBe("fitgridweb-20260903T070000Z.fitgridbackup");
     expect(clickedAnchor!.rel).toBe("noopener noreferrer");
     expect(clickedAnchor!.connected).toBe(true);
-    expect(document.querySelector('a[download="fitgridweb-portable-backup.fitgridbackup"]'))
+    expect(document.querySelector('a[download="fitgridweb-20260903T070000Z.fitgridbackup"]'))
       .toBeNull();
   });
 

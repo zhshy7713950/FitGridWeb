@@ -64,7 +64,13 @@ export type MaintenanceApi = {
   clearClientSession(): void;
 };
 
-const portableBackupFilename = "fitgridweb-portable-backup.fitgridbackup";
+function portableBackupFilename(createdAt: string): string {
+  const timestamp = new Date(createdAt).toISOString()
+    .replaceAll("-", "")
+    .replaceAll(":", "")
+    .replace(/\.\d{3}Z$/, "Z");
+  return `fitgridweb-${timestamp}.fitgridbackup`;
+}
 
 export function downloadMaintenanceArchive(url: string, suggestedFilename: string): void {
   const anchor = document.createElement("a");
@@ -626,13 +632,13 @@ export function DataVault({
     }
   }
 
-  async function downloadBackup(backupId: string) {
+  async function downloadBackup(backup: PortableBackupSummary) {
     const controller = new AbortController();
     controllers.current.add(controller);
     setHistoryError(null);
     try {
-      const url = await api.issueDownload(backupId, controller.signal);
-      if (!controller.signal.aborted) api.download(url, portableBackupFilename);
+      const url = await api.issueDownload(backup.id, controller.signal);
+      if (!controller.signal.aborted) api.download(url, portableBackupFilename(backup.createdAt));
     } catch (error) {
       if (!controller.signal.aborted) setHistoryError(publicError(error, "下载备份失败，请重试"));
     } finally {
@@ -876,7 +882,7 @@ export function DataVault({
                   <button
                     type="button"
                     aria-label={`下载备份 ${timestamp}`}
-                    onClick={() => void downloadBackup(backup.id)}
+                    onClick={() => void downloadBackup(backup)}
                   >
                     下载
                   </button>

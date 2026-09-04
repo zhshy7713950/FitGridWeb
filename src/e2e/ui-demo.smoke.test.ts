@@ -312,7 +312,7 @@ describe.sequential("database-free UI demo", () => {
       (button as HTMLButtonElement).click()
     ));
     const downloadedArchive = await downloadEvent;
-    expect(downloadedArchive.suggestedFilename()).toBe("fitgridweb-portable-backup.fitgridbackup");
+    expect(downloadedArchive.suggestedFilename()).toBe("fitgridweb-20260903T080000Z.fitgridbackup");
     expect(page.url()).toBe(`${baseUrl}/admin`);
 
     await page.getByRole("button", { name: "创建邀请" }).click();

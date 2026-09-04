@@ -376,8 +376,18 @@ paths:
         - name: X-FitGrid-Backup-Passphrase
           in: header
           required: true
-          description: 只在当前 HTTPS 请求内存和受限任务秘密文件中短暂存在
-          schema: {type: string, minLength: 12, maxLength: 128, writeOnly: true}
+          description: 独立备份密码的无填充 UTF-8 base64url 信封；解码后必须是 12–128 个 Unicode 码点，且不含 NUL 或换行。密码只在当前 HTTPS 请求内存和受限任务秘密文件中短暂存在
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 683
+            pattern: '^[A-Za-z0-9_-]+$'
+            writeOnly: true
+        - name: X-FitGrid-Backup-Passphrase-Encoding
+          in: header
+          required: true
+          description: 明确声明备份密码信封编码；服务端不对缺失或其他值做兼容降级
+          schema: {type: string, const: base64url-utf8}
         - name: X-FitGrid-Backup-Size
           in: header
           required: true

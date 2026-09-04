@@ -326,7 +326,8 @@ function uploadRequest(requestHeaders: HeadersInit): Request {
       method: "POST",
       headers: {
         "Content-Type": "application/vnd.fitgrid.backup",
-        "X-FitGrid-Backup-Passphrase": "portable-password",
+        "X-FitGrid-Backup-Passphrase": "cG9ydGFibGUtcGFzc3dvcmQ",
+        "X-FitGrid-Backup-Passphrase-Encoding": "base64url-utf8",
         "X-FitGrid-Backup-Size": "3",
         ...Object.fromEntries(new Headers(requestHeaders)),
       },
