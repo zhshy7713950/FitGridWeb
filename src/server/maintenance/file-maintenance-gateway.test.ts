@@ -24,6 +24,7 @@ import { FileMaintenanceGateway } from "./file-maintenance-gateway";
 const ADMIN_ID = "11111111-1111-4111-8111-111111111111";
 const JOB_A = "22222222-2222-4222-8222-222222222222";
 const JOB_B = "33333333-3333-4333-8333-333333333333";
+const UPLOAD_HEADROOM_BYTES = 64n * 1024n * 1024n;
 
 const roots: string[] = [];
 
@@ -284,6 +285,48 @@ describe("FileMaintenanceGateway", () => {
       .toEqual(Buffer.from([1, 2, 3]));
     expect((await stat(path.join(files.adminOpsDirectory, "uploads", `${JOB_A}.fitgridbackup`))).mode & 0o777)
       .toBe(0o600);
+  });
+
+  it("rejects insufficient peak space before reading or writing an upload and leaves admission clear", async () => {
+    const getReader = vi.fn(() => { throw new Error("upload reader must not be acquired"); });
+    const files = await fixture([JOB_A], {
+      availableBytes: vi.fn().mockResolvedValue(UPLOAD_HEADROOM_BYTES + 5n),
+    });
+    const stream = { getReader } as unknown as ReadableStream<Uint8Array>;
+
+    await expect(files.gateway.writeUpload({
+      actorId: ADMIN_ID,
+      requestId: "upload-no-space",
+      fileName: "fitgridweb-20260903T070000Z.fitgridbackup",
+      size: 3,
+      passphrase: "abcdefghijkl",
+    }, stream)).rejects.toMatchObject({ status: 507, code: "INSUFFICIENT_DISK_SPACE" });
+
+    expect(getReader).not.toHaveBeenCalled();
+    expect(await readdir(path.join(files.adminOpsDirectory, "uploads"))).toEqual([]);
+    expect(await readdir(path.join(files.adminOpsDirectory, "inbox"))).toEqual([]);
+    await expect(lstat(path.join(files.adminOpsDirectory, "status", "active-job.json")))
+      .rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("accepts the exact conservative upload-space boundary", async () => {
+    const files = await fixture([JOB_A], {
+      availableBytes: vi.fn().mockResolvedValue(UPLOAD_HEADROOM_BYTES + 6n),
+    });
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3]));
+        controller.close();
+      },
+    });
+
+    await expect(files.gateway.writeUpload({
+      actorId: ADMIN_ID,
+      requestId: "upload-space-boundary",
+      fileName: "fitgridweb-20260903T070000Z.fitgridbackup",
+      size: 3,
+      passphrase: "abcdefghijkl",
+    }, stream)).resolves.toMatchObject({ id: JOB_A, state: "queued" });
   });
 
   it("cleans an interrupted or understated upload without publishing a job", async () => {

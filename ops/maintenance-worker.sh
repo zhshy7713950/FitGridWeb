@@ -9,6 +9,13 @@ cd "$PROJECT_DIR"
 . "$SCRIPT_DIR/lib/portable-backup.sh"
 . "$SCRIPT_DIR/lib/maintenance-jobs.sh"
 
+maintenance_recovery_mode=false
+case "${1:-}" in
+  --recovery) maintenance_recovery_mode=true ;;
+  "") : ;;
+  *) maintenance_fail "Unknown maintenance worker mode"; exit 2 ;;
+esac
+
 load_fitgrid_environment
 validate_fitgrid_environment
 ADMIN_OPS_DIR=${ADMIN_OPS_DIR:-${ADMIN_OPS_WEB_DIR:-}}
@@ -21,7 +28,14 @@ done
 
 maintenance_prepare_directories || exit 1
 exec 9>"$ADMIN_OPS_ROOT_DIR/maintenance.lock"
-flock -n 9 || exit 0
+if [ "$maintenance_recovery_mode" = true ]; then
+  flock -w 30 9 || {
+    maintenance_fail "Maintenance recovery lock remained busy"
+    exit 1
+  }
+elif ! flock -n 9; then
+  exit 0
+fi
 
 maintenance_current_claim=
 maintenance_current_secret=

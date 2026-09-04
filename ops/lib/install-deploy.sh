@@ -202,6 +202,16 @@ fitgrid_install_main() {
   ensure_environment "$environment_file" "$backup_key_file" \
     "$domain" "$app_port" "$public_port" "$resolved_sha" "$nginx_site"
   ensure_swap "$swap_choice" /swapfile-fitgridweb /etc/fstab /proc/swaps
+
+  if ! install_maintenance_components "$project_directory" "$environment_file"; then
+    fitgrid_error "维护组件安装失败；新 FitGridWeb 应用尚未启动"
+    return 1
+  fi
+  if ! install_systemd_unit "$project_directory/ops/templates/fitgridweb.service" /etc/systemd/system/fitgridweb.service; then
+    restore_environment "$environment_file" "$old_environment" || true
+    fitgrid_error "systemd 应用 unit 安装失败；新 FitGridWeb 应用尚未启动"
+    return 1
+  fi
   deploy_release "$project_directory" "$environment_file" "$old_environment" "$app_port"
 
   nginx_temporary=$(mktemp -d)
@@ -221,10 +231,6 @@ fitgrid_install_main() {
     return 1
   fi
 
-  if ! install_systemd_unit "$project_directory/ops/templates/fitgridweb.service" /etc/systemd/system/fitgridweb.service; then
-    rollback_release "$project_directory" "$environment_file" "$old_environment" "$app_port" "$public_health" || true
-    return 1
-  fi
   if ! systemctl restart fitgridweb.service; then
     rollback_release "$project_directory" "$environment_file" "$old_environment" "$app_port" "$public_health" || true
     return 1
@@ -233,12 +239,6 @@ fitgrid_install_main() {
     rollback_release "$project_directory" "$environment_file" "$old_environment" "$app_port" "$public_health" || true
     return 1
   fi
-
-  if ! install_maintenance_components "$project_directory" "$environment_file"; then
-    fitgrid_error "维护组件安装失败；FitGridWeb 应用保持运行，请按上方具体错误检查"
-    return 1
-  fi
-
   if [ "$admin_choice" = yes ]; then
     create_initial_admin "$project_directory" "$environment_file"
   fi

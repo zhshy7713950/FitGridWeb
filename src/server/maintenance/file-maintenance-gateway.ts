@@ -6,6 +6,7 @@ import {
   open,
   readdir,
   realpath,
+  statfs,
   unlink,
 } from "node:fs/promises";
 import path from "node:path";
@@ -38,6 +39,7 @@ import {
 } from "./types";
 
 const terminalStates = new Set(["ready", "succeeded", "failed", "intervention-required"]);
+const uploadAdmissionHeadroomBytes = 64n * 1024n * 1024n;
 const jobTypeSchema = z.enum(["backup", "inspect-restore", "restore"]);
 const isoDateSchema = z.iso.datetime({ offset: true });
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/);
@@ -145,6 +147,7 @@ export interface FileMaintenanceGatewayConfiguration {
   maxUploadBytes: number;
   idGenerator?: () => string;
   clock?: () => number;
+  availableBytes?: (directory: string) => Promise<bigint>;
   submissionLockEndpoint?: KernelLockEndpoint;
 }
 
@@ -158,6 +161,15 @@ function notFound(): ApiError {
 
 function busy(): ApiError {
   return new ApiError(409, "MAINTENANCE_BUSY", "已有维护任务正在执行");
+}
+
+function insufficientDiskSpace(): ApiError {
+  return new ApiError(507, "INSUFFICIENT_DISK_SPACE", "可用磁盘空间不足，无法接收备份");
+}
+
+async function filesystemAvailableBytes(directory: string): Promise<bigint> {
+  const status = await statfs(directory, { bigint: true });
+  return status.bavail * status.bsize;
 }
 
 function safeInput<T>(schema: z.ZodType<T>, value: unknown, missing = notFound): T {
@@ -288,6 +300,7 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
   private readonly statusDirectory: string;
   private readonly idGenerator: () => string;
   private readonly clock: () => number;
+  private readonly availableBytes: (directory: string) => Promise<bigint>;
 
   constructor(private readonly configuration: FileMaintenanceGatewayConfiguration) {
     if (
@@ -302,6 +315,7 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
     this.statusDirectory = path.join(configuration.adminOpsDirectory, "status");
     this.idGenerator = configuration.idGenerator ?? randomUUID;
     this.clock = configuration.clock ?? Date.now;
+    this.availableBytes = configuration.availableBytes ?? filesystemAvailableBytes;
   }
 
   private async requireSpool(includeBackups = false): Promise<void> {
@@ -331,6 +345,21 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
     } catch (error) {
       if (error instanceof KernelLockBusyError) throw busy();
       throw stateInvalid();
+    }
+  }
+
+  private async requireUploadSpace(declaredBytes: number): Promise<void> {
+    let available: bigint;
+    try {
+      available = await this.availableBytes(this.uploads);
+    } catch {
+      throw stateInvalid();
+    }
+    if (typeof available !== "bigint" || available < 0n) throw stateInvalid();
+    // The host worker copies the app-owned upload into root-owned storage
+    // before unlinking it, so reserve both simultaneously on the common mount.
+    if (available < BigInt(declaredBytes) * 2n + uploadAdmissionHeadroomBytes) {
+      throw insufficientDiskSpace();
     }
   }
 
@@ -463,8 +492,9 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
     let secretCreated = false;
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
-      reader = stream.getReader();
       await this.assertIdle();
+      await this.requireUploadSpace(input.size);
+      reader = stream.getReader();
       handle = await open(
         upload,
         constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,

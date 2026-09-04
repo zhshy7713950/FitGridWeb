@@ -246,10 +246,13 @@ describe("maintenance installation", () => {
     expect(service).toContain("UMask=0077");
     expect(service).not.toContain("fitgridweb.service");
     const recovery = await readFile(maintenanceRecoveryTemplate, "utf8");
-    expect(recovery).toContain("Before=fitgridweb.service");
+    expect(recovery).toContain("Before=fitgridweb.service nginx.service");
     expect(recovery).toContain("User=root\nGroup=root");
     expect(recovery).toContain("RuntimeDirectoryMode=0755");
-    expect(recovery).toContain("ExecStart=/opt/fitgridweb/ops/maintenance-worker.sh");
+    expect(recovery).toContain(
+      "ExecStartPre=/usr/bin/install -o root -g root -m 0644 /dev/null /run/fitgridweb/maintenance.flag",
+    );
+    expect(recovery).toContain("ExecStart=/opt/fitgridweb/ops/maintenance-worker.sh --recovery");
     expect(recovery).not.toMatch(/ConditionPathExists|PathExistsGlob/);
     const sweep = await readFile(maintenanceSweepTimerTemplate, "utf8");
     expect(sweep).toContain("OnUnitInactiveSec=1min");

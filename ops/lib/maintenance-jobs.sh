@@ -546,11 +546,14 @@ maintenance_audit() {
       } | with_entries(select(.value != null))
     ') || return 1
   umask 077
-  printf '%s\n' "$maintenance_audit_line" >>"$maintenance_audit_file"
-  chmod 600 "$maintenance_audit_file"
+  printf '%s\n' "$maintenance_audit_line" >>"$maintenance_audit_file" || return 1
+  maintenance_normalize_root_file "$maintenance_audit_file" 600 || return 1
+  portable_sync_filesystem "$maintenance_audit_file" || return 1
+  portable_sync_filesystem "$ADMIN_OPS_ROOT_DIR" || return 1
   if command -v logger >/dev/null 2>&1; then
     logger -t fitgridweb-maintenance -- "$maintenance_audit_line" 2>/dev/null || :
   fi
+  return 0
 }
 
 maintenance_claim_secret() {
@@ -563,9 +566,18 @@ maintenance_claim_secret() {
 }
 
 maintenance_claim_upload() {
+  maintenance_claim_upload_code=INVALID_UPLOAD
   maintenance_upload_source="$ADMIN_OPS_DIR/uploads/$maintenance_job_id.fitgridbackup"
   maintenance_upload_claim="$ADMIN_OPS_ROOT_DIR/claimed/$maintenance_job_id.fitgridbackup"
   [ -f "$maintenance_upload_source" ] && [ ! -L "$maintenance_upload_source" ] || return 1
+  maintenance_upload_bytes=$(portable_file_size "$maintenance_upload_source") || return 1
+  maintenance_upload_available_kb=$(portable_available_kilobytes "$ADMIN_OPS_ROOT_DIR/claimed") || return 1
+  maintenance_upload_required_kb=$(awk -v size="$maintenance_upload_bytes" \
+    'BEGIN { print int((size + 67108864 + 1023) / 1024) }') || return 1
+  if [ "$maintenance_upload_available_kb" -lt "$maintenance_upload_required_kb" ]; then
+    maintenance_claim_upload_code=INSUFFICIENT_DISK_SPACE
+    return 1
+  fi
   maintenance_claim_app_file "$maintenance_upload_source" "$maintenance_upload_claim" 400 || return 1
   maintenance_current_upload=$maintenance_upload_claim
 }
@@ -581,9 +593,38 @@ maintenance_terminal_file() {
   printf '%s/completed/%s.json\n' "$ADMIN_OPS_ROOT_DIR" "$maintenance_job_id"
 }
 
+maintenance_terminal_matches_current() {
+  maintenance_terminal_candidate=$(maintenance_terminal_file)
+  maintenance_terminal_status=$(maintenance_status_file)
+  maintenance_require_root_file "$maintenance_terminal_candidate" 400 || return 1
+  [ -f "$maintenance_terminal_status" ] && [ ! -L "$maintenance_terminal_status" ] || return 1
+  jq -e \
+    --arg id "$maintenance_job_id" \
+    --arg type "$maintenance_job_type" \
+    --slurpfile status "$maintenance_terminal_status" '
+      . as $terminal |
+      type == "object" and
+      (keys | sort) == ["finishedAt", "id", "schemaVersion", "state", "type"] and
+      .schemaVersion == 1 and
+      .id == $id and
+      .type == $type and
+      (.finishedAt | type == "string") and
+      (.state == "ready" or .state == "succeeded" or .state == "failed" or .state == "intervention-required") and
+      ($status | length == 1) and
+      $status[0].id == $id and
+      $status[0].type == $type and
+      $status[0].state == $terminal.state
+    ' "$maintenance_terminal_candidate" >/dev/null 2>&1
+}
+
 maintenance_record_terminal() {
   maintenance_terminal_status=$(maintenance_status_file)
-  maintenance_terminal_state=$(jq -er '.state | select(. == "ready" or . == "succeeded" or . == "failed" or . == "intervention-required")' "$maintenance_terminal_status" 2>/dev/null) || return 1
+  maintenance_terminal_state=$(jq -er \
+    --arg id "$maintenance_job_id" \
+    --arg type "$maintenance_job_type" '
+      select(.id == $id and .type == $type) |
+      .state | select(. == "ready" or . == "succeeded" or . == "failed" or . == "intervention-required")
+    ' "$maintenance_terminal_status" 2>/dev/null) || return 1
   maintenance_terminal_destination=$(maintenance_terminal_file)
   [ ! -e "$maintenance_terminal_destination" ] && [ ! -L "$maintenance_terminal_destination" ] || return 1
   maintenance_terminal_tmp=$(mktemp "$ADMIN_OPS_ROOT_DIR/completed/.${maintenance_job_id}.XXXXXX") || return 1
@@ -594,11 +635,15 @@ maintenance_record_terminal() {
     --arg finishedAt "$(maintenance_now_iso)" \
     '{schemaVersion:1,id:$id,type:$type,state:$state,finishedAt:$finishedAt}' \
     >"$maintenance_terminal_tmp" || { rm -f "$maintenance_terminal_tmp"; return 1; }
-  chmod 400 "$maintenance_terminal_tmp" || { rm -f "$maintenance_terminal_tmp"; return 1; }
+  maintenance_normalize_root_file "$maintenance_terminal_tmp" 400 \
+    || { rm -f "$maintenance_terminal_tmp"; return 1; }
   if ! mv "$maintenance_terminal_tmp" "$maintenance_terminal_destination"; then
     rm -f "$maintenance_terminal_tmp"
     return 1
   fi
+  maintenance_terminal_matches_current \
+    && portable_sync_filesystem "$maintenance_terminal_destination" \
+    && portable_sync_filesystem "$ADMIN_OPS_ROOT_DIR/completed"
 }
 
 maintenance_replay_exists() {
@@ -667,8 +712,8 @@ maintenance_handle_inspection() {
     return 1
   fi
   if ! maintenance_claim_upload; then
-    maintenance_write_status failed INVALID_UPLOAD
-    maintenance_audit inspect-restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" failed INVALID_UPLOAD
+    maintenance_write_status failed "$maintenance_claim_upload_code"
+    maintenance_audit inspect-restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" failed "$maintenance_claim_upload_code"
     return 1
   fi
   [ ! -e "$maintenance_current_prepared" ] && [ ! -L "$maintenance_current_prepared" ] || {
@@ -930,6 +975,26 @@ maintenance_retain_intervention_state() {
     && portable_sync_filesystem "$ADMIN_OPS_ROOT_DIR/intervention"
 }
 
+maintenance_quarantine_corrupt_claim() {
+  maintenance_corrupt_basename=$(basename "$maintenance_current_claim")
+  maintenance_corrupt_directory="$ADMIN_OPS_ROOT_DIR/intervention/corrupt-claims"
+  maintenance_corrupt_destination="$maintenance_corrupt_directory/$maintenance_corrupt_basename"
+  maintenance_write_fence || :
+  if maintenance_ensure_root_directory "$maintenance_corrupt_directory" \
+    && portable_sync_filesystem "$ADMIN_OPS_ROOT_DIR/intervention" \
+    && [ ! -e "$maintenance_corrupt_destination" ] \
+    && [ ! -L "$maintenance_corrupt_destination" ] \
+    && maintenance_normalize_root_file "$maintenance_current_claim" 400 \
+    && mv "$maintenance_current_claim" "$maintenance_corrupt_destination" \
+    && maintenance_require_root_file "$maintenance_corrupt_destination" 400 \
+    && portable_sync_filesystem "$maintenance_corrupt_destination" \
+    && portable_sync_filesystem "$maintenance_corrupt_directory"; then
+    maintenance_current_claim=
+  fi
+  maintenance_audit job "" "" "" rejected INVALID_JOB || :
+  return 1
+}
+
 maintenance_enter_intervention() {
   maintenance_intervention_code=$1
   maintenance_write_fence || :
@@ -947,11 +1012,18 @@ maintenance_finalize_restored_success() {
     maintenance_enter_intervention STATUS_PUBLISH_FAILED
     return 1
   fi
+  if ! maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" succeeded "" "$maintenance_bound_sha"; then
+    maintenance_enter_intervention AUDIT_PERSIST_FAILED
+    return 1
+  fi
+  if ! maintenance_record_terminal; then
+    maintenance_enter_intervention TERMINAL_STATE_WRITE_FAILED
+    return 1
+  fi
   if ! maintenance_write_marker false; then
     maintenance_enter_intervention MARKER_CLEAR_FAILED
     return 1
   fi
-  maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" succeeded "" "$maintenance_bound_sha" || return 1
   if ! maintenance_clear_fence; then
     maintenance_enter_intervention FENCE_CLEAR_FAILED
     return 1
@@ -963,12 +1035,19 @@ maintenance_finalize_successful_rollback() {
     maintenance_enter_intervention STATUS_PUBLISH_FAILED
     return 1
   fi
+  if ! maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" failed RESTORE_FAILED "$maintenance_bound_sha" \
+    || ! maintenance_audit rollback "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" succeeded "" "$maintenance_bound_sha"; then
+    maintenance_enter_intervention AUDIT_PERSIST_FAILED
+    return 1
+  fi
+  if ! maintenance_record_terminal; then
+    maintenance_enter_intervention TERMINAL_STATE_WRITE_FAILED
+    return 1
+  fi
   if ! maintenance_write_marker false; then
     maintenance_enter_intervention MARKER_CLEAR_FAILED
     return 1
   fi
-  maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" failed RESTORE_FAILED "$maintenance_bound_sha" || return 1
-  maintenance_audit rollback "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" succeeded "" "$maintenance_bound_sha" || return 1
   if ! maintenance_clear_fence; then
     maintenance_enter_intervention FENCE_CLEAR_FAILED
     return 1
@@ -1076,16 +1155,7 @@ maintenance_process_claimed_job() {
   maintenance_cleanup_prepared=false
   maintenance_claim_basename=$(basename "$maintenance_current_claim")
   if ! maintenance_parse_job "$maintenance_current_claim"; then
-    maintenance_audit job "" "" "" rejected INVALID_JOB
-    case "$maintenance_claim_basename" in
-      ????????-????-????-????-????????????.json)
-        rm -f "$ADMIN_OPS_DIR/inbox/${maintenance_claim_basename%.json}.secret" \
-          "$ADMIN_OPS_ROOT_DIR/claimed/${maintenance_claim_basename%.json}.secret" \
-          "$ADMIN_OPS_ROOT_DIR/claimed/${maintenance_claim_basename%.json}.fitgridbackup" \
-          "$ADMIN_OPS_DIR/uploads/${maintenance_claim_basename%.json}.fitgridbackup" ;;
-    esac
-    rm -f "$maintenance_current_claim"
-    maintenance_current_claim=
+    maintenance_quarantine_corrupt_claim || :
     return 1
   fi
   if maintenance_replay_exists; then
@@ -1108,7 +1178,15 @@ maintenance_process_claimed_job() {
     maintenance_cleanup_current
     return "$maintenance_job_status"
   fi
-  if ! maintenance_record_terminal; then
+  maintenance_terminal_destination=$(maintenance_terminal_file)
+  if [ -e "$maintenance_terminal_destination" ] || [ -L "$maintenance_terminal_destination" ]; then
+    if ! maintenance_terminal_matches_current \
+      && ! maintenance_intervention_is_terminal_id "$maintenance_job_id"; then
+      maintenance_cleanup_prepared=true
+      maintenance_enter_intervention TERMINAL_STATE_WRITE_FAILED || :
+      maintenance_job_status=1
+    fi
+  elif ! maintenance_record_terminal; then
     maintenance_cleanup_prepared=true
     maintenance_enter_intervention TERMINAL_STATE_WRITE_FAILED || :
     maintenance_job_status=1
@@ -1133,6 +1211,37 @@ maintenance_recover_claimed_jobs() {
       maintenance_is_active_for "$maintenance_job_id" || maintenance_recovery_marker_state=$?
       if [ "$maintenance_recovery_marker_state" -eq 2 ]; then
         maintenance_recovery_status=1
+        continue
+      fi
+      if maintenance_terminal_matches_current; then
+        maintenance_recovery_terminalized=true
+        maintenance_recovery_authority_state=0
+        maintenance_authoritative_marker_state || maintenance_recovery_authority_state=$?
+        if [ "$maintenance_recovery_authority_state" -eq 0 ] \
+          && { [ "$maintenance_job_type" != restore ] || [ "$maintenance_recovery_marker_state" -ne 0 ]; }; then
+          maintenance_recovery_terminalized=false
+        fi
+        if [ "$maintenance_recovery_terminalized" = true ]; then
+          maintenance_reconcile_admission "$maintenance_job_id" || maintenance_recovery_terminalized=false
+        fi
+        if [ "$maintenance_recovery_terminalized" = true ] && [ "$maintenance_job_type" = restore ]; then
+          maintenance_write_marker false || maintenance_recovery_terminalized=false
+        fi
+        if [ "$maintenance_recovery_terminalized" = true ] && [ "$maintenance_job_type" = restore ]; then
+          maintenance_clear_fence || maintenance_recovery_terminalized=false
+        fi
+        if [ "$maintenance_recovery_terminalized" != true ]; then
+          maintenance_preserve_recovery=true
+          maintenance_cleanup_current
+          maintenance_recovery_status=1
+          continue
+        fi
+        maintenance_cleanup_current
+        rm -f "$ADMIN_OPS_DIR/inbox/$maintenance_job_id.secret"
+        for maintenance_stale_work in "$ADMIN_OPS_ROOT_DIR"/work/"$maintenance_job_id".*; do
+          [ -e "$maintenance_stale_work" ] || continue
+          rm -rf "$maintenance_stale_work"
+        done
         continue
       fi
       if [ "$maintenance_job_type" = restore ] && [ "$maintenance_recovery_marker_state" -eq 0 ]; then
@@ -1186,9 +1295,8 @@ maintenance_recover_claimed_jobs() {
         rm -rf "$maintenance_stale_work"
       done
     else
-      maintenance_audit job "" "" "" rejected INVALID_JOB
-      rm -f "$maintenance_stale"
-      maintenance_current_claim=
+      maintenance_quarantine_corrupt_claim || :
+      maintenance_recovery_status=1
     fi
   done
   return "$maintenance_recovery_status"

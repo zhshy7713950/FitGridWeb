@@ -3,7 +3,7 @@ Description=Recover and guard FitGridWeb maintenance state before application bo
 Requires=docker.service
 Wants=network-online.target
 After=network-online.target docker.service
-Before=fitgridweb.service
+Before=fitgridweb.service nginx.service
 
 [Service]
 Type=oneshot
@@ -14,7 +14,8 @@ EnvironmentFile=/etc/fitgridweb/fitgridweb.env
 RuntimeDirectory=fitgridweb
 RuntimeDirectoryMode=0755
 RuntimeDirectoryPreserve=yes
-ExecStart=/opt/fitgridweb/ops/maintenance-worker.sh
+ExecStartPre=/usr/bin/install -o root -g root -m 0644 /dev/null /run/fitgridweb/maintenance.flag
+ExecStart=/opt/fitgridweb/ops/maintenance-worker.sh --recovery
 UMask=0077
 TimeoutStartSec=infinity
 

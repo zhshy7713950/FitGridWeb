@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -74,6 +74,48 @@ function run(command: string, files: Awaited<ReturnType<typeof fixture>>, env: R
 }
 
 describe("deployment state machine", () => {
+  it.each([
+    ["first installation", false],
+    ["upgrade", true],
+  ])("installs every required unit before app startup during %s", async (_caseName, upgrade) => {
+    const files = await fixture();
+    if (!upgrade) await unlink(files.environment);
+    const sha = "2ca7f41000000000000000000000000000000000";
+    const command = `
+validate_domain() { :; }
+validate_port() { :; }
+validate_nginx_site() { :; }
+image_for_sha() { printf 'unused\\n'; }
+assert_public_image() { :; }
+install_dependencies() { :; }
+assert_app_port_available() { :; }
+mkdir() { :; }
+mktemp() {
+  if [ "\${1:-}" = -d ]; then printf '%s\\n' "${files.nginxTemporary}"; else printf '%s\\n' "${files.environmentBackup}"; fi
+}
+ensure_environment() { printf 'PORTABLE_BACKUP_MAX_BYTES=536870912\\n' >"$1"; }
+ensure_swap() { :; }
+install_maintenance_components() { printf 'phase install-maintenance\\n' >>"$COMMAND_LOG"; }
+install_systemd_unit() { printf 'phase install-app-unit\\n' >>"$COMMAND_LOG"; systemctl enable fitgridweb.service; }
+deploy_release() { printf 'phase start-app\\n' >>"$COMMAND_LOG"; }
+render_nginx_snippet() { printf 'location /fitgrid {}\\n'; }
+install_nginx_include() { :; }
+verify_health() { :; }
+systemctl() { printf 'phase %s\\n' "$*" >>"$COMMAND_LOG"; }
+cleanup_old_app_images() { :; }
+fitgrid_install_main grid.example.com 3300 443 /etc/nginx/conf.d/fitgridweb.conf \\
+  ${sha} no no ${String(upgrade)} "${files.project}" "${files.environment}" "${files.root}/backup.key"
+`;
+
+    const result = run(command, files);
+
+    expect(result.status, result.stderr).toBe(0);
+    const phases = (await readFile(files.log, "utf8")).trim().split("\n");
+    expect(phases.indexOf("phase install-maintenance")).toBeLessThan(phases.indexOf("phase install-app-unit"));
+    expect(phases.indexOf("phase install-app-unit")).toBeLessThan(phases.indexOf("phase start-app"));
+    expect(phases.indexOf("phase install-maintenance")).toBeLessThan(phases.indexOf("phase enable fitgridweb.service"));
+  });
+
   it("removes only old SHA images from the repository derived from APP_IMAGE", async () => {
     const files = await fixture();
     const currentImage = "ghcr.io/acme-owner/renamed-app:sha-2ca7f41000000000000000000000000000000000";
@@ -161,10 +203,10 @@ fitgrid_install_main grid.example.com 3300 443 /etc/nginx/conf.d/fitgridweb.conf
     expect(log.indexOf("docker image ls")).toBeGreaterThan(log.indexOf("phase restart-systemd"));
     expect(log.indexOf("docker image ls")).toBeGreaterThan(log.lastIndexOf("phase health"));
     expect(log).toContain("phase render-nginx 3300 536870912");
-    expect(log.indexOf("phase install-maintenance")).toBeGreaterThan(log.lastIndexOf("phase health"));
+    expect(log.indexOf("phase install-maintenance")).toBeLessThan(log.indexOf("phase health"));
   });
 
-  it("retains the healthy running app when post-health maintenance installation fails", async () => {
+  it("does not start a new app when pre-start maintenance installation fails", async () => {
     const files = await fixture();
     const sha = "2ca7f41000000000000000000000000000000000";
     const command = `
@@ -196,12 +238,13 @@ fitgrid_install_main grid.example.com 3300 443 /etc/nginx/conf.d/fitgridweb.conf
     const result = run(command, files);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("维护组件安装失败：logrotate");
-    expect(result.stderr).toContain("应用保持运行");
-    const log = await readFile(files.log, "utf8");
+    expect(result.stderr).toContain("新 FitGridWeb 应用尚未启动");
+    const log = await readFile(files.log, "utf8").catch(() => "");
     expect(log).not.toContain("phase rollback");
     expect(log).not.toMatch(/stop app|down|-v|volume rm/);
-    expect(log).toContain("phase health");
-    expect(log).toContain("phase restart-systemd");
+    expect(log).not.toContain("phase deploy");
+    expect(log).not.toContain("phase health");
+    expect(log).not.toContain("phase restart-systemd");
   });
 
   it("does not update the app when migration fails", async () => {
@@ -252,7 +295,8 @@ fitgrid_install_main grid.example.com 3300 443 /etc/nginx/conf.d/fitgridweb.conf
   it("coordinates rollback for nginx, systemd, and final health failures", async () => {
     const source = await readFile(library, "utf8");
     expect(source).toMatch(/if ! install_nginx_include[\s\S]*rollback_release/);
-    expect(source).toMatch(/if ! install_systemd_unit[\s\S]*rollback_release/);
+    expect(source.lastIndexOf("if ! install_systemd_unit"))
+      .toBeLessThan(source.lastIndexOf("deploy_release \"$project_directory\""));
     expect(source).toMatch(/if ! systemctl restart fitgridweb\.service[\s\S]*rollback_release/);
     expect((source.match(/rollback_release /g) ?? []).length).toBeGreaterThanOrEqual(4);
   });
