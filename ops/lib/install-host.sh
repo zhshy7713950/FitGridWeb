@@ -157,6 +157,70 @@ install_systemd_unit() {
   systemctl daemon-reload
 }
 
+capture_fitgrid_unit_states() {
+  for fitgrid_state_unit in \
+    fitgridweb-maintenance-recovery.service \
+    fitgridweb-maintenance.path \
+    fitgridweb-maintenance-sweep.timer \
+    fitgridweb-backup.timer \
+    fitgridweb.service
+  do
+    fitgrid_state_enabled=false
+    fitgrid_state_active=false
+    if systemctl is-enabled --quiet "$fitgrid_state_unit" >/dev/null 2>&1; then
+      fitgrid_state_enabled=true
+    fi
+    if systemctl is-active --quiet "$fitgrid_state_unit" >/dev/null 2>&1; then
+      fitgrid_state_active=true
+    fi
+    printf '%s|%s|%s\n' "$fitgrid_state_unit" "$fitgrid_state_enabled" "$fitgrid_state_active"
+  done
+}
+
+restore_fitgrid_unit_states() {
+  fitgrid_saved_unit_states=$1
+  fitgrid_restore_state_status=0
+  while IFS='|' read -r fitgrid_state_unit fitgrid_was_enabled fitgrid_was_active; do
+    [ -n "$fitgrid_state_unit" ] || continue
+    fitgrid_is_enabled=false
+    fitgrid_is_active=false
+    if systemctl is-enabled --quiet "$fitgrid_state_unit" >/dev/null 2>&1; then
+      fitgrid_is_enabled=true
+    fi
+    if systemctl is-active --quiet "$fitgrid_state_unit" >/dev/null 2>&1; then
+      fitgrid_is_active=true
+    fi
+    if [ "$fitgrid_was_active" = false ] && [ "$fitgrid_is_active" = true ]; then
+      systemctl stop "$fitgrid_state_unit" || fitgrid_restore_state_status=1
+    fi
+    if [ "$fitgrid_was_enabled" != "$fitgrid_is_enabled" ]; then
+      if [ "$fitgrid_was_enabled" = true ]; then
+        systemctl enable "$fitgrid_state_unit" || fitgrid_restore_state_status=1
+      else
+        systemctl disable "$fitgrid_state_unit" || fitgrid_restore_state_status=1
+      fi
+    fi
+    if [ "$fitgrid_was_active" = true ] && [ "$fitgrid_is_active" = false ]; then
+      systemctl start "$fitgrid_state_unit" || fitgrid_restore_state_status=1
+    fi
+  done <<EOF
+$fitgrid_saved_unit_states
+EOF
+  return "$fitgrid_restore_state_status"
+}
+
+restore_fitgrid_systemd_unit() {
+  fitgrid_unit_destination=$1
+  fitgrid_unit_backup=${2:-}
+  fitgrid_unit_had_previous=$3
+  case $fitgrid_unit_had_previous in
+    true) install_atomic_host_file "$fitgrid_unit_backup" "$fitgrid_unit_destination" 644 || return 1 ;;
+    false) rm -f "$fitgrid_unit_destination" || return 1 ;;
+    *) return 1 ;;
+  esac
+  systemctl daemon-reload
+}
+
 host_environment_value() {
   host_environment_key=$1
   host_environment_file=$2
@@ -360,6 +424,8 @@ enable_maintenance_components() {
   maintenance_enable_backup_remote=$(host_environment_value BACKUP_REMOTE_DIR "$maintenance_enable_environment_file")
   systemctl enable fitgridweb-maintenance-recovery.service \
     || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance-recovery.service 启用"; return 1; }
+  systemctl start fitgridweb-maintenance-recovery.service \
+    || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance-recovery.service 启动"; return 1; }
   systemctl enable --now fitgridweb-maintenance.path \
     || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance.path 启用"; return 1; }
   systemctl enable --now fitgridweb-maintenance-sweep.timer \

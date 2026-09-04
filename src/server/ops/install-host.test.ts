@@ -278,8 +278,11 @@ describe("maintenance installation", () => {
     const localLog = await readFile(files.log, "utf8");
     expect(localLog).toContain("systemctl enable --now fitgridweb-maintenance.path");
     expect(localLog).toContain("systemctl enable fitgridweb-maintenance-recovery.service");
+    expect(localLog).toContain("systemctl start fitgridweb-maintenance-recovery.service");
     expect(localLog).toContain("systemctl enable --now fitgridweb-maintenance-sweep.timer");
     expect(localLog.indexOf("systemctl enable fitgridweb-maintenance-recovery.service"))
+      .toBeLessThan(localLog.indexOf("systemctl start fitgridweb-maintenance-recovery.service"));
+    expect(localLog.indexOf("systemctl start fitgridweb-maintenance-recovery.service"))
       .toBeLessThan(localLog.indexOf("systemctl enable --now fitgridweb-maintenance.path"));
     expect(localLog.indexOf("systemctl enable --now fitgridweb-maintenance.path"))
       .toBeLessThan(localLog.indexOf("systemctl enable --now fitgridweb-maintenance-sweep.timer"));
