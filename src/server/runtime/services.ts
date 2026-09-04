@@ -7,6 +7,7 @@ import { ExportService } from "@/server/import-export/export-service";
 import { ImportService } from "@/server/import-export/import-service";
 import { PrismaImportRepository } from "@/server/import-export/prisma-import-repository";
 import { DownloadTokenService } from "@/server/maintenance/download-token";
+import { FileDownloadAuditGateway } from "@/server/maintenance/download-audit";
 import { FileMaintenanceGateway } from "@/server/maintenance/file-maintenance-gateway";
 import {
   InvitationService,
@@ -79,6 +80,9 @@ export function getRuntimeServices() {
     downloadTokens: new DownloadTokenService({
       secret: maintenanceConfiguration.downloadTokenSecret,
       markerDirectory: maintenanceConfiguration.downloadTokenMarkerDirectory,
+    }),
+    downloadAudits: new FileDownloadAuditGateway({
+      adminOpsDirectory: maintenanceConfiguration.adminOpsDirectory,
     }),
   };
 }

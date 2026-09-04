@@ -276,6 +276,19 @@ function runPortablePrune(files: Awaited<ReturnType<typeof portableFixture>>) {
   });
 }
 
+function runPortableReconcile(
+  files: Awaited<ReturnType<typeof portableFixture>>,
+  shellSetup = "",
+  extra: Record<string, string> = {},
+) {
+  const setup = shellSetup ? `${shellSetup};` : "";
+  return spawnSync("sh", ["-c", `. "${path.join(projectDirectory, "ops/lib/portable-backup.sh")}"; ${setup} reconcile_portable_backups "$BACKUPS" "$HISTORY" 5`], {
+    cwd: projectDirectory,
+    encoding: "utf8",
+    env: testEnvironment(files, { BACKUPS: files.backups, HISTORY: files.history, ...extra }),
+  });
+}
+
 function runPortableInspect(files: Awaited<ReturnType<typeof portableFixture>>, archive: string, resultFile = path.join(files.root, "result.json")) {
   return spawnSync("sh", ["-c", `. \"${path.join(projectDirectory, "ops/lib/portable-backup.sh")}\"; . \"${path.join(projectDirectory, "ops/env.sh")}\"; load_fitgrid_environment; inspect_portable_backup \"$ARCHIVE\" \"$PASSPHRASE_FILE\" \"$PREPARED_DIRECTORY\" \"$RESULT_FILE\"`], {
     cwd: projectDirectory,
@@ -446,7 +459,7 @@ describe("portable backups", () => {
       "fitgridweb-20260831T070000Z.fitgridbackup",
       "fitgridweb-20260830T070000Z.fitgridbackup",
     ]);
-    expect(await readJson(files.history)).toMatchObject({ entries: [{ size: 321 }] });
+    expect((await readJson(files.history)).entries[0]).toMatchObject({ size: 321 });
     expect(await readJson(files.statusFile)).toEqual({ state: "ready" });
     expect((await stat(path.join(files.backups, "fitgridweb-20260903T070000Z.fitgridbackup"))).mode & 0o777).toBe(0o640);
     const commandLog = await readFile(files.commandLog, "utf8");
@@ -502,18 +515,93 @@ describe("portable backups", () => {
 
   it("keeps at most five unique successful history entries when old history contains duplicates", async () => {
     const files = await portableFixture({ existingBackups: 5 });
-    await writeFile(files.history, JSON.stringify({ entries: [
-      { filename: "fitgridweb-20260902T070000Z.fitgridbackup", status: "ready" },
-      { filename: "fitgridweb-20260902T070000Z.fitgridbackup", status: "ready" },
-      { filename: "fitgridweb-20260901T070000Z.fitgridbackup", status: "ready" },
-      { filename: "fitgridweb-20260831T070000Z.fitgridbackup", status: "ready" },
-      { filename: "fitgridweb-20260830T070000Z.fitgridbackup", status: "ready" },
-      { filename: "fitgridweb-20260829T070000Z.fitgridbackup", status: "ready" },
-    ] }));
+    const filenames = await successfulPortableNames(files.backups);
+    const existingEntries = filenames.map((filename, index) => ({
+      id: `.id.ABC12${index}`,
+      filename,
+      createdAt: `${filename.slice(11, 15)}-${filename.slice(15, 17)}-${filename.slice(17, 19)}T${filename.slice(20, 22)}:${filename.slice(22, 24)}:${filename.slice(24, 26)}Z`,
+      size: 321,
+      sha256: String(index).repeat(64),
+      status: "ready",
+    }));
+    existingEntries.splice(1, 0, { ...existingEntries[0], id: ".id.DUP123" });
+    await writeFile(files.history, JSON.stringify({ entries: existingEntries }));
     expect(runPortableCreate(files).status).toBe(0);
     const entries = (await readJson(files.history)).entries;
     expect(entries).toHaveLength(5);
     expect(new Set(entries.map((entry: { filename: string }) => entry.filename)).size).toBe(5);
+  });
+
+  it("reconciles an archive published before its history entry and remains idempotent", async () => {
+    const files = await portableFixture({ existingBackups: 5 });
+    const newest = "fitgridweb-20260903T070000Z.fitgridbackup";
+    await writeFile(path.join(files.backups, newest), "newest");
+
+    const first = runPortableReconcile(files);
+
+    expect(first.status, first.stderr).toBe(0);
+    expect(await successfulPortableNames(files.backups)).toEqual([
+      newest,
+      "fitgridweb-20260902T070000Z.fitgridbackup",
+      "fitgridweb-20260901T070000Z.fitgridbackup",
+      "fitgridweb-20260831T070000Z.fitgridbackup",
+      "fitgridweb-20260830T070000Z.fitgridbackup",
+    ]);
+    const reconciled = await readFile(files.history, "utf8");
+    expect((JSON.parse(reconciled).entries as Array<{ filename: string }>).map((entry) => entry.filename))
+      .toEqual(await successfulPortableNames(files.backups));
+
+    await writeFile(files.commandLog, "");
+    const second = runPortableReconcile(files);
+    expect(second.status, second.stderr).toBe(0);
+    expect(await readFile(files.history, "utf8")).toBe(reconciled);
+    expect(await readFile(files.commandLog, "utf8")).not.toContain(`sync -f ${files.history}`);
+  });
+
+  it("finishes pruning after history was published with six entries", async () => {
+    const files = await portableFixture({ existingBackups: 5 });
+    const newest = "fitgridweb-20260903T070000Z.fitgridbackup";
+    await writeFile(path.join(files.backups, newest), "newest");
+    const filenames = await successfulPortableNames(files.backups);
+    await writeFile(files.history, JSON.stringify({ entries: filenames.map((filename, index) => ({
+      id: `.id.ABC12${index}`,
+      filename,
+      createdAt: `${filename.slice(11, 15)}-${filename.slice(15, 17)}-${filename.slice(17, 19)}T${filename.slice(20, 22)}:${filename.slice(22, 24)}:${filename.slice(24, 26)}Z`,
+      size: 321,
+      sha256: String(index).repeat(64),
+      status: "ready",
+    })) }) + "\n");
+
+    const result = runPortableReconcile(files);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await successfulPortableNames(files.backups)).toHaveLength(5);
+    const reconciledEntries = (await readJson(files.history)).entries;
+    expect(reconciledEntries).toHaveLength(5);
+    expect(reconciledEntries[0].sha256).toBe("0".repeat(64));
+  });
+
+  it("recovers when archive pruning stops after the reconciled history is durable", async () => {
+    const files = await portableFixture({ existingBackups: 5 });
+    const newest = "fitgridweb-20260903T070000Z.fitgridbackup";
+    const oldest = path.join(files.backups, "fitgridweb-20260829T070000Z.fitgridbackup");
+    await writeFile(path.join(files.backups, newest), "newest");
+    const failOnce = `
+rm() {
+  case "$*" in *"$FAIL_RM_TARGET"*) return 71 ;; esac
+  command rm "$@"
+}`;
+
+    const interrupted = runPortableReconcile(files, failOnce, { FAIL_RM_TARGET: oldest });
+
+    expect(interrupted.status).toBe(71);
+    expect(await successfulPortableNames(files.backups)).toHaveLength(6);
+    expect((await readJson(files.history)).entries).toHaveLength(5);
+
+    const recovered = runPortableReconcile(files);
+    expect(recovered.status, recovered.stderr).toBe(0);
+    expect(await successfulPortableNames(files.backups)).toHaveLength(5);
+    expect((await readJson(files.history)).entries).toHaveLength(5);
   });
 
   it("rejects malformed history without replacing the source file", async () => {

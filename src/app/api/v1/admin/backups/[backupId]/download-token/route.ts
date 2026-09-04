@@ -25,6 +25,12 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
     assertMaintenanceAvailable(await services.maintenance.getMaintenanceMode());
     await requireBackupArtifact(() => services.maintenance.getBackupFile(backupId));
     const token = services.downloadTokens.issue({ adminId: admin.id, backupId });
+    await services.downloadAudits.persist({
+      event: "download-token-issued",
+      actorId: admin.id,
+      requestId,
+      backupId,
+    });
     return json({ token }, 201, requestId);
   });
 }

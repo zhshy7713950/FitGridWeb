@@ -32,6 +32,55 @@ afterEach(async () => {
 });
 
 describe("administrator backup download", () => {
+  it("does not return a token until the root audit is durable", async () => {
+    let releaseAudit: (() => void) | undefined;
+    const auditPersist = vi.fn(() => new Promise<void>((resolve) => {
+      releaseAudit = resolve;
+    }));
+    const files = await downloadFixture({ auditPersist });
+    getRuntimeServices.mockReturnValue(files.services);
+
+    const responsePromise = tokenRoute.POST(
+      mutationRequest(`/backups/${BACKUP_ID}/download-token`),
+      params(),
+    );
+    let settled = false;
+    void responsePromise.then(() => {
+      settled = true;
+    });
+
+    await vi.waitFor(() => expect(auditPersist).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+    expect(auditPersist).toHaveBeenCalledWith({
+      event: "download-token-issued",
+      actorId: ADMIN_ID,
+      requestId: REQUEST_ID,
+      backupId: BACKUP_ID,
+    });
+    expect(JSON.stringify(auditPersist.mock.calls)).not.toContain("issued-download-token");
+
+    releaseAudit!();
+    const response = await responsePromise;
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({ token: "issued-download-token" });
+  });
+
+  it("fails closed without returning a token when root audit persistence fails", async () => {
+    const auditPersist = vi.fn().mockRejectedValue(new Error("root audit unavailable"));
+    const files = await downloadFixture({ auditPersist });
+    getRuntimeServices.mockReturnValue(files.services);
+
+    const response = await tokenRoute.POST(
+      mutationRequest(`/backups/${BACKUP_ID}/download-token`),
+      params(),
+    );
+    const serialized = JSON.stringify(await response.json());
+
+    expect(response.status).toBe(500);
+    expect(serialized).toContain("INTERNAL_ERROR");
+    expect(serialized).not.toContain("issued-download-token");
+  });
+
   it("issues a no-store token only after confirming the backup exists", async () => {
     const files = await downloadFixture();
     getRuntimeServices.mockReturnValue(files.services);
@@ -78,6 +127,12 @@ describe("administrator backup download", () => {
     expect(first.headers.get("content-disposition"))
       .toBe('attachment; filename="fitgridweb-20260903T070000Z.fitgridbackup"');
     expect(await first.text()).toBe("encrypted-portable-backup");
+    expect(files.auditPersist).toHaveBeenCalledWith({
+      event: "download-completed",
+      actorId: ADMIN_ID,
+      requestId: REQUEST_ID,
+      backupId: BACKUP_ID,
+    });
 
     const replay = await downloadRoute.GET(downloadRequest(token), params());
     expect(replay.status).toBe(404);
@@ -85,6 +140,42 @@ describe("administrator backup download", () => {
       code: "BACKUP_NOT_FOUND",
       requestId: REQUEST_ID,
     });
+  });
+
+  it("withholds the final bytes until the completion audit is durable", async () => {
+    let releaseAudit: (() => void) | undefined;
+    const auditPersist = vi.fn(() => new Promise<void>((resolve) => {
+      releaseAudit = resolve;
+    }));
+    const files = await downloadFixture({ auditPersist });
+    getRuntimeServices.mockReturnValue(files.services);
+
+    const response = await downloadRoute.GET(downloadRequest("issued-download-token"), params());
+    const reader = response.body!.getReader();
+    const finalRead = reader.read();
+    let finalReadSettled = false;
+    void finalRead.then(() => {
+      finalReadSettled = true;
+    });
+
+    await vi.waitFor(() => expect(auditPersist).toHaveBeenCalledOnce());
+    expect(finalReadSettled).toBe(false);
+    releaseAudit!();
+
+    const chunk = await finalRead;
+    expect(new TextDecoder().decode(chunk.value)).toBe("encrypted-portable-backup");
+    await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
+  });
+
+  it("does not deliver a complete archive when completion audit persistence fails", async () => {
+    const files = await downloadFixture({
+      auditPersist: vi.fn().mockRejectedValue(new Error("root audit unavailable")),
+    });
+    getRuntimeServices.mockReturnValue(files.services);
+
+    const response = await downloadRoute.GET(downloadRequest("issued-download-token"), params());
+
+    await expect(response.arrayBuffer()).rejects.toThrow("root audit unavailable");
   });
 
   it("returns 404 instead of 200 when the archive disappears after token consumption", async () => {
@@ -163,6 +254,7 @@ describe("administrator backup download", () => {
       expect(createReadStream).toHaveBeenCalledOnce();
       await response.body?.cancel();
       await closed;
+      expect(files.auditPersist).not.toHaveBeenCalled();
     } finally {
       createReadStream.mockRestore();
     }
@@ -198,6 +290,7 @@ describe("administrator backup download", () => {
       openedStream!.destroy(new Error("simulated archive read failure"));
       await expect(reading).rejects.toThrow("simulated archive read failure");
       await closed;
+      expect(files.auditPersist).not.toHaveBeenCalled();
     } finally {
       createReadStream.mockRestore();
     }
@@ -292,12 +385,14 @@ async function downloadFixture({
   maintenanceActive = false,
   getBackupFile,
   afterConsume,
+  auditPersist = vi.fn().mockResolvedValue(undefined),
 }: {
   session?: unknown;
   realTokens?: boolean;
   maintenanceActive?: boolean;
   getBackupFile?: ReturnType<typeof vi.fn>;
   afterConsume?: (archivePath: string, root: string) => Promise<void>;
+  auditPersist?: ReturnType<typeof vi.fn>;
 } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "fitgrid-route-download-"));
   roots.push(root);
@@ -336,6 +431,7 @@ async function downloadFixture({
     getSession,
     getBackupFile: resolvedGetBackupFile,
     tokenService,
+    auditPersist,
     services: {
       auth: { api: { getSession } },
       maintenance: {
@@ -347,6 +443,7 @@ async function downloadFixture({
         getBackupFile: resolvedGetBackupFile,
       },
       downloadTokens: tokenService,
+      downloadAudits: { persist: auditPersist },
     },
   };
 }

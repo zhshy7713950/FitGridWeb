@@ -8,6 +8,7 @@ cd "$PROJECT_DIR"
 . "$SCRIPT_DIR/env.sh"
 . "$SCRIPT_DIR/lib/portable-backup.sh"
 . "$SCRIPT_DIR/lib/maintenance-jobs.sh"
+. "$SCRIPT_DIR/lib/download-audit.sh"
 
 maintenance_recovery_mode=false
 case "${1:-}" in
@@ -27,6 +28,7 @@ done
 [ "$(id -u)" -eq 0 ] || { maintenance_fail "Maintenance worker must run as root"; exit 1; }
 
 maintenance_prepare_directories || exit 1
+download_audit_prepare_directories || exit 1
 exec 9>"$ADMIN_OPS_ROOT_DIR/maintenance.lock"
 if [ "$maintenance_recovery_mode" = true ]; then
   flock -w 30 9 || {
@@ -36,6 +38,8 @@ if [ "$maintenance_recovery_mode" = true ]; then
 elif ! flock -n 9; then
   exit 0
 fi
+
+reconcile_portable_backups "$PORTABLE_BACKUP_DIR" "$PORTABLE_BACKUP_HISTORY_FILE" 5 || exit 1
 
 maintenance_current_claim=
 maintenance_current_secret=
@@ -59,6 +63,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 maintenance_worker_status=0
+download_audit_drain || maintenance_worker_status=1
 maintenance_recover_claimed_jobs || maintenance_worker_status=1
 maintenance_purge_terminal_orphans || maintenance_worker_status=1
 if ! maintenance_guard_authority; then
@@ -67,6 +72,7 @@ if ! maintenance_guard_authority; then
 fi
 maintenance_sync_public_marker || exit 1
 maintenance_drain_inbox || maintenance_worker_status=1
+download_audit_drain || maintenance_worker_status=1
 if ! maintenance_guard_authority; then
   maintenance_sync_public_marker || :
   exit 1

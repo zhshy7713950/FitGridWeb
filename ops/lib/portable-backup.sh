@@ -843,43 +843,115 @@ portable_record_success() {
   }
 }
 
+reconcile_portable_backups() (
+  set -e
+  portable_reconcile_directory=$1
+  portable_reconcile_history=$2
+  portable_reconcile_keep=$3
+  case "$portable_reconcile_keep" in
+    ''|*[!0-9]*) portable_fail "Portable backup retention must be an integer"; exit 1 ;;
+  esac
+  [ "$portable_reconcile_keep" -gt 0 ] \
+    || { portable_fail "Portable backup retention must be positive"; exit 1; }
+  [ -d "$portable_reconcile_directory" ] && [ ! -L "$portable_reconcile_directory" ] \
+    || { portable_fail "Portable backup directory is unsafe"; exit 1; }
+  portable_reconcile_history_directory=$(dirname "$portable_reconcile_history")
+  mkdir -p "$portable_reconcile_history_directory"
+  [ -d "$portable_reconcile_history_directory" ] && [ ! -L "$portable_reconcile_history_directory" ] \
+    || { portable_fail "Portable backup history directory is unsafe"; exit 1; }
+  if [ -e "$portable_reconcile_history" ] || [ -L "$portable_reconcile_history" ]; then
+    [ -f "$portable_reconcile_history" ] && [ ! -L "$portable_reconcile_history" ] \
+      || { portable_fail "Portable backup history is unsafe"; exit 1; }
+    jq -e '
+      type == "object" and
+      (keys == ["entries"]) and
+      (.entries | type == "array") and
+      all(.entries[];
+        type == "object" and
+        (keys | sort) == ["createdAt", "filename", "id", "sha256", "size", "status"] and
+        (.id | type == "string" and test("^\\.id\\.[A-Za-z0-9]{6}$")) and
+        (.filename | type == "string" and test("^fitgridweb-[0-9]{8}T[0-9]{6}Z\\.fitgridbackup$")) and
+        (.createdAt | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+        (.size | type == "number" and floor == . and . >= 0) and
+        (.sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+        .status == "ready"
+      )
+    ' "$portable_reconcile_history" >/dev/null \
+      || { portable_fail "Portable backup history is invalid"; exit 1; }
+  fi
+
+  portable_reconcile_work=$(mktemp -d "$portable_reconcile_history_directory/.reconcile.XXXXXX")
+  trap 'portable_reconcile_status=$?; rm -rf "$portable_reconcile_work"; exit "$portable_reconcile_status"' EXIT HUP INT TERM
+  find "$portable_reconcile_directory" -maxdepth 1 -type f -name 'fitgridweb-*.fitgridbackup' -print \
+    >"$portable_reconcile_work/archive-paths"
+  while IFS= read -r portable_reconcile_archive; do
+    portable_reconcile_filename=$(basename "$portable_reconcile_archive")
+    if printf '%s\n' "$portable_reconcile_filename" \
+      | grep -Eq '^fitgridweb-[0-9]{8}T[0-9]{6}Z\.fitgridbackup$'; then
+      printf '%s\n' "$portable_reconcile_filename"
+    fi
+  done <"$portable_reconcile_work/archive-paths" \
+    | LC_ALL=C sort -r >"$portable_reconcile_work/archive-names"
+  awk -v keep="$portable_reconcile_keep" 'NR <= keep' \
+    "$portable_reconcile_work/archive-names" >"$portable_reconcile_work/selected-names"
+
+  : >"$portable_reconcile_work/entries.jsonl"
+  while IFS= read -r portable_reconcile_filename; do
+    portable_reconcile_archive="$portable_reconcile_directory/$portable_reconcile_filename"
+    portable_reconcile_entry=
+    if [ -f "$portable_reconcile_history" ]; then
+      portable_reconcile_entry=$(jq -c --arg filename "$portable_reconcile_filename" \
+        '[.entries[] | select(.filename == $filename)][0] // empty' \
+        "$portable_reconcile_history")
+    fi
+    if [ -n "$portable_reconcile_entry" ]; then
+      printf '%s\n' "$portable_reconcile_entry" >>"$portable_reconcile_work/entries.jsonl"
+      continue
+    fi
+    portable_reconcile_size=$(portable_file_size "$portable_reconcile_archive")
+    portable_reconcile_sha=$(sha256sum "$portable_reconcile_archive" | awk '{ print $1 }')
+    case "$portable_reconcile_sha" in
+      ????????????????????????????????????????????????????????????????) : ;;
+      *) portable_fail "Could not checksum portable backup"; exit 1 ;;
+    esac
+    case "$portable_reconcile_sha" in *[!0-9a-f]*) portable_fail "Could not checksum portable backup"; exit 1 ;; esac
+    portable_reconcile_stamp=${portable_reconcile_filename#fitgridweb-}
+    portable_reconcile_stamp=${portable_reconcile_stamp%.fitgridbackup}
+    portable_reconcile_created=$(portable_timestamp_iso "$portable_reconcile_stamp")
+    [ -n "$portable_reconcile_created" ] \
+      || { portable_fail "Portable backup filename timestamp is invalid"; exit 1; }
+    portable_reconcile_id_path=$(mktemp "$portable_reconcile_history_directory/.id.XXXXXX")
+    portable_reconcile_id=$(basename "$portable_reconcile_id_path")
+    rm -f "$portable_reconcile_id_path"
+    jq -nc --arg id "$portable_reconcile_id" --arg filename "$portable_reconcile_filename" \
+      --arg createdAt "$portable_reconcile_created" --argjson size "$portable_reconcile_size" \
+      --arg sha256 "$portable_reconcile_sha" \
+      '{id:$id,filename:$filename,createdAt:$createdAt,size:$size,sha256:$sha256,status:"ready"}' \
+      >>"$portable_reconcile_work/entries.jsonl"
+  done <"$portable_reconcile_work/selected-names"
+
+  jq -s '{entries:.}' "$portable_reconcile_work/entries.jsonl" \
+    >"$portable_reconcile_work/history.json"
+  if [ ! -f "$portable_reconcile_history" ] \
+    || ! cmp -s "$portable_reconcile_work/history.json" "$portable_reconcile_history"; then
+    portable_publish_for_reader "$portable_reconcile_work/history.json"
+    portable_durable_replace "$portable_reconcile_work/history.json" "$portable_reconcile_history"
+  fi
+
+  portable_reconcile_old=$(awk -v keep="$portable_reconcile_keep" 'NR > keep' \
+    "$portable_reconcile_work/archive-names")
+  if [ -n "$portable_reconcile_old" ]; then
+    while IFS= read -r portable_reconcile_filename; do
+      rm -f "$portable_reconcile_directory/$portable_reconcile_filename"
+    done <<EOF
+$portable_reconcile_old
+EOF
+    portable_sync_filesystem "$portable_reconcile_directory"
+  fi
+)
+
 prune_portable_backups() {
-  portable_prune_directory=$1
-  portable_prune_history=$2
-  portable_keep=$3
-  case "$portable_keep" in ''|*[!0-9]*) portable_fail "Portable backup retention must be an integer"; return 1 ;; esac
-  if [ -f "$portable_prune_history" ]; then
-    jq -e 'type == "object" and ((.entries // []) | type == "array")' "$portable_prune_history" >/dev/null || {
-      portable_fail "Portable backup history is invalid"
-      return 1
-    }
-  fi
-  portable_old=$(find "$portable_prune_directory" -maxdepth 1 -type f -name 'fitgridweb-*.fitgridbackup' -print | LC_ALL=C sort -r | awk -v keep="$portable_keep" 'NR > keep')
-  if [ -n "$portable_old" ]; then
-    printf '%s\n' "$portable_old" | while IFS= read -r portable_old_file; do rm -f "$portable_old_file"; done
-    portable_sync_filesystem "$portable_prune_directory" || return $?
-  fi
-  if [ -f "$portable_prune_history" ]; then
-    portable_filtered=$(mktemp "$(dirname "$portable_prune_history")/.history-filter.XXXXXX") || return 1
-    # Retain only real portable archives, the first entry per filename, and five entries at most.
-    jq -c '.entries[]?' "$portable_prune_history" | while IFS= read -r portable_entry; do
-      portable_filename=$(printf '%s\n' "$portable_entry" | jq -r '.filename')
-      case "$portable_filename" in
-        fitgridweb-????????T??????Z.fitgridbackup)
-          [ -f "$portable_prune_directory/$portable_filename" ] && printf '%s\n' "$portable_entry" ;;
-      esac
-    done | jq -s 'reduce .[] as $entry ([]; if any(.[]; .filename == $entry.filename) then . else . + [$entry] end) | .[:5] | {entries:.}' >"$portable_filtered" || { rm -f "$portable_filtered"; return 1; }
-    portable_publish_for_reader "$portable_filtered" || {
-      portable_prune_status=$?
-      rm -f "$portable_filtered"
-      return "$portable_prune_status"
-    }
-    portable_durable_replace "$portable_filtered" "$portable_prune_history" || {
-      portable_prune_status=$?
-      rm -f "$portable_filtered"
-      return "$portable_prune_status"
-    }
-  fi
+  reconcile_portable_backups "$@"
 }
 
 create_portable_backup() (

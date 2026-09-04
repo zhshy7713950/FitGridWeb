@@ -42,4 +42,5 @@ flock -n 9 || {
   echo "已有 FitGrid 维护任务正在运行，请稍后重试" >&2
   exit "$lock_status"
 }
+reconcile_portable_backups "$PORTABLE_BACKUP_DIR" "$PORTABLE_BACKUP_HISTORY_FILE" 5
 create_portable_backup "$passphrase_file" "$PORTABLE_BACKUP_DIR" "$PORTABLE_BACKUP_HISTORY_FILE"

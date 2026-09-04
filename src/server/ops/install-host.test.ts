@@ -32,6 +32,7 @@ async function fixture(swapKilobytes = 0) {
   const release = path.join(root, "os-release");
   const unit = path.join(root, "fitgridweb.service");
   const ageBin = path.join(root, "usr-local-bin");
+  const realSha256sum = spawnSync("sh", ["-c", "command -v sha256sum"], { encoding: "utf8" }).stdout.trim();
   await writeFile(swaps, swapKilobytes ? `Filename Type Size Used Priority\n/dev/existing partition ${swapKilobytes} 0 -2\n` : "Filename Type Size Used Priority\n");
   await writeFile(fstab, "UUID=root / ext4 defaults 0 1\n");
   await writeFile(release, "VERSION_CODENAME=noble\nUBUNTU_CODENAME=noble\n");
@@ -81,10 +82,13 @@ case "$url" in
 esac`);
   await executable(bin, "sha256sum", `
 printf 'sha256sum %s\\n' "$*" >>"$COMMAND_LOG"
+if [ "$1" != -c ]; then exec "${realSha256sum}" "$@"; fi
 [ "$1" = -c ] && [ "$2" = - ] || exit 2
 IFS= read -r checksum_line
 case "$checksum_line" in cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10'  '*) : ;; *) exit 3 ;; esac
 [ "\${AGE_ARCHIVE_VALID:-1}" = 1 ] || exit 4`);
+  await executable(bin, "flock", 'printf "flock %s\\n" "$*" >>"$COMMAND_LOG"');
+  await executable(bin, "sync", 'printf "sync %s\\n" "$*" >>"$COMMAND_LOG"');
   return { root, bin, log, swaps, swapfile, fstab, aptRoot, release, unit, ageBin };
 }
 
@@ -279,8 +283,12 @@ describe("maintenance installation", () => {
 
     expect(await readFile(maintenancePathTemplate, "utf8"))
       .toContain("PathExistsGlob=/var/lib/fitgridweb/admin-ops/web/inbox/*.json");
+    expect(await readFile(maintenancePathTemplate, "utf8"))
+      .toContain("PathExistsGlob=/var/lib/fitgridweb/admin-ops/web/inbox/*.audit");
     expect(await readFile(path.join(files.systemd, "fitgridweb-maintenance.path"), "utf8"))
       .toContain(`PathExistsGlob=${files.web}/inbox/*.json`);
+    expect(await readFile(path.join(files.systemd, "fitgridweb-maintenance.path"), "utf8"))
+      .toContain(`PathExistsGlob=${files.web}/inbox/*.audit`);
     const service = await readFile(maintenanceServiceTemplate, "utf8");
     expect(service).toContain("Requires=docker.service");
     expect(service).toContain("User=root\nGroup=root");
@@ -356,9 +364,11 @@ case "$1" in is-enabled|is-active) exit 1 ;; esac`);
   it("preserves existing history, prepared recovery state, and marker state on reinstall", async () => {
     const files = await maintenanceFixture();
     await mkdir(path.join(files.web, "status"), { recursive: true });
+    await mkdir(files.portable, { recursive: true });
     await mkdir(path.join(files.rootOps, "prepared/existing"), { recursive: true });
     const history = path.join(files.web, "status/backups.json");
     await writeFile(history, validHistory);
+    await writeFile(path.join(files.portable, "fitgridweb-20260903T070000Z.fitgridbackup"), "archive");
     await chmod(history, 0o600);
     await writeFile(path.join(files.rootOps, "prepared/existing/database.dump"), "prepared-data");
     await writeFile(path.join(files.rootOps, "maintenance.json"), '{"schemaVersion":1,"active":true}\n');
@@ -366,12 +376,48 @@ case "$1" in is-enabled|is-active) exit 1 ;; esac`);
 
     expect(run(command, files).status).toBe(0);
     expect(run(command, files).status).toBe(0);
-    expect(await readFile(history, "utf8")).toContain('"id":".id.ABC123"');
+    expect(JSON.parse(await readFile(history, "utf8")).entries[0].id).toBe(".id.ABC123");
     expect((await stat(history)).mode & 0o777).toBe(0o640);
     expect(await readFile(files.log, "utf8")).toContain(`chown root:1001 ${history}`);
     expect(await readFile(path.join(files.rootOps, "prepared/existing/database.dump"), "utf8")).toBe("prepared-data");
     expect(await readFile(path.join(files.rootOps, "maintenance.json"), "utf8")).toContain('"active":true');
   });
+
+  it("reconciles six crash-recovery entries before validating backup history", async () => {
+    const files = await maintenanceFixture();
+    await mkdir(path.join(files.web, "status"), { recursive: true });
+    await mkdir(files.portable, { recursive: true });
+    const filenames = [
+      "fitgridweb-20260903T070000Z.fitgridbackup",
+      "fitgridweb-20260902T070000Z.fitgridbackup",
+      "fitgridweb-20260901T070000Z.fitgridbackup",
+      "fitgridweb-20260831T070000Z.fitgridbackup",
+      "fitgridweb-20260830T070000Z.fitgridbackup",
+      "fitgridweb-20260829T070000Z.fitgridbackup",
+    ];
+    await Promise.all(filenames.map((filename) => writeFile(path.join(files.portable, filename), filename)));
+    await writeFile(path.join(files.web, "status/backups.json"), JSON.stringify({
+      entries: filenames.map((filename, index) => ({
+        id: `.id.ABC12${index}`,
+        filename,
+        createdAt: `${filename.slice(11, 15)}-${filename.slice(15, 17)}-${filename.slice(17, 19)}T${filename.slice(20, 22)}:${filename.slice(22, 24)}:${filename.slice(24, 26)}Z`,
+        size: filename.length,
+        sha256: String(index).repeat(64),
+        status: "ready",
+      })),
+    }) + "\n");
+
+    const result = run(
+      `install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}"`,
+      files,
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect((await readdir(files.portable)).sort()).toEqual(filenames.slice(0, 5).sort());
+    expect(JSON.parse(await readFile(path.join(files.web, "status/backups.json"), "utf8")).entries)
+      .toHaveLength(5);
+    expect(await readFile(files.log, "utf8")).toContain(`flock -w 30 9`);
+  }, 15_000);
 
   it("rejects a root-only tree that overlaps the app-writable spool", async () => {
     const files = await maintenanceFixture();

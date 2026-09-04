@@ -360,6 +360,11 @@ install_maintenance_components() {
   maintenance_systemd_directory=${3:-/etc/systemd/system}
   maintenance_logrotate_destination=${4:-/etc/logrotate.d/fitgridweb-ops}
   maintenance_template_directory=$maintenance_project_directory/ops/templates
+  maintenance_portable_library=$maintenance_project_directory/ops/lib/portable-backup.sh
+  [ -f "$maintenance_portable_library" ] && [ ! -L "$maintenance_portable_library" ] \
+    || { fitgrid_error "维护组件安装失败：便携备份库缺失"; return 1; }
+  # shellcheck disable=SC1090
+  . "$maintenance_portable_library"
 
   maintenance_web=$(host_environment_value ADMIN_OPS_WEB_DIR "$maintenance_environment_file")
   maintenance_root=$(host_environment_value ADMIN_OPS_ROOT_DIR "$maintenance_environment_file")
@@ -391,6 +396,16 @@ install_maintenance_components() {
     || { fitgrid_error "维护组件安装失败：root 状态目录"; return 1; }
   install -d -m 0750 -o root -g "$maintenance_reader_gid" "$maintenance_portable" \
     || { fitgrid_error "维护组件安装失败：便携备份目录"; return 1; }
+  if ! (
+    exec 9>"$maintenance_root/maintenance.lock"
+    flock -w 30 9 || exit $?
+    PORTABLE_BACKUP_READER_GID=$maintenance_reader_gid
+    export PORTABLE_BACKUP_READER_GID
+    reconcile_portable_backups "$maintenance_portable" "$maintenance_history" 5
+  ); then
+    fitgrid_error "维护组件安装失败：便携备份历史文件恢复"
+    return 1
+  fi
   normalize_portable_backup_permissions "$maintenance_portable" "$maintenance_reader_gid" || return 1
   normalize_portable_backup_history_permissions "$maintenance_history" "$maintenance_reader_gid" || return 1
 

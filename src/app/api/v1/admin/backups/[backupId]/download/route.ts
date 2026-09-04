@@ -53,6 +53,47 @@ async function openValidatedArchive(file: PortableBackupFile) {
   }
 }
 
+function withCompletionAudit(
+  source: ReadableStream<Uint8Array>,
+  persist: () => Promise<void>,
+): ReadableStream<Uint8Array> {
+  const reader = source.getReader();
+  let buffered: Uint8Array | undefined;
+  let cancelled = false;
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        while (!cancelled) {
+          const next = await reader.read();
+          if (next.done) {
+            await persist();
+            if (cancelled) return;
+            if (buffered) controller.enqueue(buffered);
+            controller.close();
+            return;
+          }
+          if (buffered) {
+            controller.enqueue(buffered);
+            buffered = next.value;
+            return;
+          }
+          buffered = next.value;
+        }
+      } catch (error) {
+        buffered = undefined;
+        await reader.cancel(error).catch(() => undefined);
+        if (!cancelled) controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      cancelled = true;
+      buffered = undefined;
+      await reader.cancel(reason).catch(() => undefined);
+    },
+  }, { highWaterMark: 0 });
+}
+
 export async function GET(request: Request, context: RouteContext): Promise<Response> {
   return maintenanceApiHandler(request, async ({ requestId }) => {
     const services = getRuntimeServices();
@@ -70,9 +111,16 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     await services.downloadTokens.consume(token, admin.id, backupId);
     const handle = await openValidatedArchive(file);
     const nodeStream = handle.createReadStream({ autoClose: true });
+    const source = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+    const body = withCompletionAudit(source, () => services.downloadAudits.persist({
+      event: "download-completed",
+      actorId: admin.id,
+      requestId,
+      backupId,
+    }));
 
     try {
-      return new Response(Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>, {
+      return new Response(body, {
         status: 200,
         headers: {
           "Accept-Ranges": "none",
