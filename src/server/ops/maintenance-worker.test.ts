@@ -466,7 +466,7 @@ case "$destination" in
       */maintenance.json|*/backups.json) : ;;
       *)
         /usr/bin/jq -er '.state | strings' "$source" >>"$TRANSITIONS_DIRECTORY/$(basename "$destination")"
-        mode=$(/usr/bin/stat -f '%Lp' "$source")
+        mode=$(/usr/bin/stat -c '%a' "$source" 2>/dev/null || /usr/bin/stat -f '%Lp' "$source")
         [ "$mode" = 640 ] || printf 'bad-mode:%s\n' "$mode" >>"$ATOMIC_ERRORS"
         ;;
     esac ;;
