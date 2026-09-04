@@ -43,6 +43,7 @@ async function openValidatedArchive(file: PortableBackupFile) {
       || info.size !== file.size
       || info.dev !== file.dev
       || info.ino !== file.ino
+      || info.ctimeMs !== file.ctimeMs
     ) throw backupNotFound();
     return handle;
   } catch (error) {

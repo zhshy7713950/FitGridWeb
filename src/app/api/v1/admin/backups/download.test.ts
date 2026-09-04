@@ -210,11 +210,14 @@ describe("administrator backup download", () => {
     await expect(response.json()).resolves.toMatchObject({ code: "BACKUP_NOT_FOUND" });
   });
 
-  it("refuses a same-size regular file replacement after token consumption", async () => {
+  it("refuses a same-size regular file replacement when its inode is reused", async () => {
     const files = await downloadFixture({
-      afterConsume: async (archive) => {
+      afterConsume: async (archive, _root, file) => {
         await unlink(archive);
         await writeFile(archive, "replacement-file-content!", { mode: 0o600 });
+        const replacement = await stat(archive);
+        file.dev = replacement.dev;
+        file.ino = replacement.ino;
       },
     });
     getRuntimeServices.mockReturnValue(files.services);
@@ -391,7 +394,11 @@ async function downloadFixture({
   realTokens?: boolean;
   maintenanceActive?: boolean;
   getBackupFile?: ReturnType<typeof vi.fn>;
-  afterConsume?: (archivePath: string, root: string) => Promise<void>;
+  afterConsume?: (
+    archivePath: string,
+    root: string,
+    file: { dev: number; ino: number },
+  ) => Promise<void>;
   auditPersist?: ReturnType<typeof vi.fn>;
 } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "fitgrid-route-download-"));
@@ -399,6 +406,17 @@ async function downloadFixture({
   const archivePath = path.join(root, "fitgridweb-20260903T070000Z.fitgridbackup");
   await writeFile(archivePath, "encrypted-portable-backup", { mode: 0o600 });
   const archiveInfo = await stat(archivePath);
+  const file = {
+    id: BACKUP_ID,
+    name: "fitgridweb-20260903T070000Z.fitgridbackup",
+    path: archivePath,
+    createdAt: "2026-09-03T07:00:00.000Z",
+    size: 25,
+    sha256: "a".repeat(64),
+    dev: archiveInfo.dev,
+    ino: archiveInfo.ino,
+    ctimeMs: archiveInfo.ctimeMs,
+  };
   const consumed = new Set<string>();
   const actualTokenService = {
     issue: vi.fn(({ adminId, backupId }: { adminId: string; backupId: string }) =>
@@ -412,19 +430,9 @@ async function downloadFixture({
   };
   const tokenService = realTokens ? actualTokenService : {
     issue: vi.fn().mockReturnValue("issued-download-token"),
-    consume: vi.fn(async () => afterConsume?.(archivePath, root)),
+    consume: vi.fn(async () => afterConsume?.(archivePath, root, file)),
   };
   const getSession = vi.fn().mockResolvedValue(session);
-  const file = {
-    id: BACKUP_ID,
-    name: "fitgridweb-20260903T070000Z.fitgridbackup",
-    path: archivePath,
-    createdAt: "2026-09-03T07:00:00.000Z",
-    size: 25,
-    sha256: "a".repeat(64),
-    dev: archiveInfo.dev,
-    ino: archiveInfo.ino,
-  };
   const resolvedGetBackupFile = getBackupFile ?? vi.fn().mockResolvedValue(file);
   return {
     archivePath,

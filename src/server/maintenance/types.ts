@@ -75,6 +75,7 @@ export interface PortableBackupFile extends PortableBackupSummary {
   path: string;
   dev: number;
   ino: number;
+  ctimeMs: number;
 }
 
 export interface MaintenanceMode {
