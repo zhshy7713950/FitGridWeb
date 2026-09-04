@@ -151,6 +151,7 @@ async function workerFixture(options: WorkerOptions = {}) {
   const healthUrlLog = path.join(root, "health-urls.log");
   const flockArgsLog = path.join(root, "flock-args.log");
   const audit = path.join(rootOps, "audit.jsonl");
+  const sha256Log = path.join(root, "sha256.log");
   const activeCount = path.join(root, "active-count");
   const maxActive = path.join(root, "max-active");
   const backupKey = path.join(root, "backup.key");
@@ -169,6 +170,7 @@ async function workerFixture(options: WorkerOptions = {}) {
   await writeFile(dockerArgsLog, "");
   await writeFile(healthUrlLog, "");
   await writeFile(flockArgsLog, "");
+  await writeFile(sha256Log, "");
   await writeFile(activeCount, "0\n");
   await writeFile(maxActive, "0\n");
   await writeFile(backupKey, "server rollback key material");
@@ -473,6 +475,15 @@ exec /bin/mv "$source" "$destination"`,
   );
   await executable(bin, "id", "printf '0\n'");
   await executable(bin, "logger", ":");
+  const realSha256sum = spawnSync("sh", ["-c", "command -v sha256sum"], {
+    encoding: "utf8",
+  }).stdout.trim();
+  await executable(
+    bin,
+    "sha256sum",
+    `printf '%s\n' "$*" >>"$SHA256_LOG"
+exec "${realSha256sum}" "$@"`,
+  );
 
   const env = {
     ...process.env,
@@ -536,6 +547,7 @@ exec /bin/mv "$source" "$destination"`,
     FAIL_COMPLETED_LEDGER: "false",
     FAIL_FLOCK: "false",
     FLOCK_ARGS_LOG: flockArgsLog,
+    SHA256_LOG: sha256Log,
     MAINTENANCE_FENCE_FILE: fence,
     REQUIRE_FENCE_DURING_HEALTH: "false",
     TMPDIR: root,
@@ -652,6 +664,7 @@ exec /bin/mv "$source" "$destination"`,
     dockerArgsLog,
     flockArgsLog,
     audit,
+    sha256Log,
     fence,
     maxActive,
     env,
@@ -690,20 +703,83 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     await expect(stat(path.join(files.statuses, `${JOB_A}.json`))).rejects.toThrow();
   });
 
-  it.each([
-    ["ordinary", false],
-    ["boot recovery", true],
-  ])("reconciles published archives before %s work", async (_caseName, recovery) => {
+  it("does not hash published archives during an idle minute sweep", async () => {
     const files = await workerFixture();
     const filename = "fitgridweb-20260903T070000Z.fitgridbackup";
     await writeFile(path.join(files.backups, filename), "published-before-history");
 
-    const result = recovery ? files.runRecovery() : files.runWorker();
+    const result = files.runWorker();
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(await readFile(path.join(files.statuses, "backups.json"), "utf8")).entries)
+      .toEqual([]);
+    expect(await readFile(files.sha256Log, "utf8")).toBe("");
+  });
+
+  it("does not hash published archives during an audit-only minute sweep", async () => {
+    const files = await workerFixture();
+    await writeFile(
+      path.join(files.inbox, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.audit"),
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        event: "download-token-issued",
+        actorId: ADMIN,
+        requestId: "01JAUDITONLY",
+        backupId: "backup-20260903",
+      }),
+      { mode: 0o600 },
+    );
+    await writeFile(
+      path.join(files.backups, "fitgridweb-20260903T070000Z.fitgridbackup"),
+      "published-before-history",
+    );
+
+    const result = files.runWorker();
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await readFile(files.sha256Log, "utf8")).toBe("");
+  });
+
+  it("reconciles published archives during boot recovery", async () => {
+    const files = await workerFixture();
+    const filename = "fitgridweb-20260903T070000Z.fitgridbackup";
+    await writeFile(path.join(files.backups, filename), "published-before-history");
+
+    const result = files.runRecovery();
 
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(await readFile(path.join(files.statuses, "backups.json"), "utf8")).entries)
       .toMatchObject([{ filename, status: "ready" }]);
-    expect((await readFile(files.flockArgsLog, "utf8")).trim()).toBe(recovery ? "-w 30 9" : "-n 9");
+    expect(await readFile(files.sha256Log, "utf8")).toContain(filename);
+    expect((await readFile(files.flockArgsLog, "utf8")).trim()).toBe("-w 30 9");
+  });
+
+  it.each(["queued", "claimed"])("reconciles published archives before a %s JSON job", async (location) => {
+    const files = await workerFixture();
+    const filename = "fitgridweb-20260902T070000Z.fitgridbackup";
+    await writeFile(path.join(files.backups, filename), "published-before-history");
+    const job = {
+      schemaVersion: 1,
+      id: JOB_A,
+      type: "backup",
+      actorId: ADMIN,
+      requestId: "01JRECONCILE",
+    };
+    if (location === "queued") {
+      await files.enqueue(job, "backup password");
+    } else {
+      const claimed = path.join(files.rootOps, "claimed");
+      await mkdir(claimed);
+      await chmod(claimed, 0o700);
+      await writeFile(path.join(claimed, `${JOB_A}.json`), JSON.stringify(job), { mode: 0o400 });
+      await chmod(path.join(claimed, `${JOB_A}.json`), 0o400);
+    }
+
+    const result = files.runWorker();
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await readFile(files.sha256Log, "utf8")).toContain(filename);
   });
 
   it("serializes jobs and reports backup stages through atomic status renames", async () => {

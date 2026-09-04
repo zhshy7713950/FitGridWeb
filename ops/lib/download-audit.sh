@@ -43,7 +43,16 @@ download_audit_root_contains() {
   download_audit_file="$ADMIN_OPS_ROOT_DIR/audit.jsonl"
   [ -e "$download_audit_file" ] || [ -L "$download_audit_file" ] || return 1
   maintenance_require_root_file "$download_audit_file" 600 || return 2
-  jq -s -e \
+  download_audit_candidates=$(mktemp "$ADMIN_OPS_ROOT_DIR/.audit-candidates.XXXXXX") || return 2
+  download_audit_candidate_status=0
+  grep -F -- "$download_audit_existing_id" "$download_audit_file" >"$download_audit_candidates" \
+    || download_audit_candidate_status=$?
+  case "$download_audit_candidate_status" in
+    0) : ;;
+    1) rm -f "$download_audit_candidates"; return 1 ;;
+    *) rm -f "$download_audit_candidates"; return 2 ;;
+  esac
+  if jq -s -e \
     --arg operation "$download_audit_existing_operation" \
     --arg auditId "$download_audit_existing_id" \
     --arg actorId "$download_audit_existing_actor" \
@@ -61,28 +70,12 @@ download_audit_root_contains() {
       then true
       else error("conflicting or invalid download audit record")
       end
-    ' "$download_audit_file" >/dev/null 2>&1
-}
-
-download_audit_root_contains_id() {
-  download_audit_existing_id=$1
-  download_audit_file="$ADMIN_OPS_ROOT_DIR/audit.jsonl"
-  [ -e "$download_audit_file" ] || [ -L "$download_audit_file" ] || return 1
-  maintenance_require_root_file "$download_audit_file" 600 || return 2
-  jq -s -e --arg auditId "$download_audit_existing_id" '
-    [.[] | select(type == "object" and .auditId? == $auditId)] as $records |
-    ($records | length) == 1 and
-    ($records[0] |
-      (keys | sort) == ["actorId", "auditId", "backupId", "operation", "requestId", "status", "time"] and
-      ((.operation == "download-token" and .status == "issued") or
-       (.operation == "download" and .status == "completed")) and
-      (.auditId | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")) and
-      (.actorId | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")) and
-      (.requestId | type == "string" and test("^[A-Za-z0-9_-]{1,64}$")) and
-      (.backupId | type == "string" and length >= 1 and length <= 128 and
-        test("^[A-Za-z0-9.][A-Za-z0-9._-]*$") and . != "." and . != "..") and
-      (.time | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")))
-  ' "$download_audit_file" >/dev/null 2>&1
+    ' "$download_audit_candidates" >/dev/null 2>&1; then
+    rm -f "$download_audit_candidates"
+    return 0
+  fi
+  rm -f "$download_audit_candidates"
+  return 2
 }
 
 download_audit_durability_barrier() {
@@ -135,6 +128,12 @@ download_audit_append() {
         rm -f "$download_audit_tmp"
         return 1
       }
+  fi
+  if [ -s "$download_audit_tmp" ] && ! tail -c 1 "$download_audit_tmp" | grep -q '^$'; then
+    if ! printf '\n' >>"$download_audit_tmp"; then
+      rm -f "$download_audit_tmp"
+      return 1
+    fi
   fi
   if ! printf '%s\n' "$download_audit_line" >>"$download_audit_tmp" \
     || ! maintenance_normalize_root_file "$download_audit_tmp" 600 \
@@ -201,11 +200,6 @@ download_audit_purge_expired_acknowledgments() {
       || continue
     download_audit_purge_expires=$(jq -er '.expiresAt' "$download_audit_purge_ack") || continue
     [ "$download_audit_purge_now" -ge "$download_audit_purge_expires" ] || continue
-    download_audit_root_contains_id "$download_audit_purge_id" || continue
-    download_audit_durability_barrier || {
-      download_audit_purge_status=1
-      continue
-    }
     rm -f "$download_audit_purge_ack" || {
       download_audit_purge_status=1
       continue

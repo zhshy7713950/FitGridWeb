@@ -85,6 +85,34 @@ printf 'stage health\\n' >>"$COMMAND_LOG"
   await executable(bin, "systemctl", `
 printf 'systemctl %s\\n' "$*" >>"$COMMAND_LOG"
 [ -n "\${UNIT_STATE_DIRECTORY:-}" ] || exit 0
+case "$*" in
+  "show --property=LoadState --value fitgridweb-backup.timer")
+    [ "\${FAIL_LEGACY_QUERY:-0}" != 1 ] || exit 5
+    if [ -f "$UNIT_STATE_DIRECTORY/enabled/fitgridweb-backup.timer" ] \
+      || [ -f "$UNIT_STATE_DIRECTORY/active/fitgridweb-backup.timer" ]; then
+      printf 'loaded\\n'
+    else
+      printf 'not-found\\n'
+    fi
+    exit ;;
+  "show --property=UnitFileState --value fitgridweb-backup.timer")
+    [ "\${FAIL_LEGACY_VERIFY:-0}" != 1 ] || { printf 'enabled\\n'; exit; }
+    [ ! -f "$UNIT_STATE_DIRECTORY/enabled/fitgridweb-backup.timer" ] \
+      && printf 'disabled\\n' || printf 'enabled\\n'
+    exit ;;
+  "show --property=ActiveState --value fitgridweb-backup.timer")
+    [ ! -f "$UNIT_STATE_DIRECTORY/active/fitgridweb-backup.timer" ] \
+      && printf 'inactive\\n' || printf 'active\\n'
+    exit ;;
+  "show --property=LoadState --value fitgridweb-backup.service")
+    [ ! -f "$UNIT_STATE_DIRECTORY/active/fitgridweb-backup.service" ] \
+      && printf 'not-found\\n' || printf 'loaded\\n'
+    exit ;;
+  "show --property=ActiveState --value fitgridweb-backup.service")
+    [ ! -f "$UNIT_STATE_DIRECTORY/active/fitgridweb-backup.service" ] \
+      && printf 'inactive\\n' || printf 'active\\n'
+    exit ;;
+esac
 action=$1
 shift
 unit=
@@ -379,6 +407,29 @@ restore_fitgrid_unit_states "$saved_states"
     expect(log).not.toContain("phase deploy");
   });
 
+  it.each([
+    ["load-state query", { FAIL_LEGACY_QUERY: "1" }],
+    ["post-disable verification", { FAIL_LEGACY_VERIFY: "1" }],
+  ])("fails before deployment state changes when legacy timer %s fails", async (_caseName, failureEnv) => {
+    const files = await fixture();
+    const backupTimerName = "fitgridweb-backup.timer";
+    await writeFile(files.environment, await readFile(files.oldEnvironment, "utf8"));
+    await writeFile(path.join(files.unitState, "enabled", backupTimerName), "");
+    await writeFile(path.join(files.unitState, "active", backupTimerName), "");
+
+    const result = run(installLifecycleCommand(files, true), files, {
+      APP_UNIT_FIXTURE: files.appUnit,
+      UNIT_STATE_DIRECTORY: files.unitState,
+      ...failureEnv,
+    });
+
+    expect(result.status).toBe(1);
+    expect(await readFile(files.environment, "utf8")).toContain(`APP_IMAGE=${oldImage}`);
+    const log = await readFile(files.log, "utf8");
+    expect(log).not.toContain("phase install-maintenance");
+    expect(log).not.toContain("phase deploy");
+  });
+
   it.each(["app-restart", "final-health"])(
     "keeps the legacy backup timer disabled when a later %s failure rolls back an upgrade",
     async (failureStage) => {
@@ -405,6 +456,31 @@ restore_fitgrid_unit_states "$saved_states"
       expect(log.slice(disabled)).not.toContain("systemctl start fitgridweb-backup.timer");
     },
   );
+
+  it("keeps a triggered legacy backup service stopped through a later deployment rollback", async () => {
+    const files = await fixture();
+    const backupTimerName = "fitgridweb-backup.timer";
+    const backupServiceName = "fitgridweb-backup.service";
+    await writeFile(path.join(files.unitState, "enabled", backupTimerName), "");
+    await writeFile(path.join(files.unitState, "active", backupTimerName), "");
+    await writeFile(path.join(files.unitState, "active", backupServiceName), "");
+
+    const result = run(installLifecycleCommand(files, true), files, {
+      APP_UNIT_FIXTURE: files.appUnit,
+      FAIL_ACTIVATION_STAGE: "final-health",
+      UNIT_STATE_DIRECTORY: files.unitState,
+    });
+
+    expect(result.status).toBe(1);
+    expect(await readdir(path.join(files.unitState, "enabled"))).not.toContain(backupTimerName);
+    expect(await readdir(path.join(files.unitState, "active"))).not.toContain(backupTimerName);
+    expect(await readdir(path.join(files.unitState, "active"))).not.toContain(backupServiceName);
+    const log = await readFile(files.log, "utf8");
+    const legacyStop = log.indexOf("systemctl stop fitgridweb-backup.service");
+    expect(legacyStop).toBeGreaterThan(-1);
+    expect(log.slice(legacyStop)).not.toContain("systemctl start fitgridweb-backup.service");
+    expect(log.slice(legacyStop)).not.toContain("systemctl enable fitgridweb-backup.timer");
+  });
 
   it("restores the legacy environment before restarting its previously active app", async () => {
     const files = await fixture();
@@ -567,6 +643,7 @@ render_nginx_snippet() { printf 'location /fitgrid {}\\n'; }
 install_nginx_include() { :; }
 verify_health() { printf 'phase health\\n' >>"$COMMAND_LOG"; }
 systemctl() {
+  if [ "$1" = show ]; then printf 'not-found\\n'; return; fi
   case "$1" in is-enabled|is-active) return 1 ;; esac
   printf 'phase %s\\n' "$*" >>"$COMMAND_LOG"
 }
@@ -662,6 +739,7 @@ install_nginx_include() { :; }
 verify_health() { printf 'phase health\\n' >>"$COMMAND_LOG"; }
 install_systemd_unit() { printf 'phase install-systemd\\n' >>"$COMMAND_LOG"; }
 systemctl() {
+  if [ "$1" = show ]; then printf 'not-found\\n'; return; fi
   case "$1" in is-enabled|is-active) return 1 ;; esac
   printf 'phase restart-systemd\\n' >>"$COMMAND_LOG"
 }
@@ -716,6 +794,7 @@ install_nginx_include() { :; }
 verify_health() { printf 'phase health\\n' >>"$COMMAND_LOG"; }
 install_systemd_unit() { :; }
 systemctl() {
+  if [ "$1" = show ]; then printf 'not-found\\n'; return; fi
   case "$1" in is-enabled|is-active) return 1 ;; esac
   printf 'phase restart-systemd\\n' >>"$COMMAND_LOG"
 }

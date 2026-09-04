@@ -39,7 +39,20 @@ elif ! flock -n 9; then
   exit 0
 fi
 
-reconcile_portable_backups "$PORTABLE_BACKUP_DIR" "$PORTABLE_BACKUP_HISTORY_FILE" 5 || exit 1
+maintenance_reconcile_required=$maintenance_recovery_mode
+if [ "$maintenance_reconcile_required" = false ]; then
+  for maintenance_reconcile_job in \
+    "$ADMIN_OPS_ROOT_DIR"/claimed/*.json \
+    "$ADMIN_OPS_DIR"/inbox/*.json
+  do
+    [ -e "$maintenance_reconcile_job" ] || [ -L "$maintenance_reconcile_job" ] || continue
+    maintenance_reconcile_required=true
+    break
+  done
+fi
+if [ "$maintenance_reconcile_required" = true ]; then
+  reconcile_portable_backups "$PORTABLE_BACKUP_DIR" "$PORTABLE_BACKUP_HISTORY_FILE" 5 || exit 1
+fi
 download_audit_purge_expired_acknowledgments || exit 1
 
 maintenance_current_claim=

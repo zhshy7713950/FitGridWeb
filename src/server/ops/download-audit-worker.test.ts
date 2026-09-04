@@ -5,6 +5,7 @@ import {
   readFile,
   readdir,
   realpath,
+  rename,
   rm,
   unlink,
   writeFile,
@@ -162,6 +163,41 @@ describe("root download audit worker", () => {
     });
   });
 
+  it("appends and replays across an unrelated truncated maintenance audit tail", async () => {
+    const files = await fixture();
+    const auditPath = path.join(files.rootOps, "audit.jsonl");
+    await writeFile(auditPath, '{"operation":"maintenance","jobId":"truncated', { mode: 0o600 });
+    await publishRequest(files.request);
+
+    const appended = runWorker(files);
+
+    expect(appended.status, appended.stderr).toBe(0);
+    await unlink(files.acknowledgment);
+    await publishRequest(files.request);
+
+    const replayed = runWorker(files);
+
+    expect(replayed.status, replayed.stderr).toBe(0);
+    const lines = (await readFile(auditPath, "utf8")).split("\n");
+    expect(lines.filter((line) => line.includes(`"auditId":"${AUDIT_ID}"`))).toHaveLength(1);
+    expect(JSON.parse(await readFile(files.acknowledgment, "utf8"))).toMatchObject({ id: AUDIT_ID });
+  });
+
+  it("fails closed without acknowledging a malformed line containing the exact audit id", async () => {
+    const files = await fixture();
+    await writeFile(
+      path.join(files.rootOps, "audit.jsonl"),
+      `{"operation":"download-token","auditId":"${AUDIT_ID}","actorId":`,
+      { mode: 0o600 },
+    );
+    await publishRequest(files.request);
+
+    const result = runWorker(files);
+
+    expect(result.status).not.toBe(0);
+    await expect(readFile(files.acknowledgment, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("does not acknowledge a short audit write and recovers without duplicating the event", async () => {
     const files = await fixture();
     await publishRequest(files.request);
@@ -245,19 +281,37 @@ portable_sync_filesystem() {
       .toHaveLength(1);
   });
 
-  it("purges only expired owned acknowledgments backed by durable complete audit records", async () => {
+  it("does not acknowledge duplicate complete records for the same audit id", async () => {
+    const files = await fixture();
+    const record = JSON.stringify({
+      operation: "download-token",
+      auditId: AUDIT_ID,
+      actorId: ADMIN_ID,
+      requestId: REQUEST_ID,
+      backupId: BACKUP_ID,
+      time: "2033-05-18T03:33:20Z",
+      status: "issued",
+    });
+    await writeFile(path.join(files.rootOps, "audit.jsonl"), `${record}\n${record}\n`, { mode: 0o600 });
+    await publishRequest(files.request);
+
+    const result = runWorker(files);
+
+    expect(result.status).not.toBe(0);
+    await expect(readFile(files.acknowledgment, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("purges expired trusted acknowledgments without consulting the current audit log", async () => {
     const files = await fixture();
     const expired = AUDIT_ID;
     const unexpired = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
     const missingAudit = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
     const unsafeMode = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-    const inconsistentAudit = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
     const unsafeSchema = "ffffffff-ffff-4fff-8fff-ffffffffffff";
     await writeFile(path.join(files.rootOps, "audit.jsonl"), [
       expired,
       unexpired,
       unsafeMode,
-      inconsistentAudit,
       unsafeSchema,
     ].map((id) => JSON.stringify({
       operation: "download-token",
@@ -266,14 +320,13 @@ portable_sync_filesystem() {
       requestId: REQUEST_ID,
       backupId: BACKUP_ID,
       time: "2033-05-18T03:33:20Z",
-      status: id === inconsistentAudit ? "completed" : "issued",
+      status: "issued",
     })).join("\n") + "\n", { mode: 0o600 });
     for (const [id, expiresAt] of [
       [expired, 1_999_999_999],
       [unexpired, 2_000_000_001],
       [missingAudit, 1_999_999_999],
       [unsafeMode, 1_999_999_999],
-      [inconsistentAudit, 1_999_999_999],
       [unsafeSchema, 1_999_999_999],
     ] as const) {
       const acknowledgment = path.join(files.status, `${id}.audit`);
@@ -292,13 +345,40 @@ portable_sync_filesystem() {
     expect(result.status, result.stderr).toBe(0);
     await expect(readFile(path.join(files.status, `${expired}.audit`), "utf8"))
       .rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(path.join(files.status, `${missingAudit}.audit`), "utf8"))
+      .rejects.toMatchObject({ code: "ENOENT" });
     expect(await readdir(files.status)).toEqual(expect.arrayContaining([
       `${unexpired}.audit`,
-      `${missingAudit}.audit`,
       `${unsafeMode}.audit`,
-      `${inconsistentAudit}.audit`,
       `${unsafeSchema}.audit`,
     ]));
+  });
+
+  it("purges an expired trusted acknowledgment after audit log rotation", async () => {
+    const files = await fixture();
+    const auditPath = path.join(files.rootOps, "audit.jsonl");
+    await writeFile(auditPath, `${JSON.stringify({
+      operation: "download-token",
+      auditId: AUDIT_ID,
+      actorId: ADMIN_ID,
+      requestId: REQUEST_ID,
+      backupId: BACKUP_ID,
+      time: "2033-05-18T03:33:20Z",
+      status: "issued",
+    })}\n`, { mode: 0o600 });
+    await rename(auditPath, `${auditPath}.1`);
+    await writeFile(files.acknowledgment, `${JSON.stringify({
+      schemaVersion: 1,
+      id: AUDIT_ID,
+      state: "persisted",
+      expiresAt: 1_999_999_999,
+    })}\n`, { mode: 0o640 });
+    await chmod(files.acknowledgment, 0o640);
+
+    const result = runWorker(files);
+
+    expect(result.status, result.stderr).toBe(0);
+    await expect(readFile(files.acknowledgment, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("does not purge an expired acknowledgment whose owner is not trusted", async () => {

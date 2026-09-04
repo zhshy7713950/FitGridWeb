@@ -192,10 +192,66 @@ capture_fitgrid_unit_states() {
 }
 
 disable_legacy_backup_timer() {
-  if systemctl is-enabled --quiet fitgridweb-backup.timer >/dev/null 2>&1 \
-    || systemctl is-active --quiet fitgridweb-backup.timer >/dev/null 2>&1; then
-    systemctl disable --now fitgridweb-backup.timer \
-      || { fitgrid_error "旧版 fitgridweb-backup.timer 禁用失败；部署未开始"; return 1; }
+  legacy_timer_load_state=$(systemctl show --property=LoadState --value \
+    fitgridweb-backup.timer 2>/dev/null) || {
+      fitgrid_error "旧版备份 unit 状态查询失败；部署未开始"
+      return 1
+    }
+  [ -n "$legacy_timer_load_state" ] || {
+    fitgrid_error "旧版备份 unit 状态查询失败；部署未开始"
+    return 1
+  }
+  if [ "$legacy_timer_load_state" != not-found ]; then
+    systemctl disable --now fitgridweb-backup.timer || {
+      fitgrid_error "旧版 fitgridweb-backup.timer 禁用失败；部署未开始"
+      return 1
+    }
+    legacy_timer_unit_state=$(systemctl show --property=UnitFileState --value \
+      fitgridweb-backup.timer 2>/dev/null) || {
+        fitgrid_error "旧版 fitgridweb-backup.timer 禁用状态验证失败；部署未开始"
+        return 1
+      }
+    legacy_timer_active_state=$(systemctl show --property=ActiveState --value \
+      fitgridweb-backup.timer 2>/dev/null) || {
+        fitgrid_error "旧版 fitgridweb-backup.timer 运行状态验证失败；部署未开始"
+        return 1
+      }
+    if [ "$legacy_timer_unit_state" != disabled ] || [ "$legacy_timer_active_state" != inactive ]; then
+      fitgrid_error "旧版 fitgridweb-backup.timer 未完全禁用；部署未开始"
+      return 1
+    fi
+  fi
+
+  legacy_service_load_state=$(systemctl show --property=LoadState --value \
+    fitgridweb-backup.service 2>/dev/null) || {
+      fitgrid_error "旧版备份 unit 状态查询失败；部署未开始"
+      return 1
+    }
+  [ -n "$legacy_service_load_state" ] || {
+    fitgrid_error "旧版备份 unit 状态查询失败；部署未开始"
+    return 1
+  }
+  if [ "$legacy_service_load_state" != not-found ]; then
+    legacy_service_active_state=$(systemctl show --property=ActiveState --value \
+      fitgridweb-backup.service 2>/dev/null) || {
+        fitgrid_error "旧版 fitgridweb-backup.service 运行状态查询失败；部署未开始"
+        return 1
+      }
+    if [ "$legacy_service_active_state" != inactive ]; then
+      systemctl stop fitgridweb-backup.service || {
+        fitgrid_error "旧版 fitgridweb-backup.service 停止失败；部署未开始"
+        return 1
+      }
+      legacy_service_active_state=$(systemctl show --property=ActiveState --value \
+        fitgridweb-backup.service 2>/dev/null) || {
+          fitgrid_error "旧版 fitgridweb-backup.service 停止状态验证失败；部署未开始"
+          return 1
+        }
+      [ "$legacy_service_active_state" = inactive ] || {
+        fitgrid_error "旧版 fitgridweb-backup.service 仍在运行；部署未开始"
+        return 1
+      }
+    fi
   fi
 }
 
