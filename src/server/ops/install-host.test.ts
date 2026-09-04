@@ -434,8 +434,60 @@ esac`,
     const log = await readFile(files.log, "utf8");
     expect(log).toContain("systemctl stop fitgridweb-backup.service");
     expect(log.match(/systemctl show --property=ActiveState --value fitgridweb-backup\.service/g))
-      .toHaveLength(2);
+      .toHaveLength(1);
+    expect(log.indexOf("systemctl stop fitgridweb-backup.service"))
+      .toBeLessThan(log.indexOf("systemctl show --property=ActiveState --value fitgridweb-backup.service"));
   });
+
+  it("stops a loaded legacy service even when its first observed state looks inactive", async () => {
+    const files = await maintenanceFixture();
+    const queriedMarker = path.join(files.root, "legacy-service-queried");
+    const stoppedMarker = path.join(files.root, "legacy-service-stopped");
+    await executable(files.bin, "systemctl", `
+printf 'systemctl %s\n' "$*" >>"$COMMAND_LOG"
+case "$*" in
+  "show --property=LoadState --value fitgridweb-backup.timer") printf 'not-found\n' ;;
+  "show --property=LoadState --value fitgridweb-backup.service") printf 'loaded\n' ;;
+  "show --property=ActiveState --value fitgridweb-backup.service")
+    if [ -f "$STOPPED_MARKER" ]; then
+      printf 'inactive\n'
+    elif [ ! -f "$QUERIED_MARKER" ]; then
+      : >"$QUERIED_MARKER"
+      printf 'inactive\n'
+    else
+      printf 'active\n'
+    fi ;;
+  "stop fitgridweb-backup.service") : >"$STOPPED_MARKER" ;;
+esac`);
+
+    const result = run("disable_legacy_backup_timer", files, {
+      QUERIED_MARKER: queriedMarker,
+      STOPPED_MARKER: stoppedMarker,
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await readFile(files.log, "utf8")).toContain("systemctl stop fitgridweb-backup.service");
+  });
+
+  it.each(["stop", "verification"])(
+    "fails closed when legacy backup service %s fails",
+    async (failure) => {
+      const files = await maintenanceFixture();
+      await executable(files.bin, "systemctl", `
+printf 'systemctl %s\n' "$*" >>"$COMMAND_LOG"
+case "$*" in
+  "show --property=LoadState --value fitgridweb-backup.timer") printf 'not-found\n' ;;
+  "show --property=LoadState --value fitgridweb-backup.service") printf 'loaded\n' ;;
+  "stop fitgridweb-backup.service") [ "$FAILURE" != stop ] ;;
+  "show --property=ActiveState --value fitgridweb-backup.service")
+    [ "$FAILURE" != verification ] && printf 'inactive\n' || printf 'active\n' ;;
+esac`);
+
+      const result = run("disable_legacy_backup_timer", files, { FAILURE: failure });
+
+      expect(result.status).not.toBe(0);
+    },
+  );
 
   it("preserves existing history, prepared recovery state, and marker state on reinstall", async () => {
     const files = await maintenanceFixture();

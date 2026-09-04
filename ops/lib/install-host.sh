@@ -232,26 +232,19 @@ disable_legacy_backup_timer() {
     return 1
   }
   if [ "$legacy_service_load_state" != not-found ]; then
+    systemctl stop fitgridweb-backup.service || {
+      fitgrid_error "旧版 fitgridweb-backup.service 停止失败；部署未开始"
+      return 1
+    }
     legacy_service_active_state=$(systemctl show --property=ActiveState --value \
       fitgridweb-backup.service 2>/dev/null) || {
-        fitgrid_error "旧版 fitgridweb-backup.service 运行状态查询失败；部署未开始"
+        fitgrid_error "旧版 fitgridweb-backup.service 停止状态验证失败；部署未开始"
         return 1
       }
-    if [ "$legacy_service_active_state" != inactive ]; then
-      systemctl stop fitgridweb-backup.service || {
-        fitgrid_error "旧版 fitgridweb-backup.service 停止失败；部署未开始"
-        return 1
-      }
-      legacy_service_active_state=$(systemctl show --property=ActiveState --value \
-        fitgridweb-backup.service 2>/dev/null) || {
-          fitgrid_error "旧版 fitgridweb-backup.service 停止状态验证失败；部署未开始"
-          return 1
-        }
-      [ "$legacy_service_active_state" = inactive ] || {
-        fitgrid_error "旧版 fitgridweb-backup.service 仍在运行；部署未开始"
-        return 1
-      }
-    fi
+    [ "$legacy_service_active_state" = inactive ] || {
+      fitgrid_error "旧版 fitgridweb-backup.service 仍在运行；部署未开始"
+      return 1
+    }
   fi
 }
 
