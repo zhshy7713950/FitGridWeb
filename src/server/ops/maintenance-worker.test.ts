@@ -294,7 +294,14 @@ case "\${MAINTENANCE_HEALTH_PHASE:-}" in
   restored)
     if [ "$RESTORED_HEALTH" != true ]; then
       printf 'health-failed\n' >>"$COMMAND_LOG"
+      if [ "$FAIL_ROLLBACK_AUDIT_APPEND" = true ]; then
+        rm -f "$ROOT_OPS_DIRECTORY/audit.jsonl"
+        mkdir "$ROOT_OPS_DIRECTORY/audit.jsonl"
+      fi
       exit 22
+    elif [ "$FAIL_RESTORE_SUCCESS_AUDIT_APPEND" = true ]; then
+      rm -f "$ROOT_OPS_DIRECTORY/audit.jsonl"
+      mkdir "$ROOT_OPS_DIRECTORY/audit.jsonl"
     fi ;;
   rollback)
     if [ "$ROLLBACK_HEALTH" != true ]; then
@@ -346,6 +353,14 @@ fi
 if [ "$target" = "$ROOT_OPS_DIRECTORY/audit.jsonl" ] \
   && [ -n "$FAIL_AUDIT_SYNC_OPERATION" ] \
   && tail -n 1 "$target" | /usr/bin/jq -e --arg operation "$FAIL_AUDIT_SYNC_OPERATION" '.operation == $operation' >/dev/null 2>&1; then
+  if [ -z "$FAIL_AUDIT_SYNC_STATUS" ] \
+    || tail -n 1 "$target" | /usr/bin/jq -e --arg status "$FAIL_AUDIT_SYNC_STATUS" '.status == $status' >/dev/null 2>&1; then
+    exit 9
+  fi
+fi
+if [ "$target" = "$ROOT_OPS_DIRECTORY/audit.jsonl" ] \
+  && [ -n "$FAIL_AUDIT_SYNC_CODE" ] \
+  && tail -n 1 "$target" | /usr/bin/jq -e --arg code "$FAIL_AUDIT_SYNC_CODE" '.code == $code' >/dev/null 2>&1; then
   exit 9
 fi
 case "$target" in *"$FAIL_SYNC_TARGET"*) [ -z "$FAIL_SYNC_TARGET" ] || exit 9 ;; esac`,
@@ -502,6 +517,10 @@ exec /bin/mv "$source" "$destination"`,
     FAIL_STATUS_SYNC_STATE: "",
     FAIL_STATUS_SYNC_FILE: path.join(root, "fail-status-sync-once"),
     FAIL_AUDIT_SYNC_OPERATION: "",
+    FAIL_AUDIT_SYNC_STATUS: "",
+    FAIL_AUDIT_SYNC_CODE: "",
+    FAIL_ROLLBACK_AUDIT_APPEND: "false",
+    FAIL_RESTORE_SUCCESS_AUDIT_APPEND: "false",
     FAIL_COMPLETED_LEDGER: "false",
     FAIL_FLOCK: "false",
     FLOCK_ARGS_LOG: flockArgsLog,
@@ -1034,6 +1053,28 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(await files.commandSequence()).toEqual(["rollback-snapshot"]);
   });
 
+  it.each([
+    ["append", true, {}],
+    ["filesystem sync", false, { FAIL_AUDIT_SYNC_CODE: "RESTORE_CONFIRMED" }],
+  ])("does not begin destructive restore when its confirmation audit %s fails", async (_failure, failAppend, failureEnv) => {
+    const files = await workerFixture();
+    if (failAppend) await mkdir(files.audit);
+    await files.prepareRestore();
+    await files.enqueueRestore();
+
+    const result = files.runWorker(failureEnv);
+
+    expect(result.status).not.toBe(0);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({
+      state: "intervention-required",
+      code: "AUDIT_PERSIST_FAILED",
+    });
+    expect(await files.commandSequence()).toEqual(["rollback-snapshot"]);
+    expect(await files.rootMaintenance()).toMatchObject({ active: true, jobId: RESTORE_JOB });
+    expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
+    expect(await stat(path.join(files.rootOps, "intervention", RESTORE_JOB, "rollback.dump.enc"))).toBeDefined();
+  });
+
   it("rolls production back exactly once when restored application health fails", async () => {
     const files = await workerFixture({ restoredHealth: false, rollbackHealth: true });
     await files.prepareRestore();
@@ -1063,6 +1104,35 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(await files.maintenance()).toMatchObject({ active: false });
     await expect(stat(path.join(files.prepared, INSPECT_JOB))).rejects.toThrow();
     await expect(stat(path.join(files.rootOps, "intervention", RESTORE_JOB))).rejects.toThrow();
+  });
+
+  it.each([
+    ["status publication", { FAIL_STATUS_STATE: "rollback" }, "STATUS_PUBLISH_FAILED"],
+    ["audit append", { FAIL_ROLLBACK_AUDIT_APPEND: "true" }, "AUDIT_PERSIST_FAILED"],
+    ["audit filesystem sync", { FAIL_AUDIT_SYNC_CODE: "ROLLBACK_STARTED" }, "AUDIT_PERSIST_FAILED"],
+  ])("does not begin rollback when its start %s fails", async (_failure, failureEnv, code) => {
+    const files = await workerFixture({ restoredHealth: false, rollbackHealth: true });
+    await files.prepareRestore();
+    await files.enqueueRestore();
+
+    const result = files.runWorker(failureEnv);
+
+    expect(result.status).not.toBe(0);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "intervention-required", code });
+    expect(await files.commandSequence()).toEqual([
+      "rollback-snapshot",
+      "stop-app",
+      "terminate-app-connections",
+      "reset-schema",
+      "migrate",
+      "restore-upload",
+      "delete-sessions",
+      "start-app",
+      "health-failed",
+    ]);
+    expect(await files.rootMaintenance()).toMatchObject({ active: true, jobId: RESTORE_JOB });
+    expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
+    expect(await stat(path.join(files.rootOps, "intervention", RESTORE_JOB, "rollback.dump.enc"))).toBeDefined();
   });
 
   it("keeps external traffic fenced through restored health and clears only after finalization", async () => {
@@ -1187,14 +1257,17 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
   });
 
   it.each([
-    ["restore success", {}, "restore"],
-    ["rollback success", { restoredHealth: false }, "rollback"],
-  ])("keeps maintenance fenced when the %s audit cannot be made durable", async (_caseName, options, operation) => {
+    ["restore success", {}, "restore", "succeeded"],
+    ["rollback success", { restoredHealth: false }, "rollback", "succeeded"],
+  ])("keeps maintenance fenced when the %s audit cannot be made durable", async (_caseName, options, operation, status) => {
     const files = await workerFixture(options);
     await files.prepareRestore();
     await files.enqueueRestore();
 
-    const result = files.runWorker({ FAIL_AUDIT_SYNC_OPERATION: operation });
+    const result = files.runWorker({
+      FAIL_AUDIT_SYNC_OPERATION: operation,
+      FAIL_AUDIT_SYNC_STATUS: status,
+    });
 
     expect(result.status).not.toBe(0);
     expect(await files.status(RESTORE_JOB)).toMatchObject({
@@ -1208,11 +1281,10 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
 
   it("keeps maintenance fenced when the success audit append fails", async () => {
     const files = await workerFixture();
-    await mkdir(files.audit);
     await files.prepareRestore();
     await files.enqueueRestore();
 
-    const result = files.runWorker();
+    const result = files.runWorker({ FAIL_RESTORE_SUCCESS_AUDIT_APPEND: "true" });
 
     expect(result.status).not.toBe(0);
     expect(await files.status(RESTORE_JOB)).toMatchObject({

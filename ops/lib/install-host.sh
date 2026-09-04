@@ -154,8 +154,7 @@ install_systemd_unit() {
   cp "$template" "$temporary"
   chmod 644 "$temporary"
   mv "$temporary" "$destination"
-  systemctl daemon-reload || return 1
-  systemctl enable fitgridweb.service || return 1
+  systemctl daemon-reload
 }
 
 host_environment_value() {
@@ -298,7 +297,6 @@ install_maintenance_components() {
   maintenance_history=$(host_environment_value PORTABLE_BACKUP_HISTORY_FILE "$maintenance_environment_file")
   maintenance_reader_gid=$(host_environment_value PORTABLE_BACKUP_READER_GID "$maintenance_environment_file")
   maintenance_reader_gid=${maintenance_reader_gid:-1001}
-  backup_remote=$(host_environment_value BACKUP_REMOTE_DIR "$maintenance_environment_file")
 
   validate_maintenance_path "$maintenance_web" ADMIN_OPS_WEB_DIR || return 1
   validate_maintenance_path "$maintenance_root" ADMIN_OPS_ROOT_DIR || return 1
@@ -355,14 +353,20 @@ install_maintenance_components() {
     return 1
   fi
   systemctl daemon-reload || { fitgrid_error "维护组件安装失败：systemd daemon-reload"; return 1; }
-  systemctl enable --now fitgridweb-maintenance.path \
-    || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance.path 启用"; return 1; }
+}
+
+enable_maintenance_components() {
+  maintenance_enable_environment_file=$1
+  maintenance_enable_backup_remote=$(host_environment_value BACKUP_REMOTE_DIR "$maintenance_enable_environment_file")
   systemctl enable fitgridweb-maintenance-recovery.service \
     || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance-recovery.service 启用"; return 1; }
+  systemctl enable --now fitgridweb-maintenance.path \
+    || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance.path 启用"; return 1; }
   systemctl enable --now fitgridweb-maintenance-sweep.timer \
     || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance-sweep.timer 启用"; return 1; }
 
-  if [ -n "$backup_remote" ] && backup_remote_is_distinct_mount "$backup_remote"; then
+  if [ -n "$maintenance_enable_backup_remote" ] \
+    && backup_remote_is_distinct_mount "$maintenance_enable_backup_remote"; then
     systemctl enable --now fitgridweb-backup.timer \
       || { fitgrid_error "维护组件安装失败：fitgridweb-backup.timer 启用"; return 1; }
   else

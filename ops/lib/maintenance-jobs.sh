@@ -1055,8 +1055,14 @@ maintenance_finalize_successful_rollback() {
 }
 
 maintenance_attempt_rollback() {
-  maintenance_write_status rollback
-  maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" rollback ROLLBACK_STARTED "$maintenance_bound_sha"
+  if ! maintenance_write_status rollback; then
+    maintenance_enter_intervention STATUS_PUBLISH_FAILED
+    return 1
+  fi
+  if ! maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" rollback ROLLBACK_STARTED "$maintenance_bound_sha"; then
+    maintenance_enter_intervention AUDIT_PERSIST_FAILED
+    return 1
+  fi
   maintenance_rollback_plain="$maintenance_current_work/rollback.restore.dump"
   MAINTENANCE_RESTORE_SOURCE=rollback
   export MAINTENANCE_RESTORE_SOURCE
@@ -1110,6 +1116,10 @@ maintenance_handle_restore() {
   fi
   if ! maintenance_write_status restoring; then
     maintenance_enter_intervention STATUS_PUBLISH_FAILED || :
+    return 1
+  fi
+  if ! maintenance_audit restore "$maintenance_job_id" "$maintenance_actor_id" "$maintenance_request_id" restoring RESTORE_CONFIRMED "$maintenance_bound_sha"; then
+    maintenance_enter_intervention AUDIT_PERSIST_FAILED || :
     return 1
   fi
   MAINTENANCE_RESTORE_SOURCE=upload

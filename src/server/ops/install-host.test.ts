@@ -171,7 +171,9 @@ describe("boot recovery", () => {
     const files = await fixture();
     expect(run(`install_systemd_unit "${unitTemplate}" "${files.unit}"`, files).status).toBe(0);
     expect(await readFile(files.unit, "utf8")).toBe(source);
-    expect(await readFile(files.log, "utf8")).toContain("systemctl enable fitgridweb.service");
+    const log = await readFile(files.log, "utf8");
+    expect(log).toContain("systemctl daemon-reload");
+    expect(log).not.toContain("systemctl enable fitgridweb.service");
   });
 });
 
@@ -208,7 +210,7 @@ describe("maintenance installation", () => {
     return { ...files, web, rootOps, portable, remote, environment, systemd, logrotate };
   }
 
-  it("installs private spool directories and enables only the maintenance path by default", async () => {
+  it("installs private spool directories without enabling services before deployment", async () => {
     const files = await maintenanceFixture();
     const result = run(
       `install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}"`,
@@ -221,10 +223,9 @@ describe("maintenance installation", () => {
     expect(log).toContain(`install -d -m 0750 -o 1001 -g 1001 ${files.web}/status`);
     expect(log).toContain(`install -d -m 0700 -o root -g root ${files.rootOps} ${files.rootOps}/prepared`);
     expect(log).toContain(`install -d -m 0750 -o root -g 1001 ${files.portable}`);
-    expect(log).toContain("systemctl enable --now fitgridweb-maintenance.path");
-    expect(log).not.toContain("enable --now fitgridweb-backup.timer");
+    expect(log).toContain("systemctl daemon-reload");
+    expect(log).not.toMatch(/systemctl (enable|disable)/);
     expect(log).not.toMatch(/sing-box|10256|30127/);
-    expect(result.stdout).toContain("自动异机备份未启用：请配置并挂载 BACKUP_REMOTE_DIR");
   });
 
   it("installs fixed worker, timer, and root-only logrotate definitions", async () => {
@@ -267,17 +268,22 @@ describe("maintenance installation", () => {
     expect(await readFile(files.logrotate, "utf8")).toContain(`${files.rootOps}/audit.jsonl`);
     expect((await stat(files.logrotate)).mode & 0o777).toBe(0o600);
     expect(await readFile(files.logrotate, "utf8")).toContain("rotate 180");
-    const installLog = await readFile(files.log, "utf8");
-    expect(installLog).toContain("systemctl enable fitgridweb-maintenance-recovery.service");
-    expect(installLog).toContain("systemctl enable --now fitgridweb-maintenance-sweep.timer");
   });
 
   it("enables unattended backup only on a writable filesystem distinct from root", async () => {
     const files = await maintenanceFixture("configured");
-    const command = `install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}"`;
+    const command = `install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}" && enable_maintenance_components "${files.environment}"`;
 
     expect(run(command, files, { REMOTE_DEVICE: "8:1" }).status).toBe(0);
-    expect(await readFile(files.log, "utf8")).not.toContain("enable --now fitgridweb-backup.timer");
+    const localLog = await readFile(files.log, "utf8");
+    expect(localLog).toContain("systemctl enable --now fitgridweb-maintenance.path");
+    expect(localLog).toContain("systemctl enable fitgridweb-maintenance-recovery.service");
+    expect(localLog).toContain("systemctl enable --now fitgridweb-maintenance-sweep.timer");
+    expect(localLog.indexOf("systemctl enable fitgridweb-maintenance-recovery.service"))
+      .toBeLessThan(localLog.indexOf("systemctl enable --now fitgridweb-maintenance.path"));
+    expect(localLog.indexOf("systemctl enable --now fitgridweb-maintenance.path"))
+      .toBeLessThan(localLog.indexOf("systemctl enable --now fitgridweb-maintenance-sweep.timer"));
+    expect(localLog).not.toContain("enable --now fitgridweb-backup.timer");
 
     await writeFile(files.log, "");
     expect(run(command, files, { REMOTE_DEVICE: "0:44" }).status).toBe(0);

@@ -39,6 +39,12 @@ restore_environment() {
   mv "$temporary" "$environment_file"
 }
 
+restore_or_remove_environment() {
+  environment_file=$1
+  old_environment=${2:-}
+  restore_environment "$environment_file" "$old_environment" || rm -f "$environment_file"
+}
+
 rollback_app() {
   project_directory=$1
   environment_file=$2
@@ -49,6 +55,7 @@ rollback_app() {
   else
     fitgrid_error "首次安装没有旧镜像可恢复；数据库保持运行以便诊断"
     fitgrid_compose "$project_directory" "$environment_file" stop app >/dev/null 2>&1 || true
+    rm -f "$environment_file"
   fi
   return 1
 }
@@ -204,15 +211,19 @@ fitgrid_install_main() {
   ensure_swap "$swap_choice" /swapfile-fitgridweb /etc/fstab /proc/swaps
 
   if ! install_maintenance_components "$project_directory" "$environment_file"; then
+    restore_or_remove_environment "$environment_file" "$old_environment"
     fitgrid_error "维护组件安装失败；新 FitGridWeb 应用尚未启动"
     return 1
   fi
   if ! install_systemd_unit "$project_directory/ops/templates/fitgridweb.service" /etc/systemd/system/fitgridweb.service; then
-    restore_environment "$environment_file" "$old_environment" || true
+    restore_or_remove_environment "$environment_file" "$old_environment"
     fitgrid_error "systemd 应用 unit 安装失败；新 FitGridWeb 应用尚未启动"
     return 1
   fi
-  deploy_release "$project_directory" "$environment_file" "$old_environment" "$app_port"
+  if ! deploy_release "$project_directory" "$environment_file" "$old_environment" "$app_port"; then
+    restore_or_remove_environment "$environment_file" "$old_environment"
+    return 1
+  fi
 
   nginx_temporary=$(mktemp -d)
   trap 'rm -rf "$nginx_temporary"' EXIT HUP INT TERM
@@ -237,6 +248,14 @@ fitgrid_install_main() {
   fi
   if ! verify_health "$public_health"; then
     rollback_release "$project_directory" "$environment_file" "$old_environment" "$app_port" "$public_health" || true
+    return 1
+  fi
+  if ! enable_maintenance_components "$environment_file"; then
+    fitgrid_error "维护组件启用失败；应用保持当前健康版本，请修复后重试安装"
+    return 1
+  fi
+  if ! systemctl enable fitgridweb.service; then
+    fitgrid_error "systemd 应用 unit 启用失败；应用保持当前健康版本，请修复后重试安装"
     return 1
   fi
   if [ "$admin_choice" = yes ]; then
