@@ -1,23 +1,24 @@
 # 服务端实现状态与验收追踪
 
-日期：2026-09-01  
+日期：2026-09-03
 范围：Next.js `/api/v1`、Better Auth 标准数据库会话、领域算法、PostgreSQL/Prisma、导入导出、前端基础与 VPS 运维资产。
 
 ## 状态摘要
 
-- 服务端代码与本机可运行的自动化门禁已经完成。
+- 服务端主体和自动化覆盖已实现；Task 6 修复后，本机可运行的产品测试门禁及 typecheck、lint、diff check 已通过，生产等价环境门控仍须单独完成。
 - Better Auth 使用 `sessions` 表保存标准数据库会话；浏览器只接收 `HttpOnly`、`Secure`、`SameSite=Lax` Cookie，不向前端返回长期 token。
 - 产品查询、冲突检测、游标、导入与导出均绑定会话 owner；`grid_trades` 和 `import_previews` 同时启用 `FORCE ROW LEVEL SECURITY`。
 - OpenAPI 中 16 个路径的每个 operationId 都有 Route Handler；Android 与 Web 导出均通过发布的 JSON Schema。
 - 已实现 `/fitgrid` 固定生产子路径、Better Auth Cookie Path、GHCR 完整 SHA 流水线、2 GiB 低内存 Compose、现有 nginx 安全集成、迁移前置/应用回滚和 systemd 开机恢复。
-- 当前主机没有 Docker，也没有提供 `TEST_DATABASE_URL`，因此真实 PostgreSQL RLS、GHCR 镜像拉取、HTTPS 部署、VPS 重启、备份和恢复演练仍是发布前环境门控。
+- 管理员数据保险库、age 便携备份、最近 5 份下载历史、流式上传预检、整库恢复/单次自动回滚、root-only intervention state 和维护 path unit 已实现。网页、`backup-portable.sh` 与 `backup.sh` 均为手动触发；项目不安装或启用自动备份 timer，升级会关闭旧版本遗留的 `fitgridweb-backup.timer`。提交 `7825546` 和 `cb99a76` 已修复 `dev:ui` 的 DataVault HTTP 500 与下载导航/文件名缺口；管理员专项测试 76/76、精确 UI-demo smoke 5/5、完整 `pnpm test --maxWorkers=4` 为 777 passed + 3 skipped，typecheck、lint、diff check 均通过。
+- 与上述本机自动化通过分开，本次 Task 7 主机没有 Docker、age、systemd、`pg_restore` 或 `TEST_DATABASE_URL`，因此真实 PostgreSQL RLS、GHCR 镜像拉取、HTTPS 部署、VPS 重启、真实加解密和生产等价恢复演练仍是发布前环境门控；这些项目没有因 Task 6 修复而获得生产验收。
 
 ## 前端基础
 
 - 登录、会话恢复和受保护布局使用现有 Better Auth 数据库会话；浏览器不读取 token。
 - `/grids` 已连接 owner-scoped `GET /api/v1/grid-trades`，覆盖搜索、清除、稳定游标分页和保留数据重试。
 - TradingView 风格桌面表格和手机卡片通过组件测试与 `/fitgrid` 生产构建。
-- 新增、详情、导入导出和管理页面仍属于后续前端阶段。
+- 新增/编辑/详情、导入导出、账号与邀请管理及管理员数据保险库均已接入对应 API；真实数据库浏览器联调仍受下述环境门控。
 
 证据边界：完整自动化门禁和 `/fitgrid` 生产构建已在本机执行；1440×900 与 390×844 浏览器检查覆盖匿名入口、受保护路由回跳、登录键盘顺序、装饰动画、响应式登录布局、静态资源和控制台。当前主机没有 Docker、Podman 或 PostgreSQL 工具，未设置 `DATABASE_URL`/`TEST_DATABASE_URL`，也没有项目环境文件或本地 PostgreSQL 监听，因此没有绕过 Better Auth 会话门禁；登录成功、用户数据隔离、搜索/清除/刷新/加载更多/失败重试/退出和登录后桌面表格/手机卡片仍等待可丢弃的本地 PostgreSQL 环境实跑。当前浏览器控制面也不提供 reduced-motion 模拟；代码中的 `prefers-reduced-motion` 规则和单次动画自动化证据不记作 reduced-motion 浏览器实跑。
 
@@ -87,11 +88,59 @@
 | OPS-02 | `create-admin.ts` 强制 TTY 隐藏输入、拒绝密码参数、仅空用户表 | 需空生产等价数据库演练 |
 | OPS-03 | 配置测试只接受完整 40 位 commit SHA/digest；升级保留秘密和数据库卷 | 需 GHCR 发布与实际升级冒烟 |
 | OPS-04 | 状态机测试验证迁移失败不更新 app、健康失败恢复旧 SHA；不逆向 migration | 需实际回滚演练 |
-| OPS-05 | `backup.sh` 执行 custom dump、list、AES-256、SHA-256、异地目录校验后才清理；失败路径有测试 | 需 PostgreSQL/异地存储实跑 |
-| OPS-06 | `restore.sh` 要求显式确认并拒绝生产/维护库 | 需完整空库恢复、RLS/算法验收与 RPO/RTO 记录 |
-| OPS-07 | 运维文档给出冻结、恢复、DNS 切换和 72 小时回滚窗 | 需双 VPS 演练 |
-| OPS-08 | 环境文件 600、目录 700、五秘密独立且升级保留；nginx 备份/幂等/失败恢复有测试 | 需容器/Git/日志人工审计 |
-| OPS-09 | `fitgridweb.service` 仅启动/停止 `db app`，依赖 Docker/network-online；容器 `unless-stopped` | 需 `systemctl restart` 与整机 reboot 验收 |
+| OPS-05 | `backup.sh`：custom dump/list、AES-256/PBKDF2、SHA-256、远端 copy+checksum 后才清理本机过期文件；仅支持管理员手动触发，安装/升级不安装或启用备份 timer，并关闭旧 `fitgridweb-backup.timer` | shell/installer 自动化通过；需真实 PostgreSQL、异机挂载与掉挂载监控 |
+| OPS-06 | `restore.sh` 要求显式确认并拒绝生产/维护库；portable worker 固定执行 fence→active marker→stop app→terminate connections→rollback snapshot→destructive restore 顺序；快照失败先恢复并验证旧 app 再解除 fence，替换路径后失败只尝试一次 rollback | 状态机/失败注入自动化通过；需完整隔离恢复、RLS/算法/2 GiB 验收与 RPO/RTO 记录 |
+| OPS-07 | 文档要求同一 reviewed SHA、临时管理员、portable upload/preview/restore、备份内管理员、三项秘密连续性、验收、DNS 和旧 VPS 只读 72 小时 | 操作顺序已文档化；需双 VPS 实跑 |
+| OPS-08 | 环境文件 600；web/root/portable 权限边界；归档文件为 history 事实源，启动与恢复同锁收敛最新 5 份；密码/上传/状态/audit 清理与脱敏；`token-issued`/`download-completed` 在 root 审计持久化确认后继续且不记录密码、token、主机路径 | 自动化通过；需容器挂载、Git、journal/logrotate 和实际文件权限人工审计 |
+| OPS-09 | `fitgridweb.service` 仅启动/停止 `db app`；maintenance path/sweep 仅处理维护队列，不是备份调度；备份仍由管理员手动触发，容器 `unless-stopped` | unit/installer 契约通过；需 `systemctl restart`、path 激活和整机 reboot 验收 |
+| OPS-10 | 管理员数据保险库与 root TTY 便携备份共享最多 5 份；raw-stream upload、10 分钟 challenge、精确短语、恢复后 logout | 专项 API/UI/shell 与本机完整产品测试门禁通过；需 HTTPS 生产浏览器端到端下载/上传/恢复实跑 |
+
+## 2026-09-03 Task 7 验证记录
+
+下列是提交 `7825546`、`cb99a76` 之前的历史诊断记录，不代表当前分支状态。`pnpm test` 的失败计数来自 Fix Round 1 前的 Task 7 运行；其余 typecheck、lint、build 与 diff check 当时通过并在 Fix Round 1 后复跑：
+
+```text
+pnpm test
+Test Files  1 failed | 77 passed | 2 skipped (80)
+Tests       1 failed | 772 passed | 3 skipped (776)
+exit 1
+
+pnpm typecheck  # exit 0
+pnpm lint       # exit 0
+pnpm build      # exit 0；23/23 static pages generated
+git diff --check  # exit 0
+```
+
+受限 sandbox 内第一次 `pnpm test` 得到 73 files/734 tests passed、2 files/8 tests skipped、4 files/18 tests failed；失败均来自内核权限门禁：loopback `listen EPERM`、维护/download-token kernel lock 不可用、伪 TTY `stty: TIOCGETD`。允许本机 loopback/PTY 后，一次完整 run 曾得到 77 files/757 tests passed、2 files/3 tests skipped、exit 0。Fix Round 1 前的最后一次 full run 得到上方单一失败：`src/e2e/ui-demo.smoke.test.ts` 的管理员邀请场景捕获到一个 HTTP 500 console error；相同 case 的 focused rerun为 1 failed/4 skipped。Fix Round 1 和 Fix Round 2 是纯文档修订，之后的 Task 6 产品修复已重新运行下述门禁。
+
+历史根因是 demo `AdminWorkspace` 挂载 live `<DataVault />` 后请求未配置的维护 API；提交 `7825546` 增加仅限非生产 `dev:ui` 的确定性维护适配器，消除了 HTTP 500。提交 `cb99a76` 又把归档下载与登录导航分离，修复了浏览器下载的通用文件名和离开管理页问题。
+
+Task 6 修复后的精确证据：
+
+```text
+pnpm test src/features/admin
+Test Files  6 passed (6)
+Tests       76 passed (76)
+
+pnpm test src/e2e/ui-demo.smoke.test.ts
+Test Files  1 passed (1)
+Tests       5 passed (5)
+Duration    24.75s
+
+pnpm test --maxWorkers=4
+Test Files  78 passed | 2 skipped (80)
+Tests       777 passed | 3 skipped (780)
+
+pnpm typecheck  # exit 0
+pnpm lint       # exit 0
+git diff --check  # exit 0
+```
+
+精确 UI-demo smoke 在真实 `pnpm dev:ui` 进程中验证备份的“正在生成 → 正在加密 → 可以下载”三阶段、实际浏览器下载文件名 `fitgridweb-portable-backup.fitgridbackup`、下载后仍停留在 `/admin`，并在全部 5 个场景中保持零 console error。此证据是无数据库/Better Auth/host maintenance 配置的开发演示验证，不是 VPS 或生产恢复验证。
+
+生产等价 Docker restore drill：**未执行，环境门控**。检查结果为 `docker`、`age`、`systemctl`、`pg_restore` 均不可用；主机是 Darwin arm64，不是 Ubuntu 24.04。由于仓库脚本内部固定 Compose project 名 `fitgridweb`，也不能在共享主机上仅用外层 `fitgridweb-drill` 名称证明隔离。本次没有创建、检查或删除任何 Docker project/volume，也没有触碰 VPS。
+
+因此以下值均为 **未测量**，不能从配置或 fake-executable 测试推断：实际 RPO、实际 RTO、运行镜像 digest/SHA、运行 PostgreSQL `version()`、2 GiB restore 峰值、真实 RLS/会话清除、真实公网健康。仓库配置声明 `postgres:17.6-alpine`、app 640 MiB/db 512 MiB，但这些不是本次运行测量。季度隔离演练模板和安全边界见 [2 GiB VPS 手册](low-memory-vps-runbook.md#每季度隔离恢复演练)。
 
 ## 可复现门禁
 
@@ -113,8 +162,11 @@ TEST_DATABASE_URL='postgresql://受限运行角色@测试库/fitgridweb' pnpm te
 docker manifest inspect ghcr.io/zhshy7713950/fitgridweb:sha-<完整SHA>
 sudo /opt/fitgridweb/ops/install-production.sh --upgrade
 systemctl restart fitgridweb
-./ops/backup.sh
-./ops/restore.sh --target 'postgresql://.../fitgridweb_restore' --backup '/path/to/backup.dump.enc' --confirm
+systemctl status fitgridweb-maintenance.path --no-pager
+journalctl -u fitgridweb-maintenance.service --since today --no-pager
+sudo /opt/fitgridweb/ops/backup-portable.sh
+sudo /opt/fitgridweb/ops/backup.sh
+sudo /opt/fitgridweb/ops/restore.sh --target 'postgresql://.../fitgridweb_restore' --backup '/path/to/backup.dump.enc' --confirm
 ```
 
-只有环境门控完成后，才能把 `SEC-10` 和 `OPS-01`–`OPS-08` 标为发布验收通过；完成前不能把“本机单元测试通过”等同于“生产恢复能力已验证”。
+只有环境门控完成后，才能把 `SEC-10` 和 `OPS-01`–`OPS-10` 标为发布验收通过；完成前不能把“本机单元测试通过”或“文件已生成”等同于“生产恢复能力已验证”。

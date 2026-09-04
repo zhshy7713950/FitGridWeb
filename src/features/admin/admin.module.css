@@ -220,6 +220,480 @@
   padding-top: 24px;
 }
 
+.dataVault {
+  padding: 24px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.vaultHeading,
+.backupLedger > header,
+.restorePreview > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.vaultHeading {
+  margin-bottom: 15px;
+}
+
+.vaultHeading > div > span,
+.backupLedger header div > span,
+.restorePreview header div > span,
+.vaultDialog form > span,
+.controlIndex {
+  color: var(--text-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.vaultHeading h2,
+.backupLedger h3,
+.restorePreview h3 {
+  margin: 5px 0 0;
+  letter-spacing: -0.025em;
+}
+
+.vaultHeading h2 {
+  font-size: 18px;
+}
+
+.vaultHeading > p {
+  max-width: 540px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.65;
+  text-align: right;
+}
+
+.vaultControls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.vaultControl {
+  min-width: 0;
+  padding: 20px;
+}
+
+.vaultControl + .vaultControl {
+  border-left: 1px solid var(--line);
+}
+
+.vaultControl h3 {
+  margin: 5px 0 0;
+  font-size: 15px;
+}
+
+.vaultControl > p {
+  min-height: 40px;
+  margin: 7px 0 16px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.executionRail {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 0 0 17px;
+  padding: 0;
+  list-style: none;
+}
+
+.executionRail::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: calc(16.667% - 3px);
+  left: calc(16.667% - 3px);
+  height: 1px;
+  background: var(--line);
+}
+
+.executionRail li {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.executionRail li > span {
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-content: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 8px;
+}
+
+.executionRail .currentStage {
+  color: var(--action);
+}
+
+.executionRail .currentStage > span {
+  border-color: var(--action);
+  box-shadow: 0 0 0 3px rgb(41 98 255 / 14%);
+}
+
+.executionRail .completedStage {
+  color: var(--positive);
+}
+
+.executionRail .completedStage > span {
+  border-color: var(--positive);
+  background: var(--positive);
+  color: var(--canvas);
+}
+
+.primaryAction,
+.restoreUpload button,
+.destructiveOutline,
+.backupLedger button,
+.vaultDialogActions button {
+  min-height: 40px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--surface-raised);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.vaultControl > .primaryAction {
+  width: 100%;
+  border-color: var(--action);
+  background: var(--action);
+}
+
+.primaryAction:disabled,
+.restoreUpload button:disabled,
+.destructiveOutline:disabled,
+.backupLedger button:disabled,
+.vaultDialogActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.restoreUpload,
+.vaultFields {
+  display: grid;
+  gap: 11px;
+}
+
+.restoreUpload label,
+.vaultFields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.restoreUpload input,
+.vaultFields input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--canvas);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.restoreUpload input[type="file"] {
+  padding: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.restoreUpload input[type="file"]::file-selector-button {
+  min-height: 26px;
+  margin-right: 9px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.restoreUpload button {
+  width: 100%;
+}
+
+.vaultError {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--negative);
+  color: var(--negative);
+  background: var(--canvas);
+  font-size: 11px;
+}
+
+.vaultError small {
+  color: var(--text-muted);
+}
+
+.restorePreview {
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  background: var(--surface);
+}
+
+.restorePreview h3,
+.backupLedger h3 {
+  font-size: 14px;
+}
+
+.restorePreview header strong {
+  color: var(--positive);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+}
+
+.restorePreview dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 16px 0;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+.restorePreview dl > div {
+  min-width: 0;
+  padding: 10px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.restorePreview dt {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.restorePreview dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.destructiveOutline {
+  width: 100%;
+  border-color: var(--negative);
+  color: var(--negative);
+  background: transparent;
+}
+
+.restoreRuntime {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
+  gap: 20px;
+  padding: 13px 16px;
+  border: 1px solid var(--negative);
+  border-top: 0;
+  background: var(--canvas);
+  font-size: 11px;
+}
+
+.restoreRuntime strong {
+  color: var(--negative);
+}
+
+.restoreRuntime span {
+  color: var(--text-muted);
+}
+
+.restoreRuntime .vaultError {
+  grid-column: 1 / -1;
+}
+
+.backupLedger {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.backupLedger > header {
+  min-height: 53px;
+  padding: 9px 0;
+}
+
+.backupLedger > header > span {
+  color: var(--text-muted);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+}
+
+.backupLedger ol {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  list-style: none;
+}
+
+.backupLedger li {
+  min-height: 45px;
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 90px minmax(110px, 0.8fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 9px 6px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.backupLedger li > span,
+.backupLedger code {
+  color: var(--text-muted);
+}
+
+.backupLedger code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backupLedger button {
+  min-height: 32px;
+  background: transparent;
+}
+
+.vaultEmpty {
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  color: var(--text-muted);
+  background: var(--surface);
+  font-size: 11px;
+}
+
+.vaultModalLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.vaultBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: rgb(8 13 18 / 82%);
+}
+
+.vaultDialog {
+  position: relative;
+  width: min(500px, 100%);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--action);
+  border-radius: 5px;
+  background: var(--surface);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 42%);
+}
+
+.vaultDialog form {
+  padding: 24px;
+}
+
+.vaultDialog h2 {
+  margin: 5px 0 0;
+  font-size: 18px;
+}
+
+.vaultDialog form > p {
+  margin: 9px 0 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vaultFields input[aria-invalid="true"] {
+  border-color: var(--negative);
+}
+
+.vaultDialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.destructiveDialog {
+  border-color: var(--negative);
+  border-top-width: 3px;
+}
+
+.downtimeWarning {
+  margin-bottom: 18px;
+  padding: 9px 11px;
+  border-left: 3px solid var(--negative);
+  color: var(--negative);
+  background: var(--canvas);
+  font-size: 11px;
+}
+
+.vaultDialogActions .destructiveAction {
+  border-color: var(--negative);
+  background: var(--negative);
+}
+
+.maintenanceNotice {
+  padding: 10px;
+  border: 1px solid var(--negative);
+  color: var(--negative) !important;
+  font-weight: 700;
+}
+
+.interventionNotice {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--negative);
+  color: var(--text-muted);
+  background: var(--canvas);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.interventionNotice strong,
+.interventionNotice code {
+  color: var(--negative);
+}
+
 .ledgerHeading {
   min-height: 46px;
   display: flex;
@@ -516,5 +990,89 @@
 
   .dialog {
     width: 100%;
+  }
+
+  .vaultHeading,
+  .restorePreview > header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .vaultHeading > p {
+    text-align: left;
+  }
+
+  .vaultControls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .vaultControl + .vaultControl {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .restoreUpload input,
+  .restoreUpload button,
+  .vaultControl > .primaryAction,
+  .destructiveOutline,
+  .backupLedger button,
+  .vaultDialogActions button {
+    min-height: 44px;
+  }
+
+  .restorePreview dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .restoreRuntime {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+  }
+
+  .backupLedger li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px 12px;
+  }
+
+  .backupLedger code {
+    grid-column: 1;
+  }
+
+  .backupLedger button {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .vaultModalLayer {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .vaultDialog {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+    overflow: auto;
+  }
+}
+
+.dataVault :is(button, input):focus-visible,
+.vaultDialog :is(button, input):focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+}
+
+.destructiveDialog :is(button, input):focus-visible,
+.destructiveOutline:focus-visible {
+  outline-color: var(--negative);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dataVault *,
+  .vaultDialog * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

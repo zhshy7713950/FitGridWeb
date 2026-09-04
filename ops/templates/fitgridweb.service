@@ -1,8 +1,10 @@
 [Unit]
 Description=FitGridWeb application and database
 Requires=docker.service
+Requires=fitgridweb-maintenance-recovery.service
 Wants=network-online.target
 After=network-online.target docker.service
+After=fitgridweb-maintenance-recovery.service
 
 [Service]
 Type=oneshot

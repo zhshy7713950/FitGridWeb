@@ -1,0 +1,10 @@
+/var/lib/fitgridweb/admin-ops/root/audit.jsonl {
+    daily
+    rotate 180
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 0600 root root
+    su root root
+}

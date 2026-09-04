@@ -18,6 +18,12 @@ const validEnvironment = {
   MIGRATION_DATABASE_URL: "postgresql://fitgridmigrate:database-secret-that-is-not-a-default@db:5432/fitgridweb",
   BETTER_AUTH_SECRET: "auth-secret-at-least-thirty-two-characters",
   OWNER_REF_SECRET: "owner-secret-at-least-thirty-two-characters",
+  ADMIN_OPS_WEB_DIR: "/var/lib/fitgridweb/admin-ops/web",
+  ADMIN_OPS_ROOT_DIR: "/var/lib/fitgridweb/admin-ops/root",
+  PORTABLE_BACKUP_DIR: "/var/lib/fitgridweb/portable-backups",
+  PORTABLE_BACKUP_HISTORY_FILE: "/var/lib/fitgridweb/admin-ops/web/status/backups.json",
+  PORTABLE_BACKUP_MAX_BYTES: "536870912",
+  PORTABLE_BACKUP_READER_GID: "1001",
 };
 
 describe("production configuration", () => {
@@ -36,6 +42,14 @@ describe("production configuration", () => {
     ["privileged app port", { APP_PORT: "443" }],
     ["invalid public HTTPS port", { PUBLIC_HTTPS_PORT: "70000" }],
     ["auth URL outside base path", { BETTER_AUTH_URL: "https://grid.example.com/" }],
+    ["relative maintenance spool", { ADMIN_OPS_WEB_DIR: "var/lib/fitgridweb/admin-ops/web" }],
+    ["root maintenance spool", { ADMIN_OPS_ROOT_DIR: "/" }],
+    ["history outside the web status directory", { PORTABLE_BACKUP_HISTORY_FILE: "/tmp/backups.json" }],
+    ["zero portable backup limit", { PORTABLE_BACKUP_MAX_BYTES: "0" }],
+    ["non-numeric portable backup reader group", { PORTABLE_BACKUP_READER_GID: "app" }],
+    ["exponential portable backup reader group", { PORTABLE_BACKUP_READER_GID: "1e3" }],
+    ["root portable backup reader group", { PORTABLE_BACKUP_READER_GID: "0" }],
+    ["root tree exposed through portable mount", { ADMIN_OPS_ROOT_DIR: validEnvironment.PORTABLE_BACKUP_DIR }],
   ])("rejects %s", (_name, patch) => {
     expect(() => validateDeploymentEnvironment({ ...validEnvironment, ...patch })).toThrow();
   });

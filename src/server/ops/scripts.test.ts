@@ -19,9 +19,11 @@ async function fixture() {
   const bin = path.join(root, "bin");
   const backups = path.join(root, "backups");
   const remote = path.join(root, "remote");
+  const adminOpsRoot = path.join(root, "admin-ops-root");
   await mkdir(bin, { recursive: true });
   await mkdir(backups);
   await mkdir(remote);
+  await mkdir(adminOpsRoot);
   const environmentFile = path.join(root, ".env");
   const commandLog = path.join(root, "commands.log");
   const keyFile = path.join(root, "backup.key");
@@ -42,9 +44,13 @@ async function fixture() {
     `BACKUP_DIR=${backups}`,
     `BACKUP_REMOTE_DIR=${remote}`,
     `BACKUP_ENCRYPTION_KEY_FILE=${keyFile}`,
+    `ADMIN_OPS_ROOT_DIR=${adminOpsRoot}`,
   ].join("\n"));
   await chmod(environmentFile, 0o600);
-  return { root, bin, backups, remote, environmentFile, commandLog, keyFile };
+  await executable(bin, "flock", `
+printf 'flock %s\n' "$*" >>"$COMMAND_LOG"
+exit "\${FLOCK_EXIT:-0}"`);
+  return { root, bin, backups, remote, adminOpsRoot, environmentFile, commandLog, keyFile };
 }
 
 function run(script: string, fixturePath: Awaited<ReturnType<typeof fixture>>, extra = {}) {
@@ -79,6 +85,20 @@ exit 0`);
 });
 
 describe("backup script", () => {
+  it("does not read the database when another maintenance operation owns the shared lock", async () => {
+    const files = await fixture();
+    await executable(files.bin, "docker", `printf 'docker %s\n' "$*" >>"$COMMAND_LOG"`);
+
+    const result = run("backup.sh", files, { FLOCK_EXIT: "88" });
+
+    expect(result.status).toBe(88);
+    expect(result.stderr).toContain("maintenance operation is already running");
+    const calls = await readFile(files.commandLog, "utf8");
+    expect(calls).toContain("flock -n 9");
+    expect(calls).not.toContain("docker ");
+    expect(await readFile(path.join(files.adminOpsRoot, "maintenance.lock"), "utf8")).toBe("");
+  });
+
   it("does not run retention cleanup when encryption fails", async () => {
     const files = await fixture();
     await executable(files.bin, "docker", `

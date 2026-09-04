@@ -7,12 +7,14 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react";
 
 import { ClientApiError } from "@/lib/api-client";
 import { lockDocumentForModal } from "@/lib/modal-isolation";
 
 import { createInvitation as createInvitationRequest } from "./admin-api";
+import { DataVault } from "./data-vault";
 import type { CreatedInvitation, ManagedUser } from "./types";
 import {
   useAdminUsers,
@@ -78,17 +80,25 @@ function ErrorMessage({ error }: { error: VisibleError }) {
 
 export function AdminWorkspace({ currentUserId }: { currentUserId: string }) {
   const controller = useAdminUsers();
-  return <AdminWorkspaceView currentUserId={currentUserId} controller={controller} />;
+  return (
+    <AdminWorkspaceView
+      currentUserId={currentUserId}
+      controller={controller}
+      dataVault={<DataVault />}
+    />
+  );
 }
 
 export function AdminWorkspaceView({
   currentUserId,
   controller,
   createInvitation = createInvitationRequest,
+  dataVault = <DataVault initialBackups={[]} />,
 }: {
   currentUserId: string;
   controller: AdminUserListController;
   createInvitation?: CreateInvitation;
+  dataVault?: ReactNode;
 }) {
   const [ttl, setTtl] = useState("24");
   const [ttlError, setTtlError] = useState("");
@@ -341,6 +351,8 @@ export function AdminWorkspaceView({
           </div>
         </section>
       ) : null}
+
+      {dataVault}
 
       <section className={styles.ledger} aria-labelledby="ledger-title">
         <header className={styles.ledgerHeading}>

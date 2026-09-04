@@ -33,10 +33,44 @@ restore_environment() {
   environment_file=$1
   old_environment=${2:-}
   [ -n "$old_environment" ] && [ -f "$old_environment" ] || return 1
-  temporary=$(mktemp "${environment_file}.rollback.XXXXXX")
-  cp "$old_environment" "$temporary"
-  chmod 600 "$temporary"
-  mv "$temporary" "$environment_file"
+  old_image=$(awk -F= '$1 == "APP_IMAGE" { sub(/^[^=]*=/, ""); print; exit }' "$old_environment")
+  [ -n "$old_image" ] || return 1
+  temporary=
+  if ! temporary=$(mktemp "${environment_file}.rollback.XXXXXX"); then
+    return 1
+  fi
+  if ! cp "$environment_file" "$temporary"; then
+    rm -f "$temporary" || true
+    return 1
+  fi
+  if ! restored_environment=$(awk -v image="$old_image" '
+    BEGIN { found = 0 }
+    /^APP_IMAGE=/ { print "APP_IMAGE=" image; found = 1; next }
+    { print }
+    END { if (!found) exit 1 }
+  ' "$temporary"); then
+    rm -f "$temporary" || true
+    return 1
+  fi
+  if ! printf '%s\n' "$restored_environment" >"$temporary"; then
+    rm -f "$temporary" || true
+    return 1
+  fi
+  if ! chmod 600 "$temporary"; then
+    rm -f "$temporary" || true
+    return 1
+  fi
+  if ! mv "$temporary" "$environment_file"; then
+    rm -f "$temporary" || true
+    return 1
+  fi
+  return 0
+}
+
+restore_or_remove_environment() {
+  environment_file=$1
+  old_environment=${2:-}
+  restore_environment "$environment_file" "$old_environment" || rm -f "$environment_file"
 }
 
 rollback_app() {
@@ -49,6 +83,7 @@ rollback_app() {
   else
     fitgrid_error "首次安装没有旧镜像可恢复；数据库保持运行以便诊断"
     fitgrid_compose "$project_directory" "$environment_file" stop app >/dev/null 2>&1 || true
+    rm -f "$environment_file"
   fi
   return 1
 }
@@ -67,6 +102,40 @@ rollback_release() {
   return 1
 }
 
+rollback_host_activation() {
+  activation_project_directory=$1
+  activation_environment_file=$2
+  activation_old_environment=${3:-}
+  activation_app_port=$4
+  activation_public_health=$5
+  activation_saved_unit_states=$6
+  activation_app_unit=$7
+  activation_app_unit_backup=${8:-}
+  activation_app_unit_had_previous=$9
+
+  activation_allow_unit_starts=true
+  if ! restore_fitgrid_systemd_unit \
+    "$activation_app_unit" "$activation_app_unit_backup" "$activation_app_unit_had_previous"; then
+    activation_allow_unit_starts=false
+    fitgrid_error "systemd 应用 unit 恢复失败；请立即人工检查"
+    if ! systemctl stop fitgridweb.service; then
+      fitgrid_error "systemd 应用服务停止失败；请立即人工检查"
+    fi
+  fi
+  if [ -n "$activation_old_environment" ]; then
+    if ! restore_environment "$activation_environment_file" "$activation_old_environment"; then
+      activation_allow_unit_starts=false
+      fitgrid_error "旧环境配置恢复失败；不会重启原有 unit，请立即人工检查"
+    fi
+  fi
+  if ! restore_fitgrid_unit_states "$activation_saved_unit_states" "$activation_allow_unit_starts"; then
+    fitgrid_error "systemd unit 状态恢复失败；请立即人工检查"
+  fi
+  rollback_release "$activation_project_directory" "$activation_environment_file" \
+    "$activation_old_environment" "$activation_app_port" "$activation_public_health" || true
+  return 1
+}
+
 deploy_release() {
   project_directory=$1
   environment_file=$2
@@ -75,11 +144,24 @@ deploy_release() {
 
   set -a
   # shellcheck disable=SC1090
-  . "$environment_file"
+  if ! . "$environment_file"; then
+    set +a
+    fitgrid_error "环境配置加载失败；新应用未启动"
+    rollback_app "$project_directory" "$environment_file" "$old_environment"
+    return 1
+  fi
   set +a
 
-  fitgrid_compose "$project_directory" "$environment_file" pull db app
-  fitgrid_compose "$project_directory" "$environment_file" up --no-build -d --wait db
+  if ! fitgrid_compose "$project_directory" "$environment_file" pull db app; then
+    fitgrid_error "应用镜像拉取失败；新应用未启动"
+    rollback_app "$project_directory" "$environment_file" "$old_environment"
+    return 1
+  fi
+  if ! fitgrid_compose "$project_directory" "$environment_file" up --no-build -d --wait db; then
+    fitgrid_error "数据库启动失败；新应用未启动"
+    rollback_app "$project_directory" "$environment_file" "$old_environment"
+    return 1
+  fi
   runtime_database_url=$DATABASE_URL
   DATABASE_URL=$MIGRATION_DATABASE_URL
   export DATABASE_URL
@@ -89,8 +171,8 @@ deploy_release() {
   DATABASE_URL=$runtime_database_url
   export DATABASE_URL
   if [ "$migration_status" -ne 0 ]; then
-    restore_environment "$environment_file" "$old_environment" || true
     fitgrid_error "数据库迁移失败；新应用未启动"
+    rollback_app "$project_directory" "$environment_file" "$old_environment"
     return 1
   fi
   if ! fitgrid_compose "$project_directory" "$environment_file" up --no-build -d --wait app; then
@@ -179,6 +261,7 @@ fitgrid_install_main() {
   shift 9
   environment_file=$1
   backup_key_file=$2
+  app_unit_destination=${3:-/etc/systemd/system/fitgridweb.service}
 
   validate_domain "$domain"
   validate_port "$app_port" 1024
@@ -186,15 +269,17 @@ fitgrid_install_main() {
   validate_nginx_site "$nginx_site" "$domain" "$public_port"
   assert_public_image "$(image_for_sha "$resolved_sha")"
 
+  disable_legacy_backup_timer || return 1
+  saved_unit_states=$(capture_fitgrid_unit_states)
   install_dependencies /etc/apt /etc/os-release
   assert_app_port_available "$app_port"
 
   backup_root=/var/lib/fitgridweb/install-backups
   nginx_backup_root=/var/backups/fitgridweb/nginx
   mkdir -p "$backup_root" "$nginx_backup_root"
+  backup_id=$(date -u +%Y%m%dT%H%M%SZ)
   old_environment=
   if [ -f "$environment_file" ]; then
-    backup_id=$(date -u +%Y%m%dT%H%M%SZ)
     old_environment=$(mktemp "$backup_root/fitgridweb.env.$backup_id.XXXXXX")
     cp -p "$environment_file" "$old_environment"
   fi
@@ -202,11 +287,40 @@ fitgrid_install_main() {
   ensure_environment "$environment_file" "$backup_key_file" \
     "$domain" "$app_port" "$public_port" "$resolved_sha" "$nginx_site"
   ensure_swap "$swap_choice" /swapfile-fitgridweb /etc/fstab /proc/swaps
-  deploy_release "$project_directory" "$environment_file" "$old_environment" "$app_port"
+
+  app_unit_had_previous=false
+  app_unit_backup=
+  if [ -e "$app_unit_destination" ] || [ -L "$app_unit_destination" ]; then
+    if [ ! -f "$app_unit_destination" ] || [ -L "$app_unit_destination" ]; then
+      restore_or_remove_environment "$environment_file" "$old_environment"
+      fitgrid_error "现有 systemd 应用 unit 不是安全的常规文件"
+      return 1
+    fi
+    app_unit_backup=$(mktemp "$backup_root/fitgridweb.service.$backup_id.XXXXXX") || {
+      restore_or_remove_environment "$environment_file" "$old_environment"
+      return 1
+    }
+    if ! cp -p "$app_unit_destination" "$app_unit_backup"; then
+      rm -f "$app_unit_backup"
+      restore_or_remove_environment "$environment_file" "$old_environment"
+      return 1
+    fi
+    app_unit_had_previous=true
+  fi
+  if ! install_maintenance_components "$project_directory" "$environment_file"; then
+    restore_or_remove_environment "$environment_file" "$old_environment"
+    fitgrid_error "维护组件安装失败；新 FitGridWeb 应用尚未启动"
+    return 1
+  fi
+  if ! deploy_release "$project_directory" "$environment_file" "$old_environment" "$app_port"; then
+    return 1
+  fi
 
   nginx_temporary=$(mktemp -d)
   trap 'rm -rf "$nginx_temporary"' EXIT HUP INT TERM
-  render_nginx_snippet "$app_port" >"$nginx_temporary/fitgridweb-location.conf"
+  portable_backup_max_bytes=$(awk -F= '$1 == "PORTABLE_BACKUP_MAX_BYTES" { sub(/^[^=]*=/, ""); print; exit }' "$environment_file")
+  portable_backup_max_bytes=${portable_backup_max_bytes:-536870912}
+  render_nginx_snippet "$app_port" "$portable_backup_max_bytes" >"$nginx_temporary/fitgridweb-location.conf"
   public_suffix=
   [ "$public_port" -eq 443 ] || public_suffix=":$public_port"
   public_health="https://$domain$public_suffix/fitgrid/api/v1/health"
@@ -219,19 +333,39 @@ fitgrid_install_main() {
     return 1
   fi
 
-  if ! install_systemd_unit "$project_directory/ops/templates/fitgridweb.service" /etc/systemd/system/fitgridweb.service; then
-    rollback_release "$project_directory" "$environment_file" "$old_environment" "$app_port" "$public_health" || true
+  if ! enable_maintenance_components "$environment_file"; then
+    rollback_host_activation "$project_directory" "$environment_file" "$old_environment" \
+      "$app_port" "$public_health" "$saved_unit_states" "$app_unit_destination" \
+      "$app_unit_backup" "$app_unit_had_previous"
+    return 1
+  fi
+  if ! install_systemd_unit "$project_directory/ops/templates/fitgridweb.service" "$app_unit_destination"; then
+    fitgrid_error "systemd 应用 unit 安装失败"
+    rollback_host_activation "$project_directory" "$environment_file" "$old_environment" \
+      "$app_port" "$public_health" "$saved_unit_states" "$app_unit_destination" \
+      "$app_unit_backup" "$app_unit_had_previous"
+    return 1
+  fi
+  if ! systemctl enable fitgridweb.service; then
+    fitgrid_error "systemd 应用 unit 启用失败"
+    rollback_host_activation "$project_directory" "$environment_file" "$old_environment" \
+      "$app_port" "$public_health" "$saved_unit_states" "$app_unit_destination" \
+      "$app_unit_backup" "$app_unit_had_previous"
     return 1
   fi
   if ! systemctl restart fitgridweb.service; then
-    rollback_release "$project_directory" "$environment_file" "$old_environment" "$app_port" "$public_health" || true
+    fitgrid_error "systemd 应用服务重启失败"
+    rollback_host_activation "$project_directory" "$environment_file" "$old_environment" \
+      "$app_port" "$public_health" "$saved_unit_states" "$app_unit_destination" \
+      "$app_unit_backup" "$app_unit_had_previous"
     return 1
   fi
   if ! verify_health "$public_health"; then
-    rollback_release "$project_directory" "$environment_file" "$old_environment" "$app_port" "$public_health" || true
+    rollback_host_activation "$project_directory" "$environment_file" "$old_environment" \
+      "$app_port" "$public_health" "$saved_unit_states" "$app_unit_destination" \
+      "$app_unit_backup" "$app_unit_had_previous"
     return 1
   fi
-
   if [ "$admin_choice" = yes ]; then
     create_initial_admin "$project_directory" "$environment_file"
   fi

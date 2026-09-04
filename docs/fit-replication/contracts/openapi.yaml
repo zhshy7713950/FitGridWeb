@@ -256,6 +256,223 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /admin/backups:
+    get:
+      tags: [Admin, ImportExport]
+      operationId: listPortableBackups
+      summary: 列出最近五份可下载的完整备份
+      responses:
+        '200':
+          description: 按创建时间倒序排列的成功备份，最多五份
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+            X-Content-Type-Options: {$ref: '#/components/headers/NoSniff'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PortableBackupList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      tags: [Admin, ImportExport]
+      operationId: createPortableBackup
+      summary: 重新验证管理员并创建完整便携备份
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreatePortableBackupRequest'}
+      responses:
+        '202':
+          description: 备份任务已进入主机维护队列
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+            X-Content-Type-Options: {$ref: '#/components/headers/NoSniff'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QueuedMaintenanceJob'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /admin/backups/{backupId}/download-token:
+    parameters:
+      - $ref: '#/components/parameters/BackupId'
+    post:
+      tags: [Admin, ImportExport]
+      operationId: issuePortableBackupDownloadToken
+      summary: 为一份备份发放绑定管理员的单次下载令牌
+      responses:
+        '201':
+          description: 令牌已发放，60 秒后失效
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+            X-Content-Type-Options: {$ref: '#/components/headers/NoSniff'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DownloadTokenResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /admin/backups/{backupId}/download:
+    parameters:
+      - $ref: '#/components/parameters/BackupId'
+    get:
+      tags: [Admin, ImportExport]
+      operationId: downloadPortableBackup
+      summary: 使用单次令牌流式下载完整便携备份
+      description: 不支持 Range；令牌在打开备份文件前被原子消费，下载中断不会删除服务器副本。
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 4096}
+      responses:
+        '200':
+          description: 加密的便携备份流
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+            Content-Disposition:
+              description: 固定格式安全文件名的附件响应
+              schema: {type: string}
+            X-Content-Type-Options: {$ref: '#/components/headers/NoSniff'}
+            Accept-Ranges:
+              schema: {type: string, const: none}
+          content:
+            application/vnd.fitgrid.backup:
+              schema: {type: string, format: binary}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '416':
+          description: RANGE_NOT_SUPPORTED：完整备份不支持分段下载
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /admin/restores/uploads:
+    post:
+      tags: [Admin, ImportExport]
+      operationId: uploadPortableBackupForInspection
+      summary: 流式上传完整备份并创建隔离预检任务
+      description: 请求正文直接流式落盘；不使用 multipart/form-data，也不会整体读入 JavaScript 内存。
+      parameters:
+        - name: fileName
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^fitgridweb-[0-9]{8}T[0-9]{6}Z\.fitgridbackup$'
+        - name: X-FitGrid-Backup-Passphrase
+          in: header
+          required: true
+          description: 独立备份密码的无填充 UTF-8 base64url 信封；解码后必须是 12–128 个 Unicode 码点，且不含 NUL 或换行。密码只在当前 HTTPS 请求内存和受限任务秘密文件中短暂存在
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 683
+            pattern: '^[A-Za-z0-9_-]+$'
+            writeOnly: true
+        - name: X-FitGrid-Backup-Passphrase-Encoding
+          in: header
+          required: true
+          description: 明确声明备份密码信封编码；服务端不对缺失或其他值做兼容降级
+          schema: {type: string, const: base64url-utf8}
+        - name: X-FitGrid-Backup-Size
+          in: header
+          required: true
+          description: 声明的正文大小；部署通过 PORTABLE_BACKUP_MAX_BYTES 配置上限，默认 512 MiB，应用仍会独立统计实际字节数
+          schema: {type: integer, minimum: 1, default: 536870912}
+      requestBody:
+        required: true
+        content:
+          application/vnd.fitgrid.backup:
+            schema: {type: string, format: binary}
+      responses:
+        '202':
+          description: 上传已完整落盘，预检任务已进入队列
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+            X-Content-Type-Options: {$ref: '#/components/headers/NoSniff'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QueuedMaintenanceJob'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '415':
+          description: BACKUP_MEDIA_TYPE_INVALID：必须使用完整备份媒体类型
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /admin/restores/{restoreId}/confirm:
+    parameters:
+      - $ref: '#/components/parameters/RestoreId'
+    post:
+      tags: [Admin, ImportExport]
+      operationId: confirmPortableBackupRestore
+      summary: 重新验证管理员并确认整库恢复
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConfirmRestoreRequest'}
+      responses:
+        '202':
+          description: 绑定预检结果的恢复任务已进入队列
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+            X-Content-Type-Options: {$ref: '#/components/headers/NoSniff'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QueuedMaintenanceJob'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /admin/maintenance/jobs/{jobId}:
+    parameters:
+      - $ref: '#/components/parameters/MaintenanceJobId'
+    get:
+      tags: [Admin]
+      operationId: getMaintenanceJob
+      summary: 获取安全裁剪后的维护任务状态
+      description: 恢复期间仍可读取；响应不包含宿主机路径、命令、密码或数据库连接信息。
+      responses:
+        '200':
+          description: 当前任务阶段和安全结果
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+            X-Content-Type-Options: {$ref: '#/components/headers/NoSniff'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MaintenanceJobStatus'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+
   /grid-trades:
     get:
       tags: [GridTrades]
@@ -503,6 +720,33 @@ components:
       in: path
       required: true
       schema: {type: string, minLength: 32, maxLength: 512}
+    BackupId:
+      name: backupId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9.][A-Za-z0-9._-]*$'
+    RestoreId:
+      name: restoreId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    MaintenanceJobId:
+      name: jobId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+
+  headers:
+    PrivateNoStore:
+      description: 响应不得由浏览器或中间缓存保存
+      schema: {type: string, const: 'no-store, private'}
+    NoSniff:
+      description: 禁止浏览器内容类型嗅探
+      schema: {type: string, const: nosniff}
 
   responses:
     BadRequest:
@@ -535,6 +779,9 @@ components:
     ServiceUnavailable:
       description: 服务未就绪
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    InternalError:
+      description: 内部状态不可用；响应经过安全裁剪，不包含路径、命令或秘密
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
 
   schemas:
     DecimalString:
@@ -562,7 +809,7 @@ components:
     ErrorResponse:
       type: object
       additionalProperties: false
-      required: [code, message]
+      required: [code, message, requestId]
       properties:
         code: {type: string, pattern: '^[A-Z0-9_]+$'}
         message: {type: string}
@@ -572,6 +819,104 @@ components:
             type: array
             items: {type: string}
         requestId: {type: string}
+
+    CreatePortableBackupRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, backupPassword, confirmBackupPassword]
+      properties:
+        currentPassword: {type: string, minLength: 1, maxLength: 128, writeOnly: true}
+        backupPassword: {type: string, minLength: 12, maxLength: 128, writeOnly: true}
+        confirmBackupPassword: {type: string, minLength: 12, maxLength: 128, writeOnly: true}
+    ConfirmRestoreRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, confirmationPhrase]
+      properties:
+        currentPassword: {type: string, minLength: 1, maxLength: 128, writeOnly: true}
+        confirmationPhrase: {type: string, const: 恢复全部数据}
+    MaintenanceState:
+      type: string
+      enum:
+        - queued
+        - dumping
+        - encrypting
+        - ready
+        - uploading
+        - inspecting
+        - awaiting-confirmation
+        - snapshotting
+        - restoring
+        - migrating
+        - checking
+        - succeeded
+        - failed
+        - rollback
+        - intervention-required
+    MaintenanceJobType:
+      type: string
+      enum: [backup, inspect-restore, restore]
+    QueuedMaintenanceJob:
+      type: object
+      additionalProperties: false
+      required: [id, type, state, requestId]
+      properties:
+        id: {type: string, format: uuid}
+        type: {$ref: '#/components/schemas/MaintenanceJobType'}
+        state: {type: string, const: queued}
+        requestId: {type: string}
+    PortableBackupSummary:
+      type: object
+      additionalProperties: false
+      required: [id, createdAt, size, sha256]
+      properties:
+        id: {type: string, minLength: 1, maxLength: 128}
+        createdAt: {type: string, format: date-time}
+        size: {type: integer, minimum: 0}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+    PortableBackupList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 5
+          items: {$ref: '#/components/schemas/PortableBackupSummary'}
+    DownloadTokenResponse:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: 绑定当前管理员和备份、60 秒有效且只能成功消费一次
+    RestorePreview:
+      type: object
+      additionalProperties: false
+      required: [users, gridTrades, invitations, importPreviews]
+      properties:
+        users: {type: integer, minimum: 0}
+        gridTrades: {type: integer, minimum: 0}
+        invitations: {type: integer, minimum: 0}
+        importPreviews: {type: integer, minimum: 0}
+    MaintenanceJobStatus:
+      type: object
+      additionalProperties: false
+      required: [id, type, state, requestId, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        type: {$ref: '#/components/schemas/MaintenanceJobType'}
+        state: {$ref: '#/components/schemas/MaintenanceState'}
+        requestId: {type: string}
+        updatedAt: {type: string, format: date-time}
+        code: {type: string, pattern: '^[A-Z][A-Z0-9_]{0,63}$'}
+        rolledBack: {type: boolean}
+        expiresAt: {type: integer, format: int64}
+        backupCreatedAt: {type: string, format: date-time}
+        postgresMajor: {type: integer, minimum: 1, maximum: 999}
+        database: {type: string, pattern: '^[A-Za-z_][A-Za-z0-9_]*$'}
+        preview: {$ref: '#/components/schemas/RestorePreview'}
 
     HealthResponse:
       type: object

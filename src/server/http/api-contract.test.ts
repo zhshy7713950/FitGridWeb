@@ -13,6 +13,12 @@ vi.mock("@/server/runtime/services", () => ({ getRuntimeServices }));
 vi.mock("@/server/auth/session", () => ({ requireAdmin }));
 
 import * as adminInvitations from "@/app/api/v1/admin/invitations/route";
+import * as adminBackupDownload from "@/app/api/v1/admin/backups/[backupId]/download/route";
+import * as adminBackupDownloadToken from "@/app/api/v1/admin/backups/[backupId]/download-token/route";
+import * as adminBackups from "@/app/api/v1/admin/backups/route";
+import * as adminMaintenanceJob from "@/app/api/v1/admin/maintenance/jobs/[jobId]/route";
+import * as adminRestoreConfirm from "@/app/api/v1/admin/restores/[restoreId]/confirm/route";
+import * as adminRestoreUpload from "@/app/api/v1/admin/restores/uploads/route";
 import * as adminUserStatus from "@/app/api/v1/admin/users/[userId]/status/route";
 import * as adminUsers from "@/app/api/v1/admin/users/route";
 import * as changePassword from "@/app/api/v1/auth/change-password/route";
@@ -40,6 +46,12 @@ const routes: Record<string, RouteModule> = {
   "/invitations/{token}": invitation,
   "/invitations/{token}/accept": invitationAccept,
   "/admin/invitations": adminInvitations,
+  "/admin/backups": adminBackups,
+  "/admin/backups/{backupId}/download-token": adminBackupDownloadToken,
+  "/admin/backups/{backupId}/download": adminBackupDownload,
+  "/admin/restores/uploads": adminRestoreUpload,
+  "/admin/restores/{restoreId}/confirm": adminRestoreConfirm,
+  "/admin/maintenance/jobs/{jobId}": adminMaintenanceJob,
   "/admin/users": adminUsers,
   "/admin/users/{userId}/status": adminUserStatus,
   "/grid-trades": gridTrades,
@@ -119,6 +131,66 @@ describe("OpenAPI route coverage", () => {
       "422": { $ref: "#/components/responses/ValidationError" },
       "429": { $ref: "#/components/responses/RateLimited" },
     });
+  });
+
+  it("documents the complete administrator maintenance contract", async () => {
+    const source = await readFile(
+      path.join(process.cwd(), "docs/fit-replication/contracts/openapi.yaml"),
+      "utf8",
+    );
+    const document = parse(source) as {
+      paths: Record<string, Record<string, {
+        responses?: Record<string, { $ref?: string; headers?: Record<string, unknown> }>;
+        requestBody?: { content?: Record<string, unknown> };
+        parameters?: Array<{
+          name?: string;
+          description?: string;
+          schema?: { default?: number; maximum?: number };
+        }>;
+      }>>;
+      components: { schemas: Record<string, { required?: string[]; enum?: string[] }> };
+    };
+
+    expect(document.paths["/admin/backups"]?.post?.responses).toMatchObject({
+      "202": expect.any(Object),
+      "401": { $ref: "#/components/responses/Unauthorized" },
+      "403": { $ref: "#/components/responses/Forbidden" },
+      "409": { $ref: "#/components/responses/Conflict" },
+      "422": { $ref: "#/components/responses/ValidationError" },
+      "429": { $ref: "#/components/responses/RateLimited" },
+      "500": { $ref: "#/components/responses/InternalError" },
+      "503": { $ref: "#/components/responses/ServiceUnavailable" },
+    });
+    expect(document.paths["/admin/restores/uploads"]?.post?.requestBody?.content)
+      .toHaveProperty("application/vnd.fitgrid.backup");
+    const declaredSize = document.paths["/admin/restores/uploads"]?.post?.parameters
+      ?.find((parameter) => parameter.name === "X-FitGrid-Backup-Size");
+    expect(declaredSize).toMatchObject({
+      description: expect.stringContaining("部署"),
+      schema: { default: 536_870_912 },
+    });
+    expect(declaredSize?.schema?.maximum).toBeUndefined();
+    expect(document.paths["/admin/restores/uploads"]?.post?.responses).toMatchObject({
+      "413": expect.any(Object),
+      "415": expect.any(Object),
+    });
+    expect(document.paths["/admin/backups/{backupId}/download"]?.get?.responses?.["200"]?.headers)
+      .toMatchObject({
+        "Cache-Control": expect.any(Object),
+        "Content-Disposition": expect.any(Object),
+        "X-Content-Type-Options": expect.any(Object),
+      });
+    expect(document.components.schemas.MaintenanceState.enum).toEqual([
+      "queued", "dumping", "encrypting", "ready", "uploading", "inspecting",
+      "awaiting-confirmation", "snapshotting", "restoring", "migrating", "checking",
+      "succeeded", "failed", "rollback", "intervention-required",
+    ]);
+    expect(document.components.schemas.PortableBackupSummary.required)
+      .toEqual(["id", "createdAt", "size", "sha256"]);
+    expect(document.components.schemas.RestorePreview.required)
+      .toEqual(["users", "gridTrades", "invitations", "importPreviews"]);
+    expect(document.components.schemas.MaintenanceJobStatus.required)
+      .toEqual(["id", "type", "state", "requestId", "updatedAt"]);
   });
 
   it("documents password mutation throttling and malformed invitation tokens", async () => {

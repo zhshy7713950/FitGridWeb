@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { ApiError, toErrorResponse } from "@/server/http/api-error";
 
-import { assertSameOrigin, FixedWindowRateLimiter, LoginAttemptLimiter } from "./request-protection";
+import {
+  assertSameOrigin,
+  backupCreationRequests,
+  FixedWindowRateLimiter,
+  LoginAttemptLimiter,
+  maintenanceStatusRequests,
+  restoreConfirmationRequests,
+  restoreInspectionRequests,
+  tokenIssueRequests,
+} from "./request-protection";
 
 describe("same-origin mutation protection", () => {
   it("accepts the public origin forwarded by the trusted reverse proxy", () => {
@@ -56,5 +65,20 @@ describe("login failure limit", () => {
     expect(() => limiter.check("ip+username")).toThrowError(ApiError);
     limiter.clear("ip+username");
     expect(() => limiter.check("ip+username")).not.toThrow();
+  });
+});
+
+describe("maintenance request limits", () => {
+  it("uses independent windows for each sensitive maintenance operation", () => {
+    const key = `admin-${Date.now()}`;
+    backupCreationRequests.consume(key);
+    backupCreationRequests.consume(key);
+    backupCreationRequests.consume(key);
+    expect(() => backupCreationRequests.consume(key)).toThrowError(ApiError);
+
+    expect(() => restoreInspectionRequests.consume(key)).not.toThrow();
+    expect(() => restoreConfirmationRequests.consume(key)).not.toThrow();
+    expect(() => maintenanceStatusRequests.consume(key)).not.toThrow();
+    expect(() => tokenIssueRequests.consume(key)).not.toThrow();
   });
 });
