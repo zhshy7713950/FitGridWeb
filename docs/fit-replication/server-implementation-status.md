@@ -10,7 +10,7 @@
 - 产品查询、冲突检测、游标、导入与导出均绑定会话 owner；`grid_trades` 和 `import_previews` 同时启用 `FORCE ROW LEVEL SECURITY`。
 - OpenAPI 中 16 个路径的每个 operationId 都有 Route Handler；Android 与 Web 导出均通过发布的 JSON Schema。
 - 已实现 `/fitgrid` 固定生产子路径、Better Auth Cookie Path、GHCR 完整 SHA 流水线、2 GiB 低内存 Compose、现有 nginx 安全集成、迁移前置/应用回滚和 systemd 开机恢复。
-- 管理员数据保险库、age 便携备份、最近 5 份下载历史、流式上传预检、整库恢复/单次自动回滚、root-only intervention state、维护 path unit 和可选异机 timer 已实现。提交 `7825546` 和 `cb99a76` 已修复 `dev:ui` 的 DataVault HTTP 500 与下载导航/文件名缺口；管理员专项测试 76/76、精确 UI-demo smoke 5/5、完整 `pnpm test --maxWorkers=4` 为 777 passed + 3 skipped，typecheck、lint、diff check 均通过。
+- 管理员数据保险库、age 便携备份、最近 5 份下载历史、流式上传预检、整库恢复/单次自动回滚、root-only intervention state 和维护 path unit 已实现。网页、`backup-portable.sh` 与 `backup.sh` 均为手动触发；项目不安装或启用自动备份 timer，升级会关闭旧版本遗留的 `fitgridweb-backup.timer`。提交 `7825546` 和 `cb99a76` 已修复 `dev:ui` 的 DataVault HTTP 500 与下载导航/文件名缺口；管理员专项测试 76/76、精确 UI-demo smoke 5/5、完整 `pnpm test --maxWorkers=4` 为 777 passed + 3 skipped，typecheck、lint、diff check 均通过。
 - 与上述本机自动化通过分开，本次 Task 7 主机没有 Docker、age、systemd、`pg_restore` 或 `TEST_DATABASE_URL`，因此真实 PostgreSQL RLS、GHCR 镜像拉取、HTTPS 部署、VPS 重启、真实加解密和生产等价恢复演练仍是发布前环境门控；这些项目没有因 Task 6 修复而获得生产验收。
 
 ## 前端基础
@@ -88,11 +88,11 @@
 | OPS-02 | `create-admin.ts` 强制 TTY 隐藏输入、拒绝密码参数、仅空用户表 | 需空生产等价数据库演练 |
 | OPS-03 | 配置测试只接受完整 40 位 commit SHA/digest；升级保留秘密和数据库卷 | 需 GHCR 发布与实际升级冒烟 |
 | OPS-04 | 状态机测试验证迁移失败不更新 app、健康失败恢复旧 SHA；不逆向 migration | 需实际回滚演练 |
-| OPS-05 | `backup.sh`：custom dump/list、AES-256/PBKDF2、SHA-256、远端 copy+checksum 后才清理本机过期文件；installer 在安装/升级时只为异设备有效挂载启用 timer，直接启用 timer 不做检查 | shell/installer 自动化通过；需真实 PostgreSQL、异机挂载、掉挂载监控和 timer 实跑 |
-| OPS-06 | `restore.sh` 要求显式确认并拒绝生产/维护库；portable worker 固定执行预检和恢复前快照，替换前失败不回滚，进入替换路径后失败只尝试一次 rollback | 状态机/失败注入自动化通过；需完整隔离恢复、RLS/算法/2 GiB 验收与 RPO/RTO 记录 |
+| OPS-05 | `backup.sh`：custom dump/list、AES-256/PBKDF2、SHA-256、远端 copy+checksum 后才清理本机过期文件；仅支持管理员手动触发，安装/升级不安装或启用备份 timer，并关闭旧 `fitgridweb-backup.timer` | shell/installer 自动化通过；需真实 PostgreSQL、异机挂载与掉挂载监控 |
+| OPS-06 | `restore.sh` 要求显式确认并拒绝生产/维护库；portable worker 固定执行 fence→active marker→stop app→terminate connections→rollback snapshot→destructive restore 顺序；快照失败先恢复并验证旧 app 再解除 fence，替换路径后失败只尝试一次 rollback | 状态机/失败注入自动化通过；需完整隔离恢复、RLS/算法/2 GiB 验收与 RPO/RTO 记录 |
 | OPS-07 | 文档要求同一 reviewed SHA、临时管理员、portable upload/preview/restore、备份内管理员、三项秘密连续性、验收、DNS 和旧 VPS 只读 72 小时 | 操作顺序已文档化；需双 VPS 实跑 |
-| OPS-08 | 环境文件 600；web/root/portable 权限边界；密码/上传/状态/audit 清理与脱敏；下载 token 单次持久化 | 自动化通过；需容器挂载、Git、journal/logrotate 和实际文件权限人工审计 |
-| OPS-09 | `fitgridweb.service` 仅启动/停止 `db app`；maintenance path 与 off-host timer 分离；容器 `unless-stopped` | unit/installer 契约通过；需 `systemctl restart`、path 激活、timer 和整机 reboot 验收 |
+| OPS-08 | 环境文件 600；web/root/portable 权限边界；归档文件为 history 事实源，启动与恢复同锁收敛最新 5 份；密码/上传/状态/audit 清理与脱敏；`token-issued`/`download-completed` 在 root 审计持久化确认后继续且不记录密码、token、主机路径 | 自动化通过；需容器挂载、Git、journal/logrotate 和实际文件权限人工审计 |
+| OPS-09 | `fitgridweb.service` 仅启动/停止 `db app`；maintenance path/sweep 仅处理维护队列，不是备份调度；备份仍由管理员手动触发，容器 `unless-stopped` | unit/installer 契约通过；需 `systemctl restart`、path 激活和整机 reboot 验收 |
 | OPS-10 | 管理员数据保险库与 root TTY 便携备份共享最多 5 份；raw-stream upload、10 分钟 challenge、精确短语、恢复后 logout | 专项 API/UI/shell 与本机完整产品测试门禁通过；需 HTTPS 生产浏览器端到端下载/上传/恢复实跑 |
 
 ## 2026-09-03 Task 7 验证记录

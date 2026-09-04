@@ -58,6 +58,6 @@ sudo sh /tmp/fitgridweb-install.sh
 
 镜像必须是公开 GHCR 中的完整 commit SHA，应用只绑定 `127.0.0.1:<可配置端口>`，数据库不暴露端口，低内存部署不启动 Caddy。迁移失败时不会更新应用，新应用健康失败时恢复旧 SHA，但不会执行危险的数据库逆向迁移。
 
-管理员登录 `/fitgrid/admin` 后，可在“数据保险库”创建、下载、上传预检并整库恢复便携备份。便携备份使用独立的 12–128 字符密码，服务器只保留最近 5 份；它与 `backup.sh` 使用服务器密钥、复制到真实异机挂载的无人值守备份是两条不同的恢复路径。不要把个人 JSON 导出或同机最近 5 份当作异机灾备。
+管理员登录 `/fitgrid/admin` 后，可在“数据保险库”创建、下载、上传预检并整库恢复便携备份。便携备份使用独立的 12–128 字符密码，服务器只保留最近 5 份；它与 `backup.sh` 使用服务器密钥、复制到真实异机挂载的手动异机备份是两条不同的恢复路径。不要把个人 JSON 导出或同机最近 5 份当作异机灾备。
 
-逐步操作、升级、nginx 恢复、开机验收、密码保管、定时异机备份、恢复失败处理、季度演练和 VPS 更换见 [2 GiB VPS 一键部署与运维手册](docs/fit-replication/low-memory-vps-runbook.md)；完整架构约束见 [部署与运维文档](docs/fit-replication/07-deployment-and-operations.md)。
+逐步操作、升级、nginx 恢复、开机验收、密码保管、手动异机备份、恢复失败处理、季度演练和 VPS 更换见 [2 GiB VPS 一键部署与运维手册](docs/fit-replication/low-memory-vps-runbook.md)；完整架构约束见 [部署与运维文档](docs/fit-replication/07-deployment-and-operations.md)。

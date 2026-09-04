@@ -17,9 +17,9 @@ flowchart TB
     U[手机与 PC 浏览器] -->|现有 HTTPS 端口 /fitgrid| N[宿主机 nginx]
     N -->|127.0.0.1:可配置端口| A[FitGridWeb / Next.js]
     A -->|内部 PostgreSQL 5432| D[(PostgreSQL)]
-    H[Ubuntu 主机定时任务] -->|pg_dump -Fc| D
-    H --> B[加密备份目录]
-    B --> O[异机或对象存储副本]
+    O[管理员手动触发] -->|backup.sh / backup-portable.sh| D
+    O --> B[加密备份目录]
+    B --> R[异机或对象存储副本]
 
     subgraph Docker Compose 低内存配置
       A
@@ -157,6 +157,8 @@ journalctl -u fitgridweb --since=-10m
 
 应用容器只获得 UID/GID 1001 的 web spool 可写挂载和便携目录只读挂载；没有 Docker socket、migration URL、服务器环境文件、backup key 或 root 状态树。`fitgridweb-maintenance.path` 监视固定 inbox，root oneshot worker 串行处理固定 schema 的 `backup`、`inspect-restore`、`restore`，审计写入 `/var/lib/fitgridweb/admin-ops/root/audit.jsonl` 并由 logrotate 保存 180 个 daily rotation。
 
+便携备份历史以归档文件为事实源：安装/升级及维护 worker 启动时，在 `maintenance.lock` 同一把锁内校验目录和 `backups.json`，按文件名、大小和摘要重建并收敛为最新 5 份；历史索引只是网页展示，不是恢复所必需。`download-token-issued` 与 `download-completed` 事件只有在 root 审计持久化并返回确认后，调用方才继续；审计不记录密码、令牌或主机绝对路径。
+
 上述管理员授权边界不覆盖 app-process RCE；如果应用进程已被攻陷，必须按主机入侵事件响应，不能仅依赖网页的管理员重新验证。root worker 不接受任意命令或用户路径，且便携备份数据不会成为 shell、SQL、DDL 或 `pg_restore` 的可执行输入；这是执行面的限制，不是对已攻陷 app 的完整隔离声明。
 
 运行异机手动备份前，`BACKUP_REMOTE_DIR` 必须是安全绝对路径、非 `/`、现有非 symlink 可写目录，并确认它确实位于另一故障域。首次安装的远端路径默认为空。项目明确不提供定时备份；升级安装器会关闭旧版本遗留的 `fitgridweb-backup.timer`。完整命令见 [2 GiB 手册](low-memory-vps-runbook.md#手动创建异机完整备份)。
@@ -173,9 +175,9 @@ sudo /opt/fitgridweb/ops/backup.sh
 
 管理员在 `/fitgrid/admin` 的“数据保险库”完成：当前密码重新验证并创建便携备份 → 最近 5 份中申请 60 秒、单次、绑定管理员/备份的下载 → 上传 `.fitgridbackup` 与独立密码 → 隔离预检 → 在固定 10 分钟挑战内再次输入当前密码和准确短语 `恢复全部数据`。预检成功只公开备份时间、PostgreSQL 主版本、数据库和四项计数；manifest 内的 app image 与浏览器文件大小不作为公开服务器证明。
 
-恢复执行顺序固定为：重新验证准备 tar 摘要、固定成员/checksum/manifest/计数/行 framing → 创建、加密、解密复检受信任的恢复前完整快照 → root 权威维护标记 → 停 `app` → 终止运行角色连接 → 删除并重建 `public` schema → 从已部署的已审核镜像执行 Prisma migration → 通过仓库内固定 `psql` 事务按外键顺序执行 `COPY FROM STDIN` 与静态 `INSERT` → 删除全部 `sessions` → 启动 `app` → 回环及公网健康。CSV 只允许 Base64 数据字段，上传内容不会成为 SQL、标识符或 `pg_restore` 输入。成功后所有用户重新登录，且触发恢复的临时管理员可能已不存在。自动回滚仍只使用主机刚生成、受服务器密钥保护的完整 custom dump，并可执行受信任的 `--clean` 恢复。
+恢复执行顺序固定为：重新验证准备 tar 摘要、固定成员/checksum/manifest/计数/行 framing → 写入 root 权威 fence → 写入 active marker → 停 `app` → 终止运行角色连接 → 创建、加密、解密复检并可使用受信任的恢复前回滚快照 → 删除并重建 `public` schema（destructive restore）→ 从已部署的已审核镜像执行 Prisma migration → 通过仓库内固定 `psql` 事务按外键顺序执行 `COPY FROM STDIN` 与静态 `INSERT` → 删除全部 `sessions` → 启动 `app` → 回环及公网健康 → 仅在验证成功后解除 fence。CSV 只允许 Base64 数据字段，上传内容不会成为 SQL、标识符或 `pg_restore` 输入。成功后所有用户重新登录，且触发恢复的临时管理员可能已不存在。自动回滚仍只使用主机刚生成、受服务器密钥保护的完整 custom dump，并可执行受信任的 `--clean` 恢复。
 
-准备数据的路径/权限/challenge/摘要或 canonical payload 复检失败，或恢复前快照的 dump、加密、解密复检失败时，生产数据库尚未被替换；worker 直接返回 `failed`（具体预检代码或 `SNAPSHOT_FAILED`），不会执行回滚。只有快照成功、维护标记建立并进入停应用/替换生产库的恢复路径后，该路径失败才触发且只触发一次自动回滚。回滚成功仍报告原 restore `failed/RESTORE_FAILED` 与 `rolledBack=true`；恢复与回滚均失败、恢复在维护阶段中断或关键状态发布失败时进入 `intervention-required`。权威 `/var/lib/fitgridweb/admin-ops/root/maintenance.json` 保持 active，重启不会自动继续。保留目录 `/var/lib/fitgridweb/admin-ops/root/intervention/{jobId}` 含 identifier-only `job.json`，若快照已生成还含 server-key 加密的 `rollback.dump.enc`；密码、上传和明文不会作为恢复材料保留。
+准备数据的路径/权限/challenge/摘要或 canonical payload 复检失败时，生产数据库尚未被替换，worker 直接返回失败。若恢复前快照的 dump、加密或解密复检失败（`SNAPSHOT_FAILED`），先恢复并验证旧 app/旧库，再解除 fence；不得进入 destructive restore。只有快照成功、fence 与 active marker 建立并进入停应用/替换生产库的恢复路径后，该路径失败才触发且只触发一次自动回滚。回滚成功仍报告原 restore `failed/RESTORE_FAILED` 与 `rolledBack=true`；恢复与回滚均失败、恢复在维护阶段中断或关键状态发布失败时进入 `intervention-required`。权威 `/var/lib/fitgridweb/admin-ops/root/maintenance.json` 保持 active，重启不会自动继续。保留目录 `/var/lib/fitgridweb/admin-ops/root/intervention/{jobId}` 含 identifier-only `job.json`，若快照已生成还含 server-key 加密的 `rollback.dump.enc`；密码、上传和明文不会作为恢复材料保留。
 
 没有通用安全的原地解除 intervention 命令。操作员应保留 job/request ID，读取 unit 状态、journal、root marker、公开 job status 和 intervention 文件权限；不得编辑 marker、删除 evidence、随意 chmod/chown、重复恢复或直接把加密文件交给 `pg_restore`。无法证明故障主机的唯一权威状态时，在新隔离主机从最后已验证备份恢复并验收。精确诊断命令和警告见 [2 GiB 手册](low-memory-vps-runbook.md#恢复失败自动回滚和人工介入)。
 
