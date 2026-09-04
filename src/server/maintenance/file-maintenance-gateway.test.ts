@@ -687,6 +687,7 @@ describe("FileMaintenanceGateway", () => {
       sha256: "a".repeat(64),
       dev: info.dev,
       ino: info.ino,
+      ctimeMs: info.ctimeMs,
     });
   });
 

@@ -610,14 +610,14 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
   private async archiveIdentity(
     filename: string,
     expectedSize: number,
-  ): Promise<{ dev: number; ino: number } | null> {
+  ): Promise<{ dev: number; ino: number; ctimeMs: number } | null> {
     const archive = path.join(this.configuration.portableBackupDirectory, filename);
     try {
       const info = await lstat(archive);
       if (!info.isFile() || info.isSymbolicLink() || info.size !== expectedSize) return null;
       const resolved = await realpath(archive);
       if (path.dirname(resolved) !== path.resolve(this.configuration.portableBackupDirectory)) return null;
-      return { dev: info.dev, ino: info.ino };
+      return { dev: info.dev, ino: info.ino, ctimeMs: info.ctimeMs };
     } catch {
       return null;
     }

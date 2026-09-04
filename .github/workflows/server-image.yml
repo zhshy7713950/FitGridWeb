@@ -46,6 +46,8 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - name: Install TTY test dependency
+        run: sudo apt-get update && sudo apt-get install --yes expect
       - run: pnpm install --frozen-lockfile
       - name: Configure restricted runtime database role
         run: |
