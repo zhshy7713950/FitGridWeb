@@ -33,10 +33,23 @@ restore_environment() {
   environment_file=$1
   old_environment=${2:-}
   [ -n "$old_environment" ] && [ -f "$old_environment" ] || return 1
-  temporary=$(mktemp "${environment_file}.rollback.XXXXXX")
-  cp "$old_environment" "$temporary"
-  chmod 600 "$temporary"
-  mv "$temporary" "$environment_file"
+  temporary=
+  if ! temporary=$(mktemp "${environment_file}.rollback.XXXXXX"); then
+    return 1
+  fi
+  if ! cp "$old_environment" "$temporary"; then
+    rm -f "$temporary" || true
+    return 1
+  fi
+  if ! chmod 600 "$temporary"; then
+    rm -f "$temporary" || true
+    return 1
+  fi
+  if ! mv "$temporary" "$environment_file"; then
+    rm -f "$temporary" || true
+    return 1
+  fi
+  return 0
 }
 
 restore_or_remove_environment() {
@@ -89,7 +102,14 @@ rollback_host_activation() {
     "$activation_app_unit" "$activation_app_unit_backup" "$activation_app_unit_had_previous"; then
     fitgrid_error "systemd 应用 unit 恢复失败；请立即人工检查"
   fi
-  if ! restore_fitgrid_unit_states "$activation_saved_unit_states"; then
+  activation_allow_unit_starts=true
+  if [ -n "$activation_old_environment" ]; then
+    if ! restore_environment "$activation_environment_file" "$activation_old_environment"; then
+      activation_allow_unit_starts=false
+      fitgrid_error "旧环境配置恢复失败；不会重启原有 unit，请立即人工检查"
+    fi
+  fi
+  if ! restore_fitgrid_unit_states "$activation_saved_unit_states" "$activation_allow_unit_starts"; then
     fitgrid_error "systemd unit 状态恢复失败；请立即人工检查"
   fi
   rollback_release "$activation_project_directory" "$activation_environment_file" \
@@ -309,6 +329,19 @@ fitgrid_install_main() {
   fi
   if ! systemctl enable fitgridweb.service; then
     fitgrid_error "systemd 应用 unit 启用失败"
+    rollback_host_activation "$project_directory" "$environment_file" "$old_environment" \
+      "$app_port" "$public_health" "$saved_unit_states" "$app_unit_destination" \
+      "$app_unit_backup" "$app_unit_had_previous"
+    return 1
+  fi
+  if ! systemctl restart fitgridweb.service; then
+    fitgrid_error "systemd 应用服务重启失败"
+    rollback_host_activation "$project_directory" "$environment_file" "$old_environment" \
+      "$app_port" "$public_health" "$saved_unit_states" "$app_unit_destination" \
+      "$app_unit_backup" "$app_unit_had_previous"
+    return 1
+  fi
+  if ! verify_health "$public_health"; then
     rollback_host_activation "$project_directory" "$environment_file" "$old_environment" \
       "$app_port" "$public_health" "$saved_unit_states" "$app_unit_destination" \
       "$app_unit_backup" "$app_unit_had_previous"

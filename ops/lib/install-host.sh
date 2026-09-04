@@ -150,11 +150,26 @@ ensure_swap() {
 install_systemd_unit() {
   template=$1
   destination=${2:-/etc/systemd/system/fitgridweb.service}
-  temporary=$(mktemp "${destination}.tmp.XXXXXX")
-  cp "$template" "$temporary"
-  chmod 644 "$temporary"
-  mv "$temporary" "$destination"
-  systemctl daemon-reload
+  temporary=
+  if ! temporary=$(mktemp "${destination}.tmp.XXXXXX"); then
+    return 1
+  fi
+  if ! cp "$template" "$temporary"; then
+    rm -f "$temporary" || true
+    return 1
+  fi
+  if ! chmod 644 "$temporary"; then
+    rm -f "$temporary" || true
+    return 1
+  fi
+  if ! mv "$temporary" "$destination"; then
+    rm -f "$temporary" || true
+    return 1
+  fi
+  if ! systemctl daemon-reload; then
+    return 1
+  fi
+  return 0
 }
 
 capture_fitgrid_unit_states() {
@@ -179,6 +194,7 @@ capture_fitgrid_unit_states() {
 
 restore_fitgrid_unit_states() {
   fitgrid_saved_unit_states=$1
+  fitgrid_restore_allow_starts=${2:-true}
   fitgrid_restore_state_status=0
   while IFS='|' read -r fitgrid_state_unit fitgrid_was_enabled fitgrid_was_active; do
     [ -n "$fitgrid_state_unit" ] || continue
@@ -200,7 +216,8 @@ restore_fitgrid_unit_states() {
         systemctl disable "$fitgrid_state_unit" || fitgrid_restore_state_status=1
       fi
     fi
-    if [ "$fitgrid_was_active" = true ] && [ "$fitgrid_is_active" = false ]; then
+    if [ "$fitgrid_restore_allow_starts" = true ] \
+      && [ "$fitgrid_was_active" = true ] && [ "$fitgrid_is_active" = false ]; then
       systemctl start "$fitgrid_state_unit" || fitgrid_restore_state_status=1
     fi
   done <<EOF

@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -174,6 +174,50 @@ describe("boot recovery", () => {
     const log = await readFile(files.log, "utf8");
     expect(log).toContain("systemctl daemon-reload");
     expect(log).not.toContain("systemctl enable fitgridweb.service");
+  });
+
+  it.each([
+    ["cp", false],
+    ["chmod", false],
+    ["mv", false],
+    ["daemon-reload", true],
+  ])("stops unit installation and removes temporary data when %s fails", async (failureStage, installedBeforeFailure) => {
+    const files = await fixture();
+    await writeFile(files.unit, "legacy unit\n");
+    const command = `
+cp() {
+  printf 'unit cp\\n' >>"$COMMAND_LOG"
+  [ "$UNIT_FAILURE_STAGE" != cp ] || return 1
+  command cp "$@"
+}
+chmod() {
+  printf 'unit chmod\\n' >>"$COMMAND_LOG"
+  [ "$UNIT_FAILURE_STAGE" != chmod ] || return 1
+  command chmod "$@"
+}
+mv() {
+  printf 'unit mv\\n' >>"$COMMAND_LOG"
+  [ "$UNIT_FAILURE_STAGE" != mv ] || return 1
+  command mv "$@"
+}
+systemctl() {
+  printf 'systemctl %s\\n' "$*" >>"$COMMAND_LOG"
+  [ "$UNIT_FAILURE_STAGE" != daemon-reload ] || [ "$1" != daemon-reload ]
+}
+install_systemd_unit "${unitTemplate}" "${files.unit}"
+install_status=$?
+[ "$install_status" -ne 0 ] || systemctl enable fitgridweb.service
+exit "$install_status"
+`;
+
+    const result = run(command, files, { UNIT_FAILURE_STAGE: failureStage });
+
+    expect(result.status).toBe(1);
+    expect(await readFile(files.unit, "utf8")).toBe(
+      installedBeforeFailure ? await readFile(unitTemplate, "utf8") : "legacy unit\n",
+    );
+    expect((await readdir(files.root)).filter((name) => name.startsWith("fitgridweb.service.tmp."))).toEqual([]);
+    expect(await readFile(files.log, "utf8")).not.toContain("systemctl enable fitgridweb.service");
   });
 });
 

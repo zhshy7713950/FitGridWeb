@@ -28,6 +28,7 @@ async function fixture() {
   const environment = path.join(root, "fitgridweb.env");
   const oldEnvironment = path.join(root, "old.env");
   const environmentBackup = path.join(root, "install-backup.env");
+  const environmentRestoreTemporary = path.join(root, "environment.rollback");
   const nginxTemporary = path.join(root, "nginx-temporary");
   const appUnit = path.join(root, "fitgridweb.service");
   const appUnitBackup = path.join(root, "fitgridweb.service.backup");
@@ -102,6 +103,12 @@ case $action in
     [ "$start_now" = false ] || rm -f "$UNIT_STATE_DIRECTORY/active/$unit" ;;
   start) : >"$UNIT_STATE_DIRECTORY/active/$unit" ;;
   stop) rm -f "$UNIT_STATE_DIRECTORY/active/$unit" ;;
+  restart)
+    if [ "\${FAIL_ACTIVATION_STAGE:-}" = app-restart ]; then
+      rm -f "$UNIT_STATE_DIRECTORY/active/$unit"
+    else
+      : >"$UNIT_STATE_DIRECTORY/active/$unit"
+    fi ;;
   *) exit 0 ;;
 esac
 failure_stage=
@@ -111,11 +118,12 @@ case "$action:$unit" in
   enable:fitgridweb-maintenance-sweep.timer) failure_stage=sweep ;;
   enable:fitgridweb-backup.timer) failure_stage=backup ;;
   enable:fitgridweb.service) failure_stage=app-enable ;;
+  restart:fitgridweb.service) failure_stage=app-restart ;;
 esac
 [ -z "$failure_stage" ] || [ "\${FAIL_ACTIVATION_STAGE:-}" != "$failure_stage" ]`);
   await executable(bin, "sleep", ":");
   return {
-    root, bin, project, environment, oldEnvironment, environmentBackup, nginxTemporary,
+    root, bin, project, environment, oldEnvironment, environmentBackup, environmentRestoreTemporary, nginxTemporary,
     appUnit, appUnitBackup, appUnitRestoreTemporary, unitState, log,
   };
 }
@@ -148,6 +156,9 @@ mktemp() {
   case "\${1:-}" in
     -d) printf '%s\\n' "${files.nginxTemporary}" ;;
     "${files.appUnit}.tmp."*) printf '%s\\n' "${files.appUnitRestoreTemporary}" ;;
+    "${files.environment}.rollback."*)
+      [ "\${FAIL_ENVIRONMENT_RESTORE:-0}" != 1 ] || return 1
+      printf '%s\\n' "${files.environmentRestoreTemporary}" ;;
     *fitgridweb.service*) printf '%s\\n' "${files.appUnitBackup}" ;;
     *) printf '%s\\n' "${files.environmentBackup}" ;;
   esac
@@ -160,7 +171,12 @@ install_maintenance_components() { printf 'phase install-maintenance\\n' >>"$COM
 deploy_release() { printf 'phase deploy\\n' >>"$COMMAND_LOG"; }
 render_nginx_snippet() { printf 'location /fitgrid {}\\n'; }
 install_nginx_include() { :; }
-verify_health() { printf 'phase public-health\\n' >>"$COMMAND_LOG"; }
+test_public_health_count=0
+verify_health() {
+  test_public_health_count=$((test_public_health_count + 1))
+  printf 'phase public-health\\n' >>"$COMMAND_LOG"
+  [ "\${FAIL_ACTIVATION_STAGE:-}" != final-health ] || [ "$test_public_health_count" -ne 2 ]
+}
 backup_remote_is_distinct_mount() { :; }
 install_systemd_unit() {
   printf 'phase app-unit-install\\n' >>"$COMMAND_LOG"
@@ -169,12 +185,63 @@ install_systemd_unit() {
   [ "\${FAIL_ACTIVATION_STAGE:-}" != app-install ]
 }
 cleanup_old_app_images() { :; }
+systemctl() {
+  if [ "\${1:-}" = start ] && [ "\${2:-}" = fitgridweb.service ]; then
+    if grep -Fq '${oldImage}' '${files.environment}'; then app_environment=old; else app_environment=new; fi
+    if grep -Fq 'legacy app unit' "$APP_UNIT_FIXTURE"; then app_unit=legacy; else app_unit=new; fi
+    printf 'phase app-state-start env=%s unit=%s\\n' "$app_environment" "$app_unit" >>"$COMMAND_LOG"
+  fi
+  command systemctl "$@"
+}
 fitgrid_install_main grid.example.com 3300 443 /etc/nginx/conf.d/fitgridweb.conf \\
   ${sha} no no ${String(upgrade)} "${files.project}" "${files.environment}" "${files.root}/backup.key" "${files.appUnit}"
 `;
 }
 
 describe("deployment state machine", () => {
+  it.each([
+    ["mktemp", ["restore mktemp"]],
+    ["cp", ["restore mktemp", "restore cp", "restore rm"]],
+    ["chmod", ["restore mktemp", "restore cp", "restore chmod", "restore rm"]],
+    ["mv", ["restore mktemp", "restore cp", "restore chmod", "restore mv", "restore rm"]],
+  ])("keeps the current environment and removes temporary data when restore %s fails", async (failureStage, expectedLog) => {
+    const files = await fixture();
+    const command = `
+mktemp() {
+  printf 'restore mktemp\\n' >>"$COMMAND_LOG"
+  [ "$RESTORE_FAILURE_STAGE" != mktemp ] || return 1
+  command mktemp "$@"
+}
+cp() {
+  printf 'restore cp\\n' >>"$COMMAND_LOG"
+  [ "$RESTORE_FAILURE_STAGE" != cp ] || return 1
+  command cp "$@"
+}
+chmod() {
+  printf 'restore chmod\\n' >>"$COMMAND_LOG"
+  [ "$RESTORE_FAILURE_STAGE" != chmod ] || return 1
+  command chmod "$@"
+}
+mv() {
+  printf 'restore mv\\n' >>"$COMMAND_LOG"
+  [ "$RESTORE_FAILURE_STAGE" != mv ] || return 1
+  command mv "$@"
+}
+rm() {
+  printf 'restore rm\\n' >>"$COMMAND_LOG"
+  command rm "$@"
+}
+restore_environment "${files.environment}" "${files.oldEnvironment}"
+`;
+
+    const result = run(command, files, { RESTORE_FAILURE_STAGE: failureStage });
+
+    expect(result.status).toBe(1);
+    expect(await readFile(files.environment, "utf8")).toContain(`APP_IMAGE=${newImage}`);
+    expect((await readdir(files.root)).filter((name) => name.startsWith("fitgridweb.env.rollback."))).toEqual([]);
+    expect((await readFile(files.log, "utf8")).trim().split("\n")).toEqual(expectedLog);
+  });
+
   it("restores only unit states changed after the activation snapshot", async () => {
     const files = await fixture();
     const appUnitName = "fitgridweb.service";
@@ -226,9 +293,18 @@ restore_fitgrid_unit_states "$saved_states"
     }
   });
 
-  it.each(["recovery", "path", "sweep", "backup", "app-install", "app-enable"])(
+  it.each([
+    ["recovery", false],
+    ["path", false],
+    ["sweep", false],
+    ["backup", false],
+    ["app-install", false],
+    ["app-enable", false],
+    ["app-restart", true],
+    ["final-health", true],
+  ])(
     "removes fresh unit activation state when %s activation fails",
-    async (failureStage) => {
+    async (failureStage, restarted) => {
       const files = await fixture();
       await unlink(files.environment);
 
@@ -243,9 +319,65 @@ restore_fitgrid_unit_states "$saved_states"
       await expect(readFile(files.appUnit, "utf8")).rejects.toThrow();
       expect(await readdir(path.join(files.unitState, "enabled"))).toEqual([]);
       expect(await readdir(path.join(files.unitState, "active"))).toEqual([]);
-      expect(await readFile(files.log, "utf8")).not.toContain("systemctl restart fitgridweb.service");
+      expect((await readFile(files.log, "utf8")).includes("systemctl restart fitgridweb.service")).toBe(restarted);
     },
   );
+
+  it("restores the legacy environment before restarting its previously active app", async () => {
+    const files = await fixture();
+    const appUnitName = "fitgridweb.service";
+    await writeFile(files.environment, await readFile(files.oldEnvironment, "utf8"));
+    await writeFile(files.appUnit, "legacy app unit\n");
+    await writeFile(path.join(files.unitState, "enabled", appUnitName), "");
+    await writeFile(path.join(files.unitState, "active", appUnitName), "");
+
+    const result = run(installLifecycleCommand(files, true), files, {
+      APP_UNIT_FIXTURE: files.appUnit,
+      FAIL_ACTIVATION_STAGE: "app-restart",
+      UNIT_STATE_DIRECTORY: files.unitState,
+    });
+
+    expect(result.status).toBe(1);
+    expect(await readFile(files.environment, "utf8")).toContain(`APP_IMAGE=${oldImage}`);
+    expect(await readFile(files.appUnit, "utf8")).toBe("legacy app unit\n");
+    expect(await readdir(path.join(files.unitState, "enabled"))).toEqual([appUnitName]);
+    expect(await readdir(path.join(files.unitState, "active"))).toEqual([appUnitName]);
+    const log = await readFile(files.log, "utf8");
+    const restart = log.indexOf("systemctl restart fitgridweb.service");
+    const restoreUnit = log.indexOf("systemctl daemon-reload", restart);
+    const restoreState = log.indexOf("phase app-state-start env=old unit=legacy", restoreUnit);
+    const restoreApp = log.indexOf("stage rollback-app", restoreState);
+    expect(restart).toBeGreaterThan(-1);
+    expect(restoreUnit).toBeGreaterThan(restart);
+    expect(restoreState).toBeGreaterThan(restoreUnit);
+    expect(restoreApp).toBeGreaterThan(restoreState);
+  });
+
+  it("does not restart a previously active app when its old environment cannot be restored", async () => {
+    const files = await fixture();
+    const appUnitName = "fitgridweb.service";
+    await writeFile(files.environment, await readFile(files.oldEnvironment, "utf8"));
+    await writeFile(files.appUnit, "legacy app unit\n");
+    await writeFile(path.join(files.unitState, "enabled", appUnitName), "");
+    await writeFile(path.join(files.unitState, "active", appUnitName), "");
+
+    const result = run(installLifecycleCommand(files, true), files, {
+      APP_UNIT_FIXTURE: files.appUnit,
+      FAIL_ACTIVATION_STAGE: "app-restart",
+      FAIL_ENVIRONMENT_RESTORE: "1",
+      UNIT_STATE_DIRECTORY: files.unitState,
+    });
+
+    expect(result.status).toBe(1);
+    await expect(readFile(files.environment, "utf8")).rejects.toThrow();
+    expect(await readFile(files.appUnit, "utf8")).toBe("legacy app unit\n");
+    expect(await readdir(path.join(files.unitState, "enabled"))).toEqual([appUnitName]);
+    expect(await readdir(path.join(files.unitState, "active"))).toEqual([]);
+    const log = await readFile(files.log, "utf8");
+    expect(log).not.toContain("phase app-state-start");
+    expect(log).toContain("docker compose --project-name fitgridweb");
+    expect(log).toContain("stop app");
+  });
 
   it("restores a legacy app unit and preserves its prior service state when app enable fails", async () => {
     const files = await fixture();
@@ -328,8 +460,9 @@ fitgrid_install_main grid.example.com 3300 443 /etc/nginx/conf.d/fitgridweb.conf
       "phase backup-start",
       "phase app-unit-install",
       "phase enable fitgridweb.service",
+      "phase restart fitgridweb.service",
+      "phase health",
     ]);
-    expect(phases).not.toContain("phase restart fitgridweb.service");
   });
 
   it("removes only old SHA images from the repository derived from APP_IMAGE", async () => {
@@ -437,7 +570,11 @@ install_dependencies() { :; }
 assert_app_port_available() { :; }
 mkdir() { :; }
 mktemp() {
-  if [ "\${1:-}" = -d ]; then printf '%s\\n' "${files.nginxTemporary}"; else printf '%s\\n' "${files.environmentBackup}"; fi
+  case "\${1:-}" in
+    -d) printf '%s\\n' "${files.nginxTemporary}" ;;
+    "${files.environment}.rollback."*) printf '%s\\n' "${files.environmentRestoreTemporary}" ;;
+    *) printf '%s\\n' "${files.environmentBackup}" ;;
+  esac
 }
 ensure_environment() { printf 'APP_IMAGE=${newImage}\\nPORTABLE_BACKUP_MAX_BYTES=536870912\\n' >"$1"; }
 ensure_swap() { :; }
