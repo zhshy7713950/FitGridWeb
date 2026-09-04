@@ -62,7 +62,7 @@ curl --fail --silent --show-error \
 - `/var/backups/fitgridweb/nginx`：nginx 修改前的带时间戳备份；
 - `/etc/systemd/system/fitgridweb.service`：开机恢复 `db app`；
 - `/etc/systemd/system/fitgridweb-maintenance.{path,service}`：监听固定 inbox 并以 root 串行执行维护任务；path 会默认启用；
-- `/etc/systemd/system/fitgridweb-backup.{timer,service}`：已安装的每日异机备份 unit；只有真实异机挂载通过安装检查时才启用 timer；
+- 自动备份 timer 不会安装或启用；升级会关闭旧版本遗留的 `fitgridweb-backup.timer`；
 - `/etc/logrotate.d/fitgridweb-ops`：模式 `0600`，轮转 root-only audit 180 天；
 - 用户同意且现有 Swap 不足时：`/swapfile-fitgridweb` 和 `/etc/fstab` 中的一条受管记录；
 - Docker 官方 apt source、Docker Engine/Compose plugin、`jq`、`util-linux`，以及通过固定 SHA-256 校验的官方 age v1.3.2 `age`/`age-plugin-batchpass` 二进制对；匹配版本已存在时幂等跳过下载。
@@ -169,7 +169,7 @@ sudo systemctl reload nginx
 | 路径 | 加密与解密材料 | 保存位置与保留 | 适用场景 |
 |---|---|---|---|
 | 网页或 `backup-portable.sh` 便携备份 | 操作者另设的 12–128 字符密码；官方 age v1.3.2 + `age-plugin-batchpass`，密码仅走文件描述符 | `/var/lib/fitgridweb/portable-backups`，网页与 CLI 共用同一历史，最多 5 份成功文件 | 浏览器下载、上传预检、整库恢复、更换 VPS |
-| `backup.sh` 无人值守异机备份 | `/etc/fitgridweb/backup.key`；AES-256-CBC/PBKDF2 | 本机 `/var/lib/fitgridweb/backups` 按 `BACKUP_RETENTION_DAYS` 清理，并复制到 `BACKUP_REMOTE_DIR`；不进入网页历史、不受 5 份限制 | 每日定时、主机丢失后的异机恢复 |
+| `backup.sh` 手动异机备份 | `/etc/fitgridweb/backup.key`；AES-256-CBC/PBKDF2 | 本机 `/var/lib/fitgridweb/backups` 按 `BACKUP_RETENTION_DAYS` 清理，并复制到 `BACKUP_REMOTE_DIR`；不进入网页历史、不受 5 份限制 | 管理员按需执行、主机丢失后的异机恢复 |
 
 便携备份密码不是管理员登录密码，也不是 `backup.key`。把 `.fitgridbackup` 与其密码放在不同的受控位置；密码只进受信密码管理器或离线保管，不要放入文件名、命令参数、shell history、工单、聊天或与备份同位置的文本文件。忘记便携密码时无法恢复该文件。服务器密钥也必须通过与异机备份不同的安全通道离机保存。
 
@@ -207,9 +207,9 @@ journalctl -u fitgridweb-maintenance.service --since today --no-pager
 
 CLI 与网页使用相同的 v3 canonical CSV 格式、目录、历史索引和最近 5 份规则。它只生成同机便携副本，不会复制到 `BACKUP_REMOTE_DIR`。底层官方 batchpass 插件只从受限文件描述符读取密码；不要把密码放入管道、普通环境变量或命令行，也不要尝试从无 TTY 的 cron/systemd 调用该脚本。
 
-## 配置真正的异机定时备份
+## 手动创建异机完整备份
 
-首次安装将 `BACKUP_REMOTE_DIR` 留空并禁用 timer，打印“自动异机备份未启用：请配置并挂载 BACKUP_REMOTE_DIR”。先由系统管理员建立持久的 NFS/块存储/其他故障域挂载；同一 VPS 根磁盘上的普通目录不合格。然后：
+首次安装将 `BACKUP_REMOTE_DIR` 留空。先由系统管理员建立持久的 NFS/块存储/其他故障域挂载；同一 VPS 根磁盘上的普通目录不合格。然后：
 
 ```bash
 sudoedit /etc/fitgridweb/fitgridweb.env
@@ -221,7 +221,7 @@ findmnt --target / --noheadings --output MAJ:MIN
 findmnt --target /mnt/fitgridweb-offsite --noheadings --output MAJ:MIN
 ```
 
-把 `BACKUP_REMOTE_DIR=/mnt/fitgridweb-offsite` 写入环境文件并保持文件模式 `600`。`realpath` 必须成功且仍是预期路径；两个 `findmnt` 的 `MAJ:MIN` 必须非空且不同。安装/升级流程运行时的启用检查还要求安全的绝对路径、非 `/`、现有目录、非符号链接、root 可写；systemd timer 和 service 本身不运行这项检查。无论首次手工启用还是掉挂载后的重新启用，都要当场重新执行上面的 `realpath`、`test` 和 `findmnt` 命令，再手工运行一次并核验远端副本：
+把 `BACKUP_REMOTE_DIR=/mnt/fitgridweb-offsite` 写入环境文件并保持文件模式 `600`。`realpath` 必须成功且仍是预期路径；两个 `findmnt` 的 `MAJ:MIN` 必须非空且不同。每次运行备份前都应确认挂载仍有效，再手工运行并核验远端副本：
 
 ```bash
 sudo /opt/fitgridweb/ops/backup.sh
@@ -229,31 +229,14 @@ cd /mnt/fitgridweb-offsite
 sha256sum -c fitgridweb-fitgridweb-YYYYMMDDTHHMMSSZ.dump.enc.sha256
 ```
 
-期望脚本打印 `Backup complete: fitgridweb-fitgridweb-YYYYMMDDTHHMMSSZ`，远端校验打印对应 `.dump.enc: OK`；同名 `.json` 元数据也应存在。只有这一整套检查成功后才启用每日定时器。`systemctl enable --now` 只启用并启动 timer，不会验证 `BACKUP_REMOTE_DIR`：
-
-```bash
-sudo systemctl enable --now fitgridweb-backup.timer
-systemctl status fitgridweb-backup.timer --no-pager
-systemctl list-timers fitgridweb-backup.timer --no-pager
-journalctl -u fitgridweb-backup.service --since today --no-pager
-```
-
-timer 的计划是每天 02:30，`Persistent=true`，随机延迟最多 10 分钟。只有安装/升级流程会在当次流程中验证挂载；直接启用 timer 没有验证步骤，`backup.sh` 自身还会 `mkdir -p`，不能识别后来掉线的挂载。必须监控挂载和日志；挂载失效、只读或目标设备变回根设备时立即禁用，避免把“远端”副本写回本机根盘：
-
-```bash
-sudo systemctl disable --now fitgridweb-backup.timer
-systemctl status fitgridweb-backup.timer --no-pager
-```
-
-修复后必须重新执行上述 `realpath`/`test`/`findmnt`/手工备份/远端 checksum 全流程，才能再次 `enable --now`；不能把直接重新启用 timer 当作验证。若通过安装器的 `--upgrade` 流程重新部署，安装器会在该次升级中执行同样的目录/设备检查并据此启用或禁用 timer，但后续每次手工重启 timer 仍不带检查。`backup.sh` 在本机保存加密 dump、`.sha256` 和 `.json`；只有远端复制及远端摘要校验成功后，才按 `BACKUP_RETENTION_DAYS`（默认 180）删除本机过期匹配文件。它不清理远端历史，远端保留/不可变策略由存储侧负责。
+期望脚本打印 `Backup complete: fitgridweb-fitgridweb-YYYYMMDDTHHMMSSZ`，远端校验打印对应 `.dump.enc: OK`；同名 `.json` 元数据也应存在。`backup.sh` 在本机保存加密 dump、`.sha256` 和 `.json`；只有远端复制及远端摘要校验成功后，才按 `BACKUP_RETENTION_DAYS`（默认 180）删除本机过期匹配文件。它不清理远端历史，远端保留/不可变策略由存储侧负责。项目不安装或启用定时器，执行频率由管理员自行决定。
 
 维护执行器日常检查：
 
 ```bash
 systemctl status fitgridweb-maintenance.path --no-pager
-systemctl status fitgridweb-backup.timer --no-pager
 journalctl -u fitgridweb-maintenance.service --since today --no-pager
-journalctl -u fitgridweb-backup.service --since today --no-pager
+sudo /opt/fitgridweb/ops/backup.sh
 ```
 
 ## 恢复失败、自动回滚和人工介入

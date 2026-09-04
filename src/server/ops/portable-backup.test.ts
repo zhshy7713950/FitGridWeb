@@ -104,6 +104,7 @@ async function portableFixture(options: PortableFixtureOptions = {}) {
   const bin = path.join(root, "bin");
   const backups = path.join(root, "backups");
   const prepared = path.join(root, "prepared");
+  const adminOpsRoot = path.join(root, "admin-ops-root");
   const environmentFile = path.join(root, ".env");
   const passphrase = path.join(root, "passphrase");
   const history = path.join(root, "history.json");
@@ -112,6 +113,7 @@ async function portableFixture(options: PortableFixtureOptions = {}) {
   await mkdir(bin, { recursive: true });
   await mkdir(backups);
   await mkdir(prepared);
+  await mkdir(adminOpsRoot);
   await writeFile(passphrase, "correct horse battery");
   await chmod(passphrase, 0o600);
   await writeFile(environmentFile, [
@@ -129,6 +131,7 @@ async function portableFixture(options: PortableFixtureOptions = {}) {
     `PORTABLE_BACKUP_DIR=${backups}`,
     `PORTABLE_BACKUP_HISTORY_FILE=${history}`,
     `PORTABLE_BACKUP_MAX_BYTES=${options.maxBytes ?? 536870912}`,
+    `ADMIN_OPS_ROOT_DIR=${adminOpsRoot}`,
   ].join("\n"));
   await chmod(environmentFile, 0o600);
   await writeFile(history, JSON.stringify({ entries: [] }));
@@ -217,9 +220,12 @@ printf 'fitgrid 999999999 0 %s 0%% /\\n' "$AVAILABLE_KILOBYTES"`);
 printf 'sync %s\\n' "$*" >>"$COMMAND_LOG"
 [ -z "\${SYNC_FAIL_TARGET:-}" ] || [ "\${2:-}" != "$SYNC_FAIL_TARGET" ] || exit 73
 [ "\${SYNC_EXIT:-0}" = 0 ] || exit "$SYNC_EXIT"`);
+  await executable(bin, "flock", `
+printf 'flock %s\n' "$*" >>"$COMMAND_LOG"
+exit "\${FLOCK_EXIT:-0}"`);
 
   return {
-    root, bin, backups, prepared, environmentFile, passphrase, history, statusFile, commandLog,
+    root, bin, backups, prepared, adminOpsRoot, environmentFile, passphrase, history, statusFile, commandLog,
     ageExit: options.ageExit ?? 0,
     availableKilobytes: options.availableKilobytes ?? 10 * 1024 * 1024,
     databaseBytes: options.databaseBytes ?? 1024,
@@ -712,6 +718,8 @@ describe("portable backups", () => {
     expect(await successfulPortableNames(files.backups)).toEqual(["fitgridweb-20260903T070000Z.fitgridbackup"]);
     const transcript = `${result.stdout}${result.stderr}${await readFile(files.commandLog, "utf8")}`;
     expect(transcript).not.toContain(passphrase);
+    expect(transcript).toContain("flock -n 9");
+    expect(await readFile(path.join(files.adminOpsRoot, "maintenance.lock"), "utf8")).toBe("");
     expect(await recursiveNames(files.root)).not.toContainEqual(expect.stringMatching(/fitgrid-portable-passphrase/));
   });
 

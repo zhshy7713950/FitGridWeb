@@ -71,7 +71,7 @@ flowchart TB
 | `OWNER_REF_SECRET` | 用户备份 ownerRef HMAC | 与认证秘密分离 |
 | `CURSOR_SIGNING_SECRET` | 分页游标签名 | 与其他应用秘密分别保管；安装器生成独立值 |
 | `BACKUP_DIR` | server-key 备份本机目录 | 默认 `/var/lib/fitgridweb/backups` |
-| `BACKUP_REMOTE_DIR` | 无人值守备份异机目标 | 首次为空；必须是与根设备不同的真实挂载 |
+| `BACKUP_REMOTE_DIR` | 手动完整备份异机目标 | 首次为空；必须是与根设备不同的真实挂载 |
 | `BACKUP_ENCRYPTION_KEY_FILE` | 备份加密密钥路径 | 主机 root 可读，不放环境值或 Git |
 | `BACKUP_RETENTION_DAYS` | server-key 本机保留天数 | 默认 180；不控制远端保留 |
 | `ADMIN_OPS_WEB_DIR` | app/worker 交换区 | 默认 `/var/lib/fitgridweb/admin-ops/web` |
@@ -148,10 +148,10 @@ journalctl -u fitgridweb --since=-10m
 
 用户 JSON 导出是单账号迁移文件，不替代完整灾难恢复。便携备份 v3 覆盖 Better Auth 用户/密码哈希/会话、角色与状态、邀请、网格产品和导入预检数据；schema、RLS 与 Prisma 迁移记录由目标机上相同已审核版本的 migrations 重建，上传文件不能携带 DDL 或 PostgreSQL archive。server-key 异机备份和恢复前回滚快照仍保存受信任的完整 custom dump。各类备份都不包含 nginx、TLS 私钥、系统日志、Docker 镜像、`fitgridweb.env`、VPS 凭据或应用秘密。
 
-实现提供两条不同路径：
+实现提供两条手动触发的路径：
 
 - 便携路径：管理员页面或 root TTY 运行 `sudo /opt/fitgridweb/ops/backup-portable.sh`，使用独立 12–128 字符 passphrase 的 age 文件 `fitgridweb-YYYYMMDDTHHMMSSZ.fitgridbackup`。安装器固定并校验官方 age v1.3.2，同时安装 `age-plugin-batchpass`；密码只经 `AGE_PASSPHRASE_FD` 传递，不进入 argv、普通环境变量或日志。v3 明文 tar 精确包含七张固定应用表的 CSV、`manifest.json` 和 `payload.sha256`，每个 CSV 物理行是双引号包围的 Base64 UTF-8 JSON。文件通过固定成员、manifest、计数、checksum、行 framing、加密后解密复检、reader 权限和文件系统同步屏障后，才加入 `/var/lib/fitgridweb/portable-backups` 与共享网页历史；成功历史最多 5 条。创建空间按配置上限保守准入并对导出流限额，预检在解密前独立准入。旧 v1 完整转储和 v2 custom data-only 转储都会拒绝。
-- 无人值守路径：`/opt/fitgridweb/ops/backup.sh` 使用 root-only `/etc/fitgridweb/backup.key` 做 AES-256-CBC/PBKDF2 加密，生成 `.dump.enc`、`.dump.enc.sha256`、`.json` 并复制到真实 `BACKUP_REMOTE_DIR`。timer 每天 02:30、persistent、最多随机延迟 10 分钟。该路径不写网页历史，也不受 5 份限制；本机默认 180 天清理只发生在远端复制及远端 checksum 成功之后，远端保留由存储侧负责。
+- 异机手动路径：`sudo /opt/fitgridweb/ops/backup.sh` 使用 root-only `/etc/fitgridweb/backup.key` 做 AES-256-CBC/PBKDF2 加密，生成 `.dump.enc`、`.dump.enc.sha256`、`.json` 并复制到预先配置的真实 `BACKUP_REMOTE_DIR`。该路径不写网页历史，也不受 5 份限制；本机默认 180 天清理只发生在远端复制及远端 checksum 成功之后，远端保留由存储侧负责。项目不安装或启用自动备份 timer。
 
 便携归档和历史索引只有在 GNU `sync -f` 文件系统屏障完成后才能发布；屏障失败不产生 `ready`，并在当前进程中删除新归档或恢复旧历史。安装/升级会先拒绝 symlink、目录或 schema 非法的既有 `backups.json`，验证后再统一为 `root:<PORTABLE_BACKUP_READER_GID>`、`0640`。
 
@@ -159,15 +159,14 @@ journalctl -u fitgridweb --since=-10m
 
 上述管理员授权边界不覆盖 app-process RCE；如果应用进程已被攻陷，必须按主机入侵事件响应，不能仅依赖网页的管理员重新验证。root worker 不接受任意命令或用户路径，且便携备份数据不会成为 shell、SQL、DDL 或 `pg_restore` 的可执行输入；这是执行面的限制，不是对已攻陷 app 的完整隔离声明。
 
-真实异机 timer 只应在 `BACKUP_REMOTE_DIR` 为安全绝对路径、非 `/`、现有非 symlink 可写目录、`realpath` 成功且 `findmnt` 设备不同于 `/` 时启用。该检查只由安装/升级流程执行；systemd timer/service 不执行此挂载检查，单独运行 `systemctl enable --now fitgridweb-backup.timer` 也不会验证目录。首次安装的远端路径默认为空，因此 timer 禁用；任何手工启用或重新启用之前都必须重新执行路径、可写、设备、手工备份和远端 checksum 检查。挂载后来失效时 unit 不会自动识别，必须监控并立即 `systemctl disable --now fitgridweb-backup.timer`。完整命令见 [2 GiB 手册](low-memory-vps-runbook.md#配置真正的异机定时备份)。
+运行异机手动备份前，`BACKUP_REMOTE_DIR` 必须是安全绝对路径、非 `/`、现有非 symlink 可写目录，并确认它确实位于另一故障域。首次安装的远端路径默认为空。项目明确不提供定时备份；升级安装器会关闭旧版本遗留的 `fitgridweb-backup.timer`。完整命令见 [2 GiB 手册](low-memory-vps-runbook.md#手动创建异机完整备份)。
 
 固定检查命令：
 
 ```bash
 systemctl status fitgridweb-maintenance.path --no-pager
-systemctl status fitgridweb-backup.timer --no-pager
 journalctl -u fitgridweb-maintenance.service --since today --no-pager
-journalctl -u fitgridweb-backup.service --since today --no-pager
+sudo /opt/fitgridweb/ops/backup.sh
 ```
 
 ## 10. 网页整库恢复与故障模型

@@ -9,7 +9,7 @@ FitGridWeb 已有 `ops/backup.sh` 和 `ops/restore.sh`，能够使用服务器�
 - 管理员页面提供便于日常使用的自包含加密备份和整库恢复。
 - VPS 提供交互式一键便携备份脚本，生成与网页相同的文件。
 
-现有 `ops/backup.sh` 继续承担使用服务器密钥的无人值守异机备份。用户级 JSON 导入导出仍只处理当前账号的网格产品，不能替代本设计中的完整数据库灾难恢复。
+现有 `ops/backup.sh` 继续承担使用服务器密钥的手动异机备份。用户级 JSON 导入导出仍只处理当前账号的网格产品，不能替代本设计中的完整数据库灾难恢复。
 
 ## 2. 范围
 
@@ -20,7 +20,7 @@ FitGridWeb 已有 `ops/backup.sh` 和 `ops/restore.sh`，能够使用服务器�
 - 邀请、网格产品和导入预检记录；
 - 由当前已审核版本的 Prisma migrations 重建 PostgreSQL schema、RLS 策略和迁移记录；便携文件本身不携带可执行 DDL。
 
-这里的“完整”指可以恢复全部应用数据与认证数据，不表示接受上传文件中的任意数据库结构。无人值守 server-key 备份与恢复前回滚快照仍是受信任的完整 custom dump；浏览器可上传的便携备份从格式 v3 起只包含固定表的规范化数据行，不能携带 PostgreSQL archive 或 SQL。
+这里的“完整”指可以恢复全部应用数据与认证数据，不表示接受上传文件中的任意数据库结构。手动 server-key 备份与恢复前回滚快照仍是受信任的完整 custom dump；浏览器可上传的便携备份从格式 v3 起只包含固定表的规范化数据行，不能携带 PostgreSQL archive 或 SQL。
 
 备份不包含 VPS root 密码、nginx、sing-box、TLS 私钥、系统日志、Docker 镜像、`/etc/fitgridweb/fitgridweb.env` 或服务器备份密钥。换 VPS 时应用秘密和基础设施配置仍按运维手册单独迁移或重建。
 
@@ -184,11 +184,11 @@ VPS 重启后 path unit 自动恢复监听。启动恢复逻辑只清理已确�
 
 备份创建、下载令牌发放、下载完成、恢复预检、恢复确认、回滚开始与结果都写审计记录。日志轮转由 logrotate 管理，默认保留 180 天。
 
-## 9. 手动、网页和自动备份
+## 9. 手动与网页备份
 
 新增 `/opt/fitgridweb/ops/backup-portable.sh`。root 交互运行时从 TTY 隐藏读取独立备份密码并确认，强制 12–128 字符，调用与主机执行器相同的备份库，输出兼容网页恢复的 `.fitgridbackup`，更新同一历史索引并遵守成功后最多保留 5 份的规则。密码不能通过命令参数传入，避免进入 shell history 和进程列表。
 
-现有 `/opt/fitgridweb/ops/backup.sh` 保持非交互模式，使用 `/etc/fitgridweb/backup.key` 加密并复制到 `BACKUP_REMOTE_DIR`，用于真正的异机灾难恢复。它不写入网页最近备份列表，也不受 5 份便携备份限制。安装器只有在 `BACKUP_REMOTE_DIR` 指向有效异机挂载时才允许启用每日 systemd timer；未配置时必须报告“自动异机备份未启用”，不能把同机目录伪装成自动灾备。
+现有 `/opt/fitgridweb/ops/backup.sh` 保持非交互模式，使用 `/etc/fitgridweb/backup.key` 加密并复制到 `BACKUP_REMOTE_DIR`，用于管理员手动创建异机灾难恢复副本。它不写入网页最近备份列表，也不受 5 份便携备份限制。项目不安装或启用每日 systemd timer；升级必须关闭旧版本遗留的 timer。
 
 ## 10. 低资源与故障处理
 
@@ -226,7 +226,7 @@ VPS 重启后 path unit 自动恢复监听。启动恢复逻辑只清理已确�
 
 - 管理员网页创建、下载、上传和恢复步骤；
 - `backup-portable.sh` 一键便携备份操作；
-- `backup.sh` 异机自动备份配置与 timer 状态检查；
+- `backup.sh` 异机手动备份、挂载检查与摘要核验；
 - `.fitgridbackup` 保存、密码保管和完整性注意事项；
 - 新 VPS 首次安装、临时管理员、上传恢复、恢复后账号切换和 DNS 切换；
 - 恢复失败、自动回滚失败和维护状态解除；

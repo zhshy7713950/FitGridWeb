@@ -354,17 +354,6 @@ render_maintenance_host_file() {
   rm -f "$host_rendered"
 }
 
-backup_remote_is_distinct_mount() {
-  backup_remote=$1
-  validate_maintenance_path "$backup_remote" BACKUP_REMOTE_DIR || return 1
-  [ -d "$backup_remote" ] && [ ! -L "$backup_remote" ] && [ -w "$backup_remote" ] || return 1
-  backup_remote_canonical=$(realpath "$backup_remote" 2>/dev/null) || return 1
-  backup_root_device=$(findmnt --target / --noheadings --output MAJ:MIN 2>/dev/null | awk 'NF { print $1; exit }')
-  backup_remote_device=$(findmnt --target "$backup_remote_canonical" --noheadings --output MAJ:MIN 2>/dev/null | awk 'NF { print $1; exit }')
-  [ -n "$backup_root_device" ] && [ -n "$backup_remote_device" ] \
-    && [ "$backup_root_device" != "$backup_remote_device" ]
-}
-
 install_maintenance_components() {
   maintenance_project_directory=$1
   maintenance_environment_file=$2
@@ -416,9 +405,7 @@ install_maintenance_components() {
   for maintenance_unit in \
     fitgridweb-maintenance.service \
     fitgridweb-maintenance-recovery.service \
-    fitgridweb-maintenance-sweep.timer \
-    fitgridweb-backup.service \
-    fitgridweb-backup.timer
+    fitgridweb-maintenance-sweep.timer
   do
     if ! install_atomic_host_file "$maintenance_template_directory/$maintenance_unit" \
       "$maintenance_systemd_directory/$maintenance_unit" 644; then
@@ -437,8 +424,6 @@ install_maintenance_components() {
 }
 
 enable_maintenance_components() {
-  maintenance_enable_environment_file=$1
-  maintenance_enable_backup_remote=$(host_environment_value BACKUP_REMOTE_DIR "$maintenance_enable_environment_file")
   systemctl enable fitgridweb-maintenance-recovery.service \
     || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance-recovery.service 启用"; return 1; }
   systemctl start fitgridweb-maintenance-recovery.service \
@@ -448,13 +433,10 @@ enable_maintenance_components() {
   systemctl enable --now fitgridweb-maintenance-sweep.timer \
     || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance-sweep.timer 启用"; return 1; }
 
-  if [ -n "$maintenance_enable_backup_remote" ] \
-    && backup_remote_is_distinct_mount "$maintenance_enable_backup_remote"; then
-    systemctl enable --now fitgridweb-backup.timer \
-      || { fitgrid_error "维护组件安装失败：fitgridweb-backup.timer 启用"; return 1; }
-  else
-    systemctl disable --now fitgridweb-backup.timer >/dev/null 2>&1 \
-      || { fitgrid_error "维护组件安装失败：fitgridweb-backup.timer 禁用"; return 1; }
-    printf '自动异机备份未启用：请配置并挂载 BACKUP_REMOTE_DIR\n'
+  if systemctl is-enabled --quiet fitgridweb-backup.timer >/dev/null 2>&1 \
+    || systemctl is-active --quiet fitgridweb-backup.timer >/dev/null 2>&1; then
+    systemctl disable --now fitgridweb-backup.timer \
+      || { fitgrid_error "维护组件安装失败：旧版 fitgridweb-backup.timer 禁用"; return 1; }
   fi
+  printf '自动定时备份已禁用；请使用管理页面或 ops/backup.sh 手动备份\n'
 }

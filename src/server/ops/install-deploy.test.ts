@@ -119,7 +119,7 @@ case "$action:$unit" in
   start:fitgridweb-maintenance-recovery.service) failure_stage=recovery ;;
   enable:fitgridweb-maintenance.path) failure_stage=path ;;
   enable:fitgridweb-maintenance-sweep.timer) failure_stage=sweep ;;
-  enable:fitgridweb-backup.timer) failure_stage=backup ;;
+  disable:fitgridweb-backup.timer) failure_stage=backup ;;
   enable:fitgridweb.service) failure_stage=app-enable ;;
   restart:fitgridweb.service) failure_stage=app-restart ;;
 esac
@@ -197,7 +197,6 @@ verify_health() {
   printf 'phase public-health\\n' >>"$COMMAND_LOG"
   [ "\${FAIL_ACTIVATION_STAGE:-}" != final-health ] || [ "$test_public_health_count" -ne 2 ]
 }
-backup_remote_is_distinct_mount() { :; }
 install_systemd_unit() {
   printf 'phase app-unit-install\\n' >>"$COMMAND_LOG"
   printf 'new app unit\\n' >"$APP_UNIT_FIXTURE"
@@ -273,17 +272,20 @@ restore_environment "${files.environment}" "${files.oldEnvironment}"
     const files = await fixture();
     const appUnitName = "fitgridweb.service";
     const pathUnitName = "fitgridweb-maintenance.path";
+    const backupTimerName = "fitgridweb-backup.timer";
     await writeFile(path.join(files.unitState, "enabled", appUnitName), "");
     await writeFile(path.join(files.unitState, "active", appUnitName), "");
     await writeFile(path.join(files.unitState, "enabled", pathUnitName), "");
     await writeFile(path.join(files.unitState, "active", pathUnitName), "");
+    await writeFile(path.join(files.unitState, "enabled", backupTimerName), "");
+    await writeFile(path.join(files.unitState, "active", backupTimerName), "");
     const command = `
 saved_states=$(capture_fitgrid_unit_states)
 systemctl enable fitgridweb-maintenance-recovery.service
 systemctl start fitgridweb-maintenance-recovery.service
 systemctl enable --now fitgridweb-maintenance.path
 systemctl enable --now fitgridweb-maintenance-sweep.timer
-systemctl enable --now fitgridweb-backup.timer
+    systemctl disable --now fitgridweb-backup.timer
 systemctl enable fitgridweb.service
 printf 'restore-boundary\\n' >>"$COMMAND_LOG"
 restore_fitgrid_unit_states "$saved_states"
@@ -292,8 +294,10 @@ restore_fitgrid_unit_states "$saved_states"
     const result = run(command, files, { UNIT_STATE_DIRECTORY: files.unitState });
 
     expect(result.status, result.stderr).toBe(0);
-    expect((await readdir(path.join(files.unitState, "enabled"))).sort()).toEqual([pathUnitName, appUnitName]);
-    expect((await readdir(path.join(files.unitState, "active"))).sort()).toEqual([pathUnitName, appUnitName]);
+    expect((await readdir(path.join(files.unitState, "enabled"))).sort())
+      .toEqual([backupTimerName, pathUnitName, appUnitName].sort());
+    expect((await readdir(path.join(files.unitState, "active"))).sort())
+      .toEqual([backupTimerName, pathUnitName, appUnitName].sort());
     const log = await readFile(files.log, "utf8");
     const restoreLog = log.slice(log.indexOf("restore-boundary"));
     expect(restoreLog).not.toMatch(/(?:disable|stop) (?:fitgridweb\.service|fitgridweb-maintenance\.path)/);
@@ -324,7 +328,6 @@ restore_fitgrid_unit_states "$saved_states"
     ["recovery", false],
     ["path", false],
     ["sweep", false],
-    ["backup", false],
     ["app-install", false],
     ["app-enable", false],
     ["app-restart", true],
@@ -349,6 +352,23 @@ restore_fitgrid_unit_states "$saved_states"
       expect((await readFile(files.log, "utf8")).includes("systemctl restart fitgridweb.service")).toBe(restarted);
     },
   );
+
+  it("fails an upgrade if an active legacy backup timer cannot be disabled", async () => {
+    const files = await fixture();
+    const backupTimerName = "fitgridweb-backup.timer";
+    await writeFile(path.join(files.unitState, "enabled", backupTimerName), "");
+    await writeFile(path.join(files.unitState, "active", backupTimerName), "");
+
+    const result = run(installLifecycleCommand(files, true), files, {
+      APP_UNIT_FIXTURE: files.appUnit,
+      FAIL_ACTIVATION_STAGE: "backup",
+      UNIT_STATE_DIRECTORY: files.unitState,
+    });
+
+    expect(result.status).toBe(1);
+    expect(await readdir(path.join(files.unitState, "enabled"))).toContain(backupTimerName);
+    expect(await readdir(path.join(files.unitState, "active"))).toContain(backupTimerName);
+  });
 
   it("restores the legacy environment before restarting its previously active app", async () => {
     const files = await fixture();

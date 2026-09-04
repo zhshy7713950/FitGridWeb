@@ -8,13 +8,21 @@ cd "$PROJECT_DIR"
 load_fitgrid_environment
 validate_fitgrid_environment
 
-for variable_name in BACKUP_DIR BACKUP_REMOTE_DIR BACKUP_ENCRYPTION_KEY_FILE; do
+for variable_name in BACKUP_DIR BACKUP_REMOTE_DIR BACKUP_ENCRYPTION_KEY_FILE ADMIN_OPS_ROOT_DIR; do
   require_fitgrid_value "$variable_name"
 done
 [ -f "$BACKUP_ENCRYPTION_KEY_FILE" ] || { echo "Backup encryption key file is missing" >&2; exit 1; }
 require_private_file "$BACKUP_ENCRYPTION_KEY_FILE" "Backup encryption key"
 case "$BACKUP_DIR" in ""|/) echo "Unsafe BACKUP_DIR" >&2; exit 1 ;; esac
 case "$BACKUP_REMOTE_DIR" in ""|/) echo "Unsafe BACKUP_REMOTE_DIR" >&2; exit 1 ;; esac
+[ -d "$ADMIN_OPS_ROOT_DIR" ] && [ ! -L "$ADMIN_OPS_ROOT_DIR" ] \
+  || { echo "Unsafe ADMIN_OPS_ROOT_DIR" >&2; exit 1; }
+exec 9>"$ADMIN_OPS_ROOT_DIR/maintenance.lock"
+flock -n 9 || {
+  lock_status=$?
+  echo "Another FitGrid maintenance operation is already running" >&2
+  exit "$lock_status"
+}
 
 mkdir -p "$BACKUP_DIR" "$BACKUP_REMOTE_DIR"
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)

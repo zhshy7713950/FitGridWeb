@@ -163,9 +163,7 @@ docker manifest inspect ghcr.io/zhshy7713950/fitgridweb:sha-<完整SHA>
 sudo /opt/fitgridweb/ops/install-production.sh --upgrade
 systemctl restart fitgridweb
 systemctl status fitgridweb-maintenance.path --no-pager
-systemctl status fitgridweb-backup.timer --no-pager
 journalctl -u fitgridweb-maintenance.service --since today --no-pager
-journalctl -u fitgridweb-backup.service --since today --no-pager
 sudo /opt/fitgridweb/ops/backup-portable.sh
 sudo /opt/fitgridweb/ops/backup.sh
 sudo /opt/fitgridweb/ops/restore.sh --target 'postgresql://.../fitgridweb_restore' --backup '/path/to/backup.dump.enc' --confirm

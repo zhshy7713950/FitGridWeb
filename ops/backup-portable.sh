@@ -12,9 +12,11 @@ cd "$PROJECT_DIR"
 . "$SCRIPT_DIR/lib/portable-backup.sh"
 load_fitgrid_environment
 validate_fitgrid_environment
-for variable_name in PORTABLE_BACKUP_DIR PORTABLE_BACKUP_HISTORY_FILE; do
+for variable_name in PORTABLE_BACKUP_DIR PORTABLE_BACKUP_HISTORY_FILE ADMIN_OPS_ROOT_DIR; do
   require_fitgrid_value "$variable_name"
 done
+[ -d "$ADMIN_OPS_ROOT_DIR" ] && [ ! -L "$ADMIN_OPS_ROOT_DIR" ] \
+  || { echo "不安全的 ADMIN_OPS_ROOT_DIR" >&2; exit 1; }
 
 terminal_state=
 passphrase_file=
@@ -34,4 +36,10 @@ while :; do
 done
 passphrase_file=$(portable_secret_file "$first")
 unset first second
+exec 9>"$ADMIN_OPS_ROOT_DIR/maintenance.lock"
+flock -n 9 || {
+  lock_status=$?
+  echo "已有 FitGrid 维护任务正在运行，请稍后重试" >&2
+  exit "$lock_status"
+}
 create_portable_backup "$passphrase_file" "$PORTABLE_BACKUP_DIR" "$PORTABLE_BACKUP_HISTORY_FILE"

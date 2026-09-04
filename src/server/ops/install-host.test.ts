@@ -12,8 +12,6 @@ const maintenancePathTemplate = path.join(process.cwd(), "ops/templates/fitgridw
 const maintenanceServiceTemplate = path.join(process.cwd(), "ops/templates/fitgridweb-maintenance.service");
 const maintenanceRecoveryTemplate = path.join(process.cwd(), "ops/templates/fitgridweb-maintenance-recovery.service");
 const maintenanceSweepTimerTemplate = path.join(process.cwd(), "ops/templates/fitgridweb-maintenance-sweep.timer");
-const backupServiceTemplate = path.join(process.cwd(), "ops/templates/fitgridweb-backup.service");
-const backupTimerTemplate = path.join(process.cwd(), "ops/templates/fitgridweb-backup.timer");
 const logrotateTemplate = path.join(process.cwd(), "ops/templates/fitgridweb-ops.logrotate");
 
 async function executable(directory: string, name: string, body: string) {
@@ -272,7 +270,7 @@ describe("maintenance installation", () => {
     expect(log).not.toMatch(/sing-box|10256|30127/);
   });
 
-  it("installs fixed worker, timer, and root-only logrotate definitions", async () => {
+  it("installs fixed maintenance workers without an automatic backup timer", async () => {
     const files = await maintenanceFixture();
     expect(run(
       `install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}"`,
@@ -302,19 +300,17 @@ describe("maintenance installation", () => {
     const sweep = await readFile(maintenanceSweepTimerTemplate, "utf8");
     expect(sweep).toContain("OnUnitInactiveSec=1min");
     expect(sweep).toContain("Unit=fitgridweb-maintenance.service");
-    const timer = await readFile(backupTimerTemplate, "utf8");
-    expect(timer).toContain("OnCalendar=*-*-* 02:30:00");
-    expect(timer).toContain("Persistent=true");
-    expect(timer).toContain("RandomizedDelaySec=10m");
-    expect(await readFile(path.join(files.systemd, "fitgridweb-backup.service"), "utf8"))
-      .toBe(await readFile(backupServiceTemplate, "utf8"));
+    await expect(readFile(path.join(files.systemd, "fitgridweb-backup.service"), "utf8"))
+      .rejects.toThrow();
+    await expect(readFile(path.join(files.systemd, "fitgridweb-backup.timer"), "utf8"))
+      .rejects.toThrow();
     expect(await readFile(logrotateTemplate, "utf8")).toContain("/var/lib/fitgridweb/admin-ops/root/audit.jsonl");
     expect(await readFile(files.logrotate, "utf8")).toContain(`${files.rootOps}/audit.jsonl`);
     expect((await stat(files.logrotate)).mode & 0o777).toBe(0o600);
     expect(await readFile(files.logrotate, "utf8")).toContain("rotate 180");
   });
 
-  it("enables unattended backup only on a writable filesystem distinct from root", async () => {
+  it("always disables the legacy unattended backup timer", async () => {
     const files = await maintenanceFixture("configured");
     const command = `install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}" && enable_maintenance_components "${files.environment}"`;
 
@@ -330,11 +326,31 @@ describe("maintenance installation", () => {
       .toBeLessThan(localLog.indexOf("systemctl enable --now fitgridweb-maintenance.path"));
     expect(localLog.indexOf("systemctl enable --now fitgridweb-maintenance.path"))
       .toBeLessThan(localLog.indexOf("systemctl enable --now fitgridweb-maintenance-sweep.timer"));
+    expect(localLog).toContain("systemctl disable --now fitgridweb-backup.timer");
     expect(localLog).not.toContain("enable --now fitgridweb-backup.timer");
 
     await writeFile(files.log, "");
     expect(run(command, files, { REMOTE_DEVICE: "0:44" }).status).toBe(0);
-    expect(await readFile(files.log, "utf8")).toContain("systemctl enable --now fitgridweb-backup.timer");
+    const remoteLog = await readFile(files.log, "utf8");
+    expect(remoteLog).toContain("systemctl disable --now fitgridweb-backup.timer");
+    expect(remoteLog).not.toContain("enable --now fitgridweb-backup.timer");
+  });
+
+  it("continues a fresh install when the legacy backup timer does not exist", async () => {
+    const files = await maintenanceFixture();
+    await executable(files.bin, "systemctl", `
+printf 'systemctl %s\n' "$*" >>"$COMMAND_LOG"
+case "$1" in is-enabled|is-active) exit 1 ;; esac`);
+
+    const result = run(
+      `install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}" && enable_maintenance_components "${files.environment}"`,
+      files,
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await readFile(files.log, "utf8")).not.toContain(
+      "systemctl disable --now fitgridweb-backup.timer",
+    );
   });
 
   it("preserves existing history, prepared recovery state, and marker state on reinstall", async () => {
