@@ -26,6 +26,7 @@ const auditAcknowledgmentSchema = z.strictObject({
   schemaVersion: z.literal(1),
   id: maintenanceUuidSchema,
   state: z.literal("persisted"),
+  expiresAt: z.number().int().safe().positive(),
 });
 
 export interface DownloadAuditInput {
@@ -129,7 +130,11 @@ async function readAcknowledgment(
       || (info.mode & 0o777) !== 0o640
     ) throw stateInvalid();
     const parsed = auditAcknowledgmentSchema.safeParse(JSON.parse(await handle.readFile("utf8")));
-    if (!parsed.success || parsed.data.id !== id) throw stateInvalid();
+    if (
+      !parsed.success
+      || parsed.data.id !== id
+      || parsed.data.expiresAt <= Math.floor(Date.now() / 1_000)
+    ) throw stateInvalid();
     return "persisted";
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return "missing";

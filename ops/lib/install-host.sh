@@ -177,7 +177,6 @@ capture_fitgrid_unit_states() {
     fitgridweb-maintenance-recovery.service \
     fitgridweb-maintenance.path \
     fitgridweb-maintenance-sweep.timer \
-    fitgridweb-backup.timer \
     fitgridweb.service
   do
     fitgrid_state_enabled=false
@@ -190,6 +189,14 @@ capture_fitgrid_unit_states() {
     fi
     printf '%s|%s|%s\n' "$fitgrid_state_unit" "$fitgrid_state_enabled" "$fitgrid_state_active"
   done
+}
+
+disable_legacy_backup_timer() {
+  if systemctl is-enabled --quiet fitgridweb-backup.timer >/dev/null 2>&1 \
+    || systemctl is-active --quiet fitgridweb-backup.timer >/dev/null 2>&1; then
+    systemctl disable --now fitgridweb-backup.timer \
+      || { fitgrid_error "旧版 fitgridweb-backup.timer 禁用失败；部署未开始"; return 1; }
+  fi
 }
 
 restore_fitgrid_unit_states() {
@@ -448,10 +455,5 @@ enable_maintenance_components() {
   systemctl enable --now fitgridweb-maintenance-sweep.timer \
     || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance-sweep.timer 启用"; return 1; }
 
-  if systemctl is-enabled --quiet fitgridweb-backup.timer >/dev/null 2>&1 \
-    || systemctl is-active --quiet fitgridweb-backup.timer >/dev/null 2>&1; then
-    systemctl disable --now fitgridweb-backup.timer \
-      || { fitgrid_error "维护组件安装失败：旧版 fitgridweb-backup.timer 禁用"; return 1; }
-  fi
   printf '自动定时备份已禁用；请使用管理页面或 ops/backup.sh 手动备份\n'
 }

@@ -530,6 +530,29 @@ describe("portable backups", () => {
     const entries = (await readJson(files.history)).entries;
     expect(entries).toHaveLength(5);
     expect(new Set(entries.map((entry: { filename: string }) => entry.filename)).size).toBe(5);
+    expect(entries.find((entry: { filename: string }) => entry.filename === filenames[0]).id)
+      .not.toMatch(/\.id\.(?:ABC120|DUP123)/);
+  });
+
+  it("does not preserve a history id shared by different archives", async () => {
+    const files = await portableFixture({ existingBackups: 2 });
+    const filenames = await successfulPortableNames(files.backups);
+    await writeFile(files.history, JSON.stringify({ entries: filenames.map((filename) => ({
+      id: ".id.SHARED",
+      filename,
+      createdAt: `${filename.slice(11, 15)}-${filename.slice(15, 17)}-${filename.slice(17, 19)}T${filename.slice(20, 22)}:${filename.slice(22, 24)}:${filename.slice(24, 26)}Z`,
+      size: 8,
+      sha256: "a".repeat(64),
+      status: "ready",
+    })) }));
+
+    const result = runPortableReconcile(files);
+
+    expect(result.status, result.stderr).toBe(0);
+    const entries = (await readJson(files.history)).entries as Array<{ id: string }>;
+    expect(entries.map((entry) => entry.id)).not.toContain(".id.SHARED");
+    expect(new Set(entries.map((entry) => entry.id)).size).toBe(2);
+    expect(await successfulPortableNames(files.backups)).toEqual(filenames);
   });
 
   it("reconciles an archive published before its history entry and remains idempotent", async () => {
@@ -558,6 +581,56 @@ describe("portable backups", () => {
     expect(await readFile(files.commandLog, "utf8")).not.toContain(`sync -f ${files.history}`);
   });
 
+  it("recomputes size and checksum when an existing archive changes size while preserving its unique id", async () => {
+    const files = await portableFixture({ existingBackups: 1 });
+    const filename = "fitgridweb-20260902T070000Z.fitgridbackup";
+    const archive = path.join(files.backups, filename);
+    await writeFile(archive, "replacement archive with a different size");
+    await writeFile(files.history, JSON.stringify({ entries: [{
+      id: ".id.STABLE",
+      filename,
+      createdAt: "2026-09-02T07:00:00Z",
+      size: 8,
+      sha256: createHash("sha256").update("20260902").digest("hex"),
+      status: "ready",
+    }] }));
+
+    const result = runPortableReconcile(files, "stat() { /usr/bin/stat \"$@\"; }");
+
+    expect(result.status, result.stderr).toBe(0);
+    expect((await readJson(files.history)).entries[0]).toMatchObject({
+      id: ".id.STABLE",
+      size: Buffer.byteLength("replacement archive with a different size"),
+      sha256: createHash("sha256").update("replacement archive with a different size").digest("hex"),
+    });
+    expect(await successfulPortableNames(files.backups)).toEqual([filename]);
+  });
+
+  it("recomputes checksum when an existing archive changes without changing size", async () => {
+    const files = await portableFixture({ existingBackups: 1 });
+    const filename = "fitgridweb-20260902T070000Z.fitgridbackup";
+    const archive = path.join(files.backups, filename);
+    await writeFile(archive, "BBBBBBBB");
+    await writeFile(files.history, JSON.stringify({ entries: [{
+      id: ".id.STABLE",
+      filename,
+      createdAt: "2026-09-02T07:00:00Z",
+      size: 8,
+      sha256: createHash("sha256").update("AAAAAAAA").digest("hex"),
+      status: "ready",
+    }] }));
+
+    const result = runPortableReconcile(files, "stat() { /usr/bin/stat \"$@\"; }");
+
+    expect(result.status, result.stderr).toBe(0);
+    expect((await readJson(files.history)).entries[0]).toMatchObject({
+      id: ".id.STABLE",
+      size: 8,
+      sha256: createHash("sha256").update("BBBBBBBB").digest("hex"),
+    });
+    expect(await successfulPortableNames(files.backups)).toEqual([filename]);
+  });
+
   it("finishes pruning after history was published with six entries", async () => {
     const files = await portableFixture({ existingBackups: 5 });
     const newest = "fitgridweb-20260903T070000Z.fitgridbackup";
@@ -578,7 +651,8 @@ describe("portable backups", () => {
     expect(await successfulPortableNames(files.backups)).toHaveLength(5);
     const reconciledEntries = (await readJson(files.history)).entries;
     expect(reconciledEntries).toHaveLength(5);
-    expect(reconciledEntries[0].sha256).toBe("0".repeat(64));
+    expect(reconciledEntries[0].sha256)
+      .toBe(createHash("sha256").update("newest").digest("hex"));
   });
 
   it("recovers when archive pruning stops after the reconciled history is durable", async () => {

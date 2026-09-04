@@ -269,6 +269,8 @@ fitgrid_install_main() {
   validate_nginx_site "$nginx_site" "$domain" "$public_port"
   assert_public_image "$(image_for_sha "$resolved_sha")"
 
+  disable_legacy_backup_timer || return 1
+  saved_unit_states=$(capture_fitgrid_unit_states)
   install_dependencies /etc/apt /etc/os-release
   assert_app_port_available "$app_port"
 
@@ -305,8 +307,6 @@ fitgrid_install_main() {
     fi
     app_unit_had_previous=true
   fi
-  saved_unit_states=$(capture_fitgrid_unit_states)
-
   if ! install_maintenance_components "$project_directory" "$environment_file"; then
     restore_or_remove_environment "$environment_file" "$old_environment"
     fitgrid_error "维护组件安装失败；新 FitGridWeb 应用尚未启动"

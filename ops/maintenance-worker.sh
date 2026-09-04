@@ -40,6 +40,7 @@ elif ! flock -n 9; then
 fi
 
 reconcile_portable_backups "$PORTABLE_BACKUP_DIR" "$PORTABLE_BACKUP_HISTORY_FILE" 5 || exit 1
+download_audit_purge_expired_acknowledgments || exit 1
 
 maintenance_current_claim=
 maintenance_current_secret=

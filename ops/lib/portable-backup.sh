@@ -901,12 +901,11 @@ reconcile_portable_backups() (
     portable_reconcile_entry=
     if [ -f "$portable_reconcile_history" ]; then
       portable_reconcile_entry=$(jq -c --arg filename "$portable_reconcile_filename" \
-        '[.entries[] | select(.filename == $filename)][0] // empty' \
+        '[.entries[] | select(.filename == $filename)] as $matches |
+         if ($matches | length) == 1 and
+           ([.entries[] | select(.id == $matches[0].id)] | length) == 1
+         then $matches[0] else empty end' \
         "$portable_reconcile_history")
-    fi
-    if [ -n "$portable_reconcile_entry" ]; then
-      printf '%s\n' "$portable_reconcile_entry" >>"$portable_reconcile_work/entries.jsonl"
-      continue
     fi
     portable_reconcile_size=$(portable_file_size "$portable_reconcile_archive")
     portable_reconcile_sha=$(sha256sum "$portable_reconcile_archive" | awk '{ print $1 }')
@@ -920,9 +919,13 @@ reconcile_portable_backups() (
     portable_reconcile_created=$(portable_timestamp_iso "$portable_reconcile_stamp")
     [ -n "$portable_reconcile_created" ] \
       || { portable_fail "Portable backup filename timestamp is invalid"; exit 1; }
-    portable_reconcile_id_path=$(mktemp "$portable_reconcile_history_directory/.id.XXXXXX")
-    portable_reconcile_id=$(basename "$portable_reconcile_id_path")
-    rm -f "$portable_reconcile_id_path"
+    if [ -n "$portable_reconcile_entry" ]; then
+      portable_reconcile_id=$(printf '%s\n' "$portable_reconcile_entry" | jq -er '.id')
+    else
+      portable_reconcile_id_path=$(mktemp "$portable_reconcile_history_directory/.id.XXXXXX")
+      portable_reconcile_id=$(basename "$portable_reconcile_id_path")
+      rm -f "$portable_reconcile_id_path"
+    fi
     jq -nc --arg id "$portable_reconcile_id" --arg filename "$portable_reconcile_filename" \
       --arg createdAt "$portable_reconcile_created" --argjson size "$portable_reconcile_size" \
       --arg sha256 "$portable_reconcile_sha" \

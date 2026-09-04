@@ -18,6 +18,7 @@ const AUDIT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ADMIN_ID = "11111111-1111-4111-8111-111111111111";
 const BACKUP_ID = "backup-20260903";
 const REQUEST_ID = "request_admin_download_0001";
+const ACKNOWLEDGMENT_EXPIRES_AT = Math.floor(Date.now() / 1_000) + 60;
 const currentUid = process.getuid?.() ?? 0;
 const roots: string[] = [];
 
@@ -77,6 +78,7 @@ describe("download audit gateway", () => {
       schemaVersion: 1,
       id: AUDIT_ID,
       state: "persisted",
+      expiresAt: ACKNOWLEDGMENT_EXPIRES_AT,
     })}\n`, { mode: 0o640 });
     await expect(persistence).resolves.toBeUndefined();
     await expect(lstat(files.acknowledgment)).rejects.toMatchObject({ code: "ENOENT" });
@@ -90,6 +92,7 @@ describe("download audit gateway", () => {
       schemaVersion: 1,
       id: AUDIT_ID,
       state: "persisted",
+      expiresAt: ACKNOWLEDGMENT_EXPIRES_AT,
       token: "unexpected",
     }), { mode: 0o640 });
 
@@ -156,11 +159,33 @@ describe("download audit gateway", () => {
       schemaVersion: 1,
       id: AUDIT_ID,
       state: "persisted",
+      expiresAt: ACKNOWLEDGMENT_EXPIRES_AT,
     }), { mode: 0o640 });
 
     await expect(persistence).rejects.toMatchObject({
       status: 500,
       code: "DOWNLOAD_AUDIT_STATE_INVALID",
+    });
+  });
+
+  it("rejects an expired root acknowledgment without deleting it", async () => {
+    const files = await fixture();
+    const persistence = files.gateway.persist(input);
+    await vi.waitFor(async () => expect(await lstat(files.request)).toBeDefined());
+    await writeFile(files.acknowledgment, JSON.stringify({
+      schemaVersion: 1,
+      id: AUDIT_ID,
+      state: "persisted",
+      expiresAt: Math.floor(Date.now() / 1_000) - 1,
+    }), { mode: 0o640 });
+
+    await expect(persistence).rejects.toMatchObject({
+      status: 500,
+      code: "DOWNLOAD_AUDIT_STATE_INVALID",
+    });
+    expect(JSON.parse(await readFile(files.acknowledgment, "utf8"))).toMatchObject({
+      id: AUDIT_ID,
+      state: "persisted",
     });
   });
 });

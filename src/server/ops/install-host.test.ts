@@ -318,9 +318,9 @@ describe("maintenance installation", () => {
     expect(await readFile(files.logrotate, "utf8")).toContain("rotate 180");
   });
 
-  it("always disables the legacy unattended backup timer", async () => {
+  it("disables the legacy unattended backup timer before maintenance installation", async () => {
     const files = await maintenanceFixture("configured");
-    const command = `install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}" && enable_maintenance_components "${files.environment}"`;
+    const command = `disable_legacy_backup_timer && install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}" && enable_maintenance_components "${files.environment}"`;
 
     expect(run(command, files, { REMOTE_DEVICE: "8:1" }).status).toBe(0);
     const localLog = await readFile(files.log, "utf8");
@@ -335,6 +335,8 @@ describe("maintenance installation", () => {
     expect(localLog.indexOf("systemctl enable --now fitgridweb-maintenance.path"))
       .toBeLessThan(localLog.indexOf("systemctl enable --now fitgridweb-maintenance-sweep.timer"));
     expect(localLog).toContain("systemctl disable --now fitgridweb-backup.timer");
+    expect(localLog.indexOf("systemctl disable --now fitgridweb-backup.timer"))
+      .toBeLessThan(localLog.indexOf(`install -d -m 0700 -o 1001 -g 1001 ${files.web}`));
     expect(localLog).not.toContain("enable --now fitgridweb-backup.timer");
 
     await writeFile(files.log, "");
@@ -351,7 +353,7 @@ printf 'systemctl %s\n' "$*" >>"$COMMAND_LOG"
 case "$1" in is-enabled|is-active) exit 1 ;; esac`);
 
     const result = run(
-      `install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}" && enable_maintenance_components "${files.environment}"`,
+      `disable_legacy_backup_timer && install_maintenance_components "${process.cwd()}" "${files.environment}" "${files.systemd}" "${files.logrotate}" && enable_maintenance_components "${files.environment}"`,
       files,
     );
 

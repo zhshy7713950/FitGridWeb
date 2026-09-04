@@ -221,6 +221,7 @@ describe("maintenance route authorization and same-origin matrix", () => {
 });
 
 function servicesFor(session: unknown) {
+  const downloadAuditPersist = vi.fn().mockResolvedValue(undefined);
   const file = {
     id: BACKUP_ID,
     name: FILE_NAME,
@@ -269,6 +270,9 @@ function servicesFor(session: unknown) {
       consume: vi.fn().mockResolvedValue(undefined),
       issue: vi.fn().mockReturnValue("download-token"),
     },
+    downloadAudits: {
+      persist: downloadAuditPersist,
+    },
   };
 }
 
@@ -283,6 +287,7 @@ function expectNoMaintenanceAccess(services: ReturnType<typeof servicesFor>, lab
     services.maintenance.writeUpload,
     services.downloadTokens.consume,
     services.downloadTokens.issue,
+    services.downloadAudits.persist,
   ]) expect(operation, label).not.toHaveBeenCalled();
 }
 
