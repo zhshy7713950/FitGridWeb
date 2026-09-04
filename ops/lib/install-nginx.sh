@@ -276,6 +276,9 @@ render_proxy_location() {
   upload_mebibytes=$4
   cat <<EOF
 location ${qualifier} ${path} {
+    if (-f /run/fitgridweb/maintenance.flag) {
+        return 503;
+    }
     proxy_pass http://127.0.0.1:${app_port};
     proxy_http_version 1.1;
     proxy_set_header Host \$http_host;
@@ -295,6 +298,22 @@ location ${qualifier} ${path} {
 EOF
 }
 
+render_health_location() {
+  app_port=$1
+  cat <<EOF
+location = /fitgrid/api/v1/health {
+    proxy_pass http://127.0.0.1:${app_port};
+    proxy_http_version 1.1;
+    proxy_set_header Host \$http_host;
+    proxy_set_header X-Forwarded-Host \$http_host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_connect_timeout 10s;
+}
+EOF
+}
+
 render_nginx_snippet() {
   app_port=$1
   upload_max_bytes=${2:-536870912}
@@ -304,6 +323,8 @@ render_nginx_snippet() {
     if (bytes + 0 <= 0) exit 1
     printf "%.0f", int((bytes + 1048575) / 1048576)
   }') || { fitgrid_error "上传字节上限无效"; return 1; }
+  render_health_location "$app_port"
+  printf '\n'
   render_proxy_location = /fitgrid "$app_port" "$upload_mebibytes"
   printf '\n'
   render_proxy_location '^~' /fitgrid/ "$app_port" "$upload_mebibytes"

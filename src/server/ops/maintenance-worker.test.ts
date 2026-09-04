@@ -24,6 +24,7 @@ const worker = path.join(projectDirectory, "ops/maintenance-worker.sh");
 const ADMIN = "846b92e7-0f27-4d5e-96e2-429c120e2324";
 const JOB_A = "978dbffd-3667-4b37-826b-956f0c63938a";
 const JOB_B = "79fc98ea-46a7-40b7-9bb3-e25f2f4ce52d";
+const JOB_AFTER_INTERVENTION = "f31b8a91-9f1e-4a55-9f3d-ae4d6c9d9201";
 const INSPECT_JOB = "ef4faf98-dc68-409c-b630-5dfbc173c99e";
 const RESTORE_JOB = "cba6002b-19c5-4753-a511-ed06c4709036";
 
@@ -77,6 +78,9 @@ type WorkerOptions = {
   failRollbackQuiesce?: boolean;
 };
 
+const testRootUid = typeof process.getuid === "function" ? process.getuid() : 0;
+const testRootGid = typeof process.getgid === "function" ? process.getgid() : 0;
+
 async function executable(directory: string, name: string, source: string) {
   const file = path.join(directory, name);
   await writeFile(file, `#!/bin/sh\nset -eu\n${source}\n`);
@@ -85,6 +89,18 @@ async function executable(directory: string, name: string, source: string) {
 
 async function readJson(file: string) {
   return JSON.parse(await readFile(file, "utf8"));
+}
+
+async function waitForFile(file: string, timeoutMilliseconds = 7_000) {
+  const deadline = Date.now() + timeoutMilliseconds;
+  while (Date.now() < deadline) {
+    try {
+      return await stat(file);
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  throw new Error(`Timed out waiting for ${file}`);
 }
 
 async function createPortableArchive(
@@ -136,6 +152,7 @@ async function workerFixture(options: WorkerOptions = {}) {
   const activeCount = path.join(root, "active-count");
   const maxActive = path.join(root, "max-active");
   const backupKey = path.join(root, "backup.key");
+  const fence = path.join(root, "run", "maintenance.flag");
   await Promise.all([
     mkdir(bin, { recursive: true }),
     mkdir(inbox, { recursive: true }),
@@ -192,13 +209,19 @@ printf '%s\n' "$active" >"$FAKE_ACTIVE_COUNT"
 maximum=$(cat "$FAKE_MAX_ACTIVE")
 [ "$active" -le "$maximum" ] || printf '%s\n' "$active" >"$FAKE_MAX_ACTIVE"
 rmdir "$lock"
+finished=false
 finish() {
+  [ "$finished" = false ] || return 0
+  finished=true
   while ! mkdir "$lock" 2>/dev/null; do sleep 0.01; done
   active=$(cat "$FAKE_ACTIVE_COUNT")
   printf '%s\n' "$((active - 1))" >"$FAKE_ACTIVE_COUNT"
   rmdir "$lock"
 }
-trap finish EXIT HUP INT TERM
+trap finish EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 sleep "\${FAKE_DOCKER_DELAY:-0}"
 case "$*" in
   *"pg_database_size"*) printf '1024\n' ;;
@@ -233,7 +256,13 @@ case "$*" in
       printf 'portable custom dump'
     fi ;;
   *"pg_restore --list"*) cat >/dev/null; printf '37; 0 9006 TABLE DATA public users fitgrid_migrate\\n' ;;
-  *"--set=migration_user="*) cat >/dev/null; printf 'reset-schema\\n' >>"$COMMAND_LOG" ;;
+  *"--set=migration_user="*)
+    cat >/dev/null
+    printf 'reset-schema\\n' >>"$COMMAND_LOG"
+    if [ "$HOLD_DESTRUCTIVE" = true ]; then
+      : >"$DESTRUCTIVE_HOLD_FILE"
+      while [ ! -f "$DESTRUCTIVE_RELEASE_FILE" ]; do sleep 0.02; done
+    fi ;;
   *" stop app"*)
     printf 'stop-app\n' >>"$COMMAND_LOG"
     if [ "\${MAINTENANCE_RESTORE_SOURCE:-}" = rollback ] && [ "$FAIL_ROLLBACK_QUIESCE" = true ]; then exit 9; fi ;;
@@ -255,6 +284,10 @@ esac`,
     bin,
     "curl",
     `
+if [ "$REQUIRE_FENCE_DURING_HEALTH" = true ] && [ ! -f "$MAINTENANCE_FENCE_FILE" ]; then
+  printf 'health-unfenced\n' >>"$COMMAND_LOG"
+  exit 23
+fi
 case "\${MAINTENANCE_HEALTH_PHASE:-}" in
   restored)
     if [ "$RESTORED_HEALTH" != true ]; then
@@ -269,17 +302,45 @@ case "\${MAINTENANCE_HEALTH_PHASE:-}" in
 esac
 case "$*" in *"https://"*) printf 'health-ok\n' >>"$COMMAND_LOG" ;; esac`,
   );
-  await executable(bin, "age", "cat");
-  await executable(bin, "sync", ":");
-  await executable(bin, "chown", ":");
+  await executable(bin, "age", `sleep "\${FAKE_AGE_DELAY:-0}"; cat`);
   await executable(
     bin,
-    "stat",
+    "sync",
     `
-if [ "$1" = -c ] && [ "$2" = %u ]; then printf '%s\n' "$FAKE_ROOT_OWNER"; exit 0; fi
-if [ "$1" = -f ] && [ "$2" = %u ]; then printf '%s\n' "$FAKE_ROOT_OWNER"; exit 0; fi
-exec /usr/bin/stat "$@"`,
+target=\${2:-\${1:-}}
+if [ "$LOG_DURABILITY_BARRIERS" = true ]; then
+  case "$target" in
+    */intervention/*/rollback.dump.enc) printf 'sync-intervention-cipher\n' >>"$COMMAND_LOG" ;;
+    */intervention/*/job.json) printf 'sync-intervention-job\n' >>"$COMMAND_LOG" ;;
+    */intervention/*) printf 'sync-intervention-dir\n' >>"$COMMAND_LOG" ;;
+    */rollback.dump.enc) printf 'sync-rollback-cipher\n' >>"$COMMAND_LOG" ;;
+    */work|*/work/*) printf 'sync-work\n' >>"$COMMAND_LOG" ;;
+    "$MAINTENANCE_FENCE_FILE") printf 'sync-fence\n' >>"$COMMAND_LOG" ;;
+    "$ROOT_OPS_DIRECTORY/maintenance.json") printf 'sync-marker\n' >>"$COMMAND_LOG" ;;
+  esac
+fi
+if [ "$target" = "$MAINTENANCE_FENCE_FILE" ] && [ "$HOLD_FENCE_BARRIER" = true ]; then
+  : >"$FENCE_HOLD_FILE"
+  while [ ! -f "$FENCE_RELEASE_FILE" ]; do sleep 0.02; done
+fi
+if [ -n "$FAIL_STATUS_SYNC_STATE" ]; then
+  case "$target" in
+    "$STATUS_DIRECTORY"/*.json)
+      if /usr/bin/jq -e --arg state "$FAIL_STATUS_SYNC_STATE" '.state == $state' "$target" >/dev/null 2>&1 \
+        && [ ! -f "$FAIL_STATUS_SYNC_FILE" ]; then
+        : >"$FAIL_STATUS_SYNC_FILE"
+        exit 9
+      fi ;;
+  esac
+fi
+case "$target" in *"$FAIL_SYNC_TARGET"*) [ -z "$FAIL_SYNC_TARGET" ] || exit 9 ;; esac`,
   );
+  await executable(
+    bin,
+    "df",
+    `printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/fake 20000000 1 %s 1%% /\n' "$FAKE_AVAILABLE_KB"`,
+  );
+  await executable(bin, "chown", ":");
   await executable(
     bin,
     "ln",
@@ -319,11 +380,25 @@ cp "$input" "$output"`,
     `
 source=$1
 destination=$2
+if [ "$FAIL_CROSS_DEVICE_MV" = true ]; then
+  case "$source" in
+    "$WEB_DIRECTORY"/*)
+      case "$destination" in "$ROOT_OPS_DIRECTORY"/*) exit 18 ;; esac
+      ;;
+  esac
+fi
 if [ "$destination" = "$STATUS_DIRECTORY/maintenance.json" ] \
   && [ "$FAIL_MARKER_CLEAR" = true ] \
   && /usr/bin/jq -e '.active == false' "$source" >/dev/null \
   && [ ! -f "$FAIL_MARKER_FILE" ]; then
   : >"$FAIL_MARKER_FILE"
+  exit 9
+fi
+if [ "$destination" = "$ROOT_OPS_DIRECTORY/maintenance.json" ] \
+  && [ "$FAIL_ACTIVE_MARKER" = true ] \
+  && /usr/bin/jq -e '.active == true' "$source" >/dev/null \
+  && [ ! -f "$FAIL_ACTIVE_MARKER_FILE" ]; then
+  : >"$FAIL_ACTIVE_MARKER_FILE"
   exit 9
 fi
 if [ -n "$FAIL_STATUS_STATE" ] \
@@ -377,14 +452,33 @@ exec /bin/mv "$source" "$destination"`,
     EXPORT_SQL_LOG: path.join(root, "export.sql"),
     RESTORE_SQL_LOG: path.join(root, "restore.sql"),
     DOCKER_ARGS_LOG: dockerArgsLog,
-    FAKE_ROOT_OWNER: "0",
+    MAINTENANCE_ROOT_UID: String(testRootUid),
+    MAINTENANCE_ROOT_GID: String(testRootGid),
+    WEB_DIRECTORY: web,
+    FAIL_CROSS_DEVICE_MV: "false",
+    FAKE_AGE_DELAY: "0",
+    FAKE_AVAILABLE_KB: "10000000",
+    LOG_DURABILITY_BARRIERS: "false",
+    FAIL_SYNC_TARGET: "",
+    HOLD_FENCE_BARRIER: "false",
+    FENCE_HOLD_FILE: path.join(root, "fence-held"),
+    FENCE_RELEASE_FILE: path.join(root, "fence-release"),
+    HOLD_DESTRUCTIVE: "false",
+    DESTRUCTIVE_HOLD_FILE: path.join(root, "destructive-held"),
+    DESTRUCTIVE_RELEASE_FILE: path.join(root, "destructive-release"),
     RACE_PREPARED_REPLACEMENT: "false",
     LN_LOG: path.join(root, "ln.log"),
     FAIL_MARKER_CLEAR: "false",
     FAIL_MARKER_FILE: path.join(root, "fail-marker-once"),
+    FAIL_ACTIVE_MARKER: "false",
+    FAIL_ACTIVE_MARKER_FILE: path.join(root, "fail-active-marker-once"),
     FAIL_STATUS_STATE: "",
     FAIL_STATUS_FILE: path.join(root, "fail-status-once"),
+    FAIL_STATUS_SYNC_STATE: "",
+    FAIL_STATUS_SYNC_FILE: path.join(root, "fail-status-sync-once"),
     FAIL_COMPLETED_LEDGER: "false",
+    MAINTENANCE_FENCE_FILE: fence,
+    REQUIRE_FENCE_DURING_HEALTH: "false",
     TMPDIR: root,
   };
 
@@ -490,6 +584,7 @@ exec /bin/mv "$source" "$destination"`,
     commandLog,
     dockerArgsLog,
     audit,
+    fence,
     maxActive,
     env,
     enqueue,
@@ -540,6 +635,20 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(Number((await readFile(files.maxActive, "utf8")).trim())).toBe(1);
   });
 
+  it("claims app-owned job artifacts without relying on a cross-filesystem rename", async () => {
+    const files = await workerFixture();
+    await files.enqueue(
+      { schemaVersion: 1, id: JOB_A, type: "backup", actorId: ADMIN, requestId: "01JEXDEV" },
+      "backup password",
+    );
+
+    const result = files.runWorker({ FAIL_CROSS_DEVICE_MV: "true" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await files.status(JOB_A)).toMatchObject({ state: "ready" });
+    expect(await readdir(files.inbox)).toEqual([]);
+  });
+
   it("persists terminal job IDs in root state and rejects replay after cleanup", async () => {
     const files = await workerFixture();
     const job = { schemaVersion: 1, id: JOB_A, type: "backup", actorId: ADMIN, requestId: "01JREPLAY" };
@@ -582,6 +691,53 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect((await stat(preparedDirectory)).mode & 0o777).toBe(0o500);
     expect(await readdir(files.uploads)).toEqual([]);
     expect(await readdir(files.inbox)).toEqual([]);
+    await expect(stat(path.join(files.rootOps, "completed", `${INSPECT_JOB}.json`))).rejects.toThrow();
+  });
+
+  it.each([
+    ["status publication", { FAIL_STATUS_STATE: "failed" }],
+    ["terminal ledger publication", { FAIL_COMPLETED_LEDGER: "true" }],
+  ])("destroys inspected plaintext and reconciles admission when expiry %s fails", async (_failure, failureEnv) => {
+    const files = await workerFixture();
+    await files.enqueueInspect();
+    expect(files.runWorker().status).toBe(0);
+    await writeFile(path.join(files.statuses, "active-job.json"), JSON.stringify({
+      schemaVersion: 1,
+      jobId: INSPECT_JOB,
+      createdAt: "2026-09-03T07:00:00Z",
+    }));
+
+    const expiry = files.runWorker({
+      MAINTENANCE_NOW_EPOCH: "1788424000",
+      ...failureEnv,
+    });
+
+    expect(expiry.status).not.toBe(0);
+    await expect(stat(path.join(files.prepared, INSPECT_JOB))).rejects.toThrow();
+    await expect(stat(path.join(files.statuses, "active-job.json"))).rejects.toThrow();
+  });
+
+  it("uses a root-owned claimed upload after the app recreates its upload pathname", async () => {
+    const files = await workerFixture();
+    await files.enqueueInspect();
+    const claimedUpload = path.join(files.rootOps, "claimed", `${INSPECT_JOB}.fitgridbackup`);
+    const publicUpload = path.join(files.uploads, `${INSPECT_JOB}.fitgridbackup`);
+    const workerExit = new Promise<number | null>((resolve) => {
+      const child = spawn("sh", [worker], {
+        cwd: projectDirectory,
+        env: { ...files.env, FAKE_AGE_DELAY: "0.5" },
+      });
+      child.on("exit", resolve);
+    });
+
+    const claimed = await waitForFile(claimedUpload);
+    expect(claimed.uid).toBe(testRootUid);
+    expect(claimed.gid).toBe(testRootGid);
+    expect(claimed.mode & 0o777).toBe(0o400);
+    await writeFile(publicUpload, "app replacement after claim");
+
+    expect(await workerExit).toBe(0);
+    expect(await files.status(INSPECT_JOB)).toMatchObject({ state: "awaiting-confirmation" });
   });
 
   it("never publishes an uploaded manifest app image into the app-readable status layer", async () => {
@@ -631,7 +787,7 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
       await mkdir(claimed);
       await chmod(claimed, 0o770);
     }, {}],
-    ["non-root-owned root state", async () => undefined, { FAKE_ROOT_OWNER: "501" }],
+    ["unexpected root-state owner", async () => undefined, { MAINTENANCE_ROOT_UID: String(testRootUid + 1) }],
   ])("fails closed for %s", async (_caseName, arrange, extraEnv) => {
     const files = await workerFixture();
     await arrange(files);
@@ -717,6 +873,86 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     }).trim());
   });
 
+  it("refuses restore peak space before snapshotting or touching the live database", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+
+    const result = files.runWorker({ FAKE_AVAILABLE_KB: "1024" });
+
+    expect(result.status).not.toBe(0);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "failed", code: "INSUFFICIENT_DISK_SPACE" });
+    expect(await files.commandSequence()).toEqual([]);
+    await expect(stat(files.fence)).rejects.toThrow();
+  });
+
+  it("durably barriers rollback evidence, fence, and marker before destructive commands", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+
+    const result = files.runWorker({ LOG_DURABILITY_BARRIERS: "true" });
+
+    expect(result.status, result.stderr).toBe(0);
+    const sequence = await files.commandSequence();
+    const stop = sequence.indexOf("stop-app");
+    const reset = sequence.indexOf("reset-schema");
+    for (const barrier of ["sync-rollback-cipher", "sync-work", "sync-fence", "sync-marker"]) {
+      expect(sequence.indexOf(barrier), `${barrier}: ${sequence.join(", ")}`).toBeGreaterThan(-1);
+      expect(sequence.indexOf(barrier)).toBeLessThan(stop);
+      expect(sequence.indexOf(barrier)).toBeLessThan(reset);
+    }
+  });
+
+  it("does not mutate the database when the rollback durability barrier fails", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+
+    const result = files.runWorker({ FAIL_SYNC_TARGET: "rollback.dump.enc" });
+
+    expect(result.status).not.toBe(0);
+    expect(await files.commandSequence()).toEqual(["rollback-snapshot"]);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "failed", code: "SNAPSHOT_FAILED" });
+    await expect(stat(files.fence)).rejects.toThrow();
+  });
+
+  it("enters intervention when the fence cannot become durable before marker activation", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+
+    const result = files.runWorker({ FAIL_SYNC_TARGET: "maintenance.flag" });
+
+    expect(result.status).not.toBe(0);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({
+      state: "intervention-required",
+      code: "FENCE_ACTIVATION_FAILED",
+    });
+    expect(await files.rootMaintenance()).toMatchObject({ active: true, jobId: RESTORE_JOB });
+    expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
+    expect((await readdir(path.join(files.rootOps, "intervention", RESTORE_JOB))).sort())
+      .toEqual(["job.json", "rollback.dump.enc"]);
+    expect(await files.commandSequence()).toEqual(["rollback-snapshot"]);
+  });
+
+  it.each([
+    ["active marker", { FAIL_ACTIVE_MARKER: "true" }, "MARKER_ACTIVATION_FAILED"],
+    ["restoring status", { FAIL_STATUS_STATE: "restoring" }, "STATUS_PUBLISH_FAILED"],
+  ])("does not touch the live database when %s publication fails", async (_failure, failureEnv, code) => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+
+    const result = files.runWorker(failureEnv);
+
+    expect(result.status).not.toBe(0);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "intervention-required", code });
+    expect(await files.rootMaintenance()).toMatchObject({ active: true, jobId: RESTORE_JOB });
+    expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
+    expect(await files.commandSequence()).toEqual(["rollback-snapshot"]);
+  });
+
   it("rolls production back exactly once when restored application health fails", async () => {
     const files = await workerFixture({ restoredHealth: false, rollbackHealth: true });
     await files.prepareRestore();
@@ -748,12 +984,24 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     await expect(stat(path.join(files.rootOps, "intervention", RESTORE_JOB))).rejects.toThrow();
   });
 
+  it("keeps external traffic fenced through restored health and clears only after finalization", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+
+    const result = files.runWorker({ REQUIRE_FENCE_DURING_HEALTH: "true" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await files.commandSequence()).not.toContain("health-unfenced");
+    await expect(stat(files.fence)).rejects.toThrow();
+  });
+
   it("leaves maintenance active when restore and rollback both fail", async () => {
     const files = await workerFixture({ restoredHealth: false, rollbackHealth: false });
     await files.prepareRestore();
     await files.enqueueRestore();
 
-    const result = files.runWorker();
+    const result = files.runWorker({ LOG_DURABILITY_BARRIERS: "true" });
 
     expect(result.status).not.toBe(0);
     expect(await files.status(RESTORE_JOB)).toMatchObject({
@@ -762,6 +1010,8 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
       code: "ROLLBACK_FAILED",
     });
     expect(await files.maintenance()).toMatchObject({ active: true, jobId: RESTORE_JOB });
+    expect((await stat(path.dirname(files.fence))).mode & 0o777).toBe(0o755);
+    expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
     expect((await files.commandSequence()).filter((entry) => entry === "restore-rollback")).toHaveLength(1);
     await expect(stat(path.join(files.prepared, INSPECT_JOB))).rejects.toThrow();
     const intervention = path.join(files.rootOps, "intervention", RESTORE_JOB);
@@ -769,10 +1019,38 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect((await stat(intervention)).mode & 0o777).toBe(0o700);
     expect((await stat(path.join(intervention, "rollback.dump.enc"))).mode & 0o777).toBe(0o400);
     expect(await readFile(path.join(intervention, "rollback.dump.enc"), "utf8")).toBe("rollback custom dump");
+    expect(await files.commandSequence()).toEqual(expect.arrayContaining([
+      "sync-intervention-cipher",
+      "sync-intervention-job",
+      "sync-intervention-dir",
+    ]));
 
     expect(files.runWorker().status).not.toBe(0);
     expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "intervention-required", code: "ROLLBACK_FAILED" });
     expect((await files.commandSequence()).filter((entry) => entry === "restore-rollback")).toHaveLength(1);
+  });
+
+  it("stops draining before a queued second job after intervention", async () => {
+    const files = await workerFixture({ restoredHealth: false, rollbackHealth: false });
+    await files.prepareRestore();
+    await files.enqueueRestore();
+    await files.enqueue({
+      schemaVersion: 1,
+      id: JOB_AFTER_INTERVENTION,
+      type: "backup",
+      actorId: ADMIN,
+      requestId: "01JAFTERFAIL",
+    }, "queued backup password");
+
+    const result = files.runWorker();
+
+    expect(result.status).not.toBe(0);
+    expect(await readdir(files.inbox)).toEqual([
+      `${JOB_AFTER_INTERVENTION}.json`,
+      `${JOB_AFTER_INTERVENTION}.secret`,
+    ]);
+    await expect(stat(path.join(files.statuses, `${JOB_AFTER_INTERVENTION}.json`))).rejects.toThrow();
+    expect((await files.commandSequence()).filter((entry) => entry === "rollback-snapshot")).toHaveLength(1);
   });
 
   it("does not write rollback data when rollback quiescing fails", async () => {
@@ -811,12 +1089,15 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(await stat(path.join(files.rootOps, "intervention", RESTORE_JOB, "rollback.dump.enc"))).toBeDefined();
   });
 
-  it("reasserts maintenance when terminal success status publication fails", async () => {
+  it.each([
+    ["atomic rename", { FAIL_STATUS_STATE: "succeeded" }],
+    ["durability sync", { FAIL_STATUS_SYNC_STATE: "succeeded" }],
+  ])("reasserts maintenance when terminal success status %s fails", async (_failure, failureEnv) => {
     const files = await workerFixture();
     await files.prepareRestore();
     await files.enqueueRestore();
 
-    const result = files.runWorker({ FAIL_STATUS_STATE: "succeeded" });
+    const result = files.runWorker(failureEnv);
 
     expect(result.status).not.toBe(0);
     expect(await files.maintenance()).toMatchObject({ active: true, jobId: RESTORE_JOB });
@@ -868,34 +1149,22 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(await readFile(path.join(intervention, "rollback.dump.enc"), "utf8")).toBe("rollback custom dump");
   });
 
-  it("removes prepared plaintext and passwords when the completed ledger cannot publish after inspection", async () => {
+  it("does not attempt a terminal ledger while inspection awaits confirmation", async () => {
     const files = await workerFixture();
     await files.enqueueInspect();
 
     const result = files.runWorker({ FAIL_COMPLETED_LEDGER: "true" });
 
-    expect(result.status).not.toBe(0);
-    expect(await files.status(INSPECT_JOB)).toMatchObject({
-      state: "intervention-required",
-      code: "TERMINAL_STATE_WRITE_FAILED",
-    });
-    expect(await files.rootMaintenance()).toMatchObject({ schemaVersion: 1, active: true, jobId: INSPECT_JOB });
-    expect(await readdir(path.join(files.rootOps, "intervention", INSPECT_JOB))).toEqual(["job.json"]);
-    await expect(stat(path.join(files.prepared, INSPECT_JOB))).rejects.toThrow();
+    expect(result.status, result.stderr).toBe(0);
+    expect(await files.status(INSPECT_JOB)).toMatchObject({ state: "awaiting-confirmation" });
+    await expect(stat(files.fence)).rejects.toThrow();
+    await expect(stat(path.join(files.rootOps, "completed", `${INSPECT_JOB}.json`))).rejects.toThrow();
+    await expect(stat(path.join(files.rootOps, "intervention", INSPECT_JOB))).rejects.toThrow();
+    expect(await stat(path.join(files.prepared, INSPECT_JOB))).toBeDefined();
     expect(await readdir(files.inbox)).toEqual([]);
     expect(await readdir(files.uploads)).toEqual([]);
     expect(await readdir(path.join(files.rootOps, "claimed"))).toEqual([]);
     expect(await readdir(path.join(files.rootOps, "work"))).toEqual([]);
-
-    await writeFile(path.join(files.inbox, `${INSPECT_JOB}.secret`), "late inspection secret");
-    await writeFile(path.join(files.rootOps, "claimed", `${INSPECT_JOB}.secret`), "late claimed secret");
-    await writeFile(path.join(files.uploads, `${INSPECT_JOB}.fitgridbackup`), "late inspection upload");
-    expect(files.runWorker().status).not.toBe(0);
-
-    expect(await readdir(files.inbox)).toEqual([]);
-    expect(await readdir(files.uploads)).toEqual([]);
-    expect(await readdir(path.join(files.rootOps, "claimed"))).toEqual([]);
-    expect(await readdir(path.join(files.rootOps, "intervention", INSPECT_JOB))).toEqual(["job.json"]);
   });
 
   it("uses root-owned active maintenance after the public mirror is deleted or forged inactive", async () => {
@@ -1021,16 +1290,105 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
       actorId: ADMIN,
       requestId: "01JSTALE",
     }));
+    await chmod(path.join(claimed, `${JOB_A}.json`), 0o400);
     await writeFile(path.join(claimed, `${JOB_A}.secret`), "do not retain me");
     await writeFile(path.join(files.inbox, `${JOB_A}.secret`), "nor me");
 
     const result = files.runWorker();
 
-    expect(result.status).not.toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(await files.status(JOB_A)).toMatchObject({ state: "failed", code: "STALE_JOB" });
     expect(await readdir(claimed)).toEqual([]);
     expect(await readdir(files.inbox)).toEqual([]);
     expect(await files.commandSequence()).toEqual([]);
+  });
+
+  it("preserves a recoverable claim when terminated after fencing but before the active marker", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+    await writeFile(path.join(files.statuses, "active-job.json"), JSON.stringify({
+      schemaVersion: 1,
+      jobId: RESTORE_JOB,
+      createdAt: "2026-09-03T07:00:00Z",
+    }));
+    const child = spawn("sh", [worker], {
+      cwd: projectDirectory,
+      detached: true,
+      env: { ...files.env, HOLD_FENCE_BARRIER: "true" },
+      stdio: "ignore",
+    });
+    const childExit = new Promise<number | null>((resolve) => child.on("exit", resolve));
+
+    await waitForFile(String(files.env.FENCE_HOLD_FILE));
+    expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
+    if (child.pid === undefined) throw new Error("worker did not start");
+    process.kill(-child.pid, "SIGTERM");
+    expect(await childExit).not.toBe(0);
+
+    const claim = path.join(files.rootOps, "claimed", `${RESTORE_JOB}.json`);
+    expect((await stat(claim)).mode & 0o777).toBe(0o400);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "snapshotting" });
+    expect(await stat(path.join(files.statuses, "active-job.json"))).toBeDefined();
+
+    const failedRecovery = files.runWorker({ FAIL_STATUS_STATE: "failed" });
+
+    expect(failedRecovery.status).not.toBe(0);
+    expect((await stat(claim)).mode & 0o777).toBe(0o400);
+    expect(await stat(path.join(files.statuses, "active-job.json"))).toBeDefined();
+    expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
+
+    const recovery = files.runWorker();
+
+    expect(recovery.status, recovery.stderr).toBe(0);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "failed", code: "STALE_JOB" });
+    await expect(stat(claim)).rejects.toThrow();
+    await expect(stat(path.join(files.statuses, "active-job.json"))).rejects.toThrow();
+    await expect(stat(files.fence)).rejects.toThrow();
+    expect(await files.commandSequence()).toEqual(["rollback-snapshot"]);
+  });
+
+  it("preserves rollback evidence on TERM during destructive restore and intervenes on boot", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+    const child = spawn("sh", [worker], {
+      cwd: projectDirectory,
+      detached: true,
+      env: { ...files.env, HOLD_DESTRUCTIVE: "true" },
+      stdio: "ignore",
+    });
+    const childExit = new Promise<number | null>((resolve) => child.on("exit", resolve));
+
+    await waitForFile(String(files.env.DESTRUCTIVE_HOLD_FILE));
+    if (child.pid === undefined) throw new Error("worker did not start");
+    process.kill(-child.pid, "SIGTERM");
+    expect(await childExit).not.toBe(0);
+
+    const claim = path.join(files.rootOps, "claimed", `${RESTORE_JOB}.json`);
+    expect((await stat(claim)).mode & 0o777).toBe(0o400);
+    const workEntries = await readdir(path.join(files.rootOps, "work"));
+    expect(workEntries).toHaveLength(1);
+    await expect(stat(path.join(files.rootOps, "work", workEntries[0]!, "rollback.dump.enc"))).resolves.toBeDefined();
+    expect(await files.rootMaintenance()).toMatchObject({ active: true, jobId: RESTORE_JOB });
+    expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
+
+    const recovery = files.runWorker({ LOG_DURABILITY_BARRIERS: "true" });
+
+    expect(recovery.status).not.toBe(0);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({
+      state: "intervention-required",
+      code: "RESTORE_INTERRUPTED",
+    });
+    const intervention = path.join(files.rootOps, "intervention", RESTORE_JOB);
+    expect((await readdir(intervention)).sort()).toEqual(["job.json", "rollback.dump.enc"]);
+    expect((await stat(path.join(intervention, "rollback.dump.enc"))).mode & 0o777).toBe(0o400);
+    expect((await files.commandSequence()).filter((entry) => entry === "reset-schema")).toHaveLength(1);
+    expect(await files.commandSequence()).toEqual(expect.arrayContaining([
+      "sync-intervention-cipher",
+      "sync-intervention-job",
+      "sync-intervention-dir",
+    ]));
   });
 
   it("marks an interrupted in-maintenance restore for intervention instead of retrying it", async () => {
@@ -1046,6 +1404,7 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
       requestId: "01JINTERRUPTED",
       restoreId: INSPECT_JOB,
     }));
+    await chmod(path.join(claimed, `${RESTORE_JOB}.json`), 0o400);
     await writeFile(path.join(files.rootOps, "maintenance.json"), JSON.stringify({
       schemaVersion: 1,
       active: true,
@@ -1070,6 +1429,27 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(await readdir(intervention)).toEqual(["job.json"]);
     expect((await stat(intervention)).mode & 0o777).toBe(0o700);
     expect((await stat(path.join(intervention, "job.json"))).mode & 0o777).toBe(0o400);
+  });
+
+  it.each([
+    ["active", JSON.stringify({
+      schemaVersion: 1,
+      active: true,
+      jobId: RESTORE_JOB,
+      updatedAt: "2026-09-03T00:00:00Z",
+    })],
+    ["corrupt", "{not-valid-json"],
+  ])("recreates the external fence and blocks boot for an %s root marker", async (_caseName, marker) => {
+    const files = await workerFixture();
+    await writeFile(path.join(files.rootOps, "maintenance.json"), marker);
+    await chmod(path.join(files.rootOps, "maintenance.json"), 0o600);
+
+    const result = files.runWorker();
+
+    expect(result.status).not.toBe(0);
+    expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
+    expect((await stat(path.dirname(files.fence))).mode & 0o777).toBe(0o755);
+    expect(await files.commandSequence()).toEqual([]);
   });
 
   it("redacts rejected task values, secrets, database URLs, and command output from audit", async () => {

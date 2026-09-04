@@ -542,6 +542,35 @@ describe("FileMaintenanceGateway", () => {
     });
   });
 
+  it("keeps an awaiting inspection admitted against unrelated maintenance jobs", async () => {
+    const files = await fixture();
+    await writeFile(path.join(files.adminOpsDirectory, "status", "active-job.json"), JSON.stringify({
+      schemaVersion: 1,
+      jobId: JOB_A,
+      createdAt: "2026-09-03T07:00:00Z",
+    }));
+    await writeFile(path.join(files.adminOpsDirectory, "status", `${JOB_A}.json`), JSON.stringify({
+      schemaVersion: 1,
+      id: JOB_A,
+      type: "inspect-restore",
+      actorId: ADMIN_ID,
+      requestId: "inspect-submit",
+      state: "awaiting-confirmation",
+      updatedAt: "2026-09-03T07:00:00Z",
+      expiresAt: 2_000_000_000,
+      backupCreatedAt: "2026-09-03T06:30:00Z",
+      postgresMajor: 17,
+      database: "fitgridweb",
+      preview: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0 },
+    }));
+
+    await expect(files.gateway.createBackup({
+      actorId: ADMIN_ID,
+      requestId: "unrelated-backup",
+      passphrase: "mnopqrstuvwx",
+    })).rejects.toMatchObject({ status: 409, code: "MAINTENANCE_BUSY" });
+  });
+
   it("rejects traversal identifiers before disk access", async () => {
     const files = await fixture();
     await rm(path.join(files.adminOpsDirectory, "status"), { recursive: true });

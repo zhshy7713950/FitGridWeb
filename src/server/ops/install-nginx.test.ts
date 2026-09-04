@@ -215,6 +215,16 @@ describe("nginx managed include", () => {
     expect(result.stdout.match(/proxy_read_timeout 600s;/g)).toHaveLength(2);
     expect(result.stdout.match(/proxy_send_timeout 600s;/g)).toHaveLength(2);
     expect(result.stdout.match(/proxy_request_buffering off;/g)).toHaveLength(2);
+    expect(result.stdout).toMatch(
+      /location = \/fitgrid\/api\/v1\/health \{[\s\S]*?proxy_pass http:\/\/127\.0\.0\.1:3300;[\s\S]*?\}/,
+    );
+    expect(result.stdout.match(/if \(-f \/run\/fitgridweb\/maintenance\.flag\) \{/g)).toHaveLength(2);
+    expect(result.stdout).toMatch(
+      /location = \/fitgrid \{[\s\S]*?if \(-f \/run\/fitgridweb\/maintenance\.flag\) \{[\s\S]*?return 503;[\s\S]*?\}/,
+    );
+    expect(result.stdout).toMatch(
+      /location \^~ \/fitgrid\/ \{[\s\S]*?if \(-f \/run\/fitgridweb\/maintenance\.flag\) \{[\s\S]*?return 503;[\s\S]*?\}/,
+    );
   });
 
   it("derives an nginx MiB ceiling from the validated byte limit", async () => {

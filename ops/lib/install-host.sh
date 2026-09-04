@@ -334,7 +334,13 @@ install_maintenance_components() {
     fitgrid_error "维护组件安装失败：fitgridweb-maintenance.path"
     return 1
   fi
-  for maintenance_unit in fitgridweb-maintenance.service fitgridweb-backup.service fitgridweb-backup.timer; do
+  for maintenance_unit in \
+    fitgridweb-maintenance.service \
+    fitgridweb-maintenance-recovery.service \
+    fitgridweb-maintenance-sweep.timer \
+    fitgridweb-backup.service \
+    fitgridweb-backup.timer
+  do
     if ! install_atomic_host_file "$maintenance_template_directory/$maintenance_unit" \
       "$maintenance_systemd_directory/$maintenance_unit" 644; then
       fitgrid_error "维护组件安装失败：$maintenance_unit"
@@ -351,6 +357,10 @@ install_maintenance_components() {
   systemctl daemon-reload || { fitgrid_error "维护组件安装失败：systemd daemon-reload"; return 1; }
   systemctl enable --now fitgridweb-maintenance.path \
     || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance.path 启用"; return 1; }
+  systemctl enable fitgridweb-maintenance-recovery.service \
+    || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance-recovery.service 启用"; return 1; }
+  systemctl enable --now fitgridweb-maintenance-sweep.timer \
+    || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance-sweep.timer 启用"; return 1; }
 
   if [ -n "$backup_remote" ] && backup_remote_is_distinct_mount "$backup_remote"; then
     systemctl enable --now fitgridweb-backup.timer \

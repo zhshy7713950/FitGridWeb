@@ -1,8 +1,9 @@
 [Unit]
-Description=FitGridWeb administrator maintenance worker
+Description=Recover and guard FitGridWeb maintenance state before application boot
 Requires=docker.service
 Wants=network-online.target
 After=network-online.target docker.service
+Before=fitgridweb.service
 
 [Service]
 Type=oneshot
@@ -16,3 +17,6 @@ RuntimeDirectoryPreserve=yes
 ExecStart=/opt/fitgridweb/ops/maintenance-worker.sh
 UMask=0077
 TimeoutStartSec=infinity
+
+[Install]
+WantedBy=multi-user.target

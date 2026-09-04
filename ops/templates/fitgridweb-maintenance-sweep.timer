@@ -1,0 +1,11 @@
+[Unit]
+Description=Sweep FitGridWeb prepared maintenance state every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=1min
+AccuracySec=5s
+Unit=fitgridweb-maintenance.service
+
+[Install]
+WantedBy=timers.target

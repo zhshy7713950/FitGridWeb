@@ -29,20 +29,36 @@ maintenance_current_upload=
 maintenance_current_work=
 maintenance_current_prepared=
 maintenance_cleanup_prepared=false
-trap 'maintenance_worker_status=$?; maintenance_cleanup_current; exit "$maintenance_worker_status"' EXIT HUP INT TERM
+maintenance_preserve_recovery=false
+maintenance_worker_exit() {
+  maintenance_worker_status=$?
+  if [ -n "${maintenance_current_claim:-}" ]; then
+    maintenance_preserve_recovery=true
+  fi
+  maintenance_cleanup_current
+  trap - EXIT
+  exit "$maintenance_worker_status"
+}
+trap maintenance_worker_exit EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 maintenance_worker_status=0
 maintenance_recover_claimed_jobs || maintenance_worker_status=1
-maintenance_sync_public_marker || exit 1
 maintenance_purge_terminal_orphans || maintenance_worker_status=1
-maintenance_authority_state=0
-maintenance_any_active || maintenance_authority_state=$?
-case "$maintenance_authority_state" in 0) exit 1 ;; 1) : ;; *) exit 1 ;; esac
-maintenance_drain_inbox || maintenance_worker_status=1
+if ! maintenance_guard_authority; then
+  maintenance_sync_public_marker || :
+  exit 1
+fi
 maintenance_sync_public_marker || exit 1
-maintenance_authority_state=0
-maintenance_any_active || maintenance_authority_state=$?
-case "$maintenance_authority_state" in 0) exit 1 ;; 1) : ;; *) exit 1 ;; esac
+maintenance_drain_inbox || maintenance_worker_status=1
+if ! maintenance_guard_authority; then
+  maintenance_sync_public_marker || :
+  exit 1
+fi
+maintenance_sync_public_marker || exit 1
 maintenance_expire_prepared || maintenance_worker_status=1
 maintenance_purge_terminal_orphans || maintenance_worker_status=1
+maintenance_guard_authority || exit 1
 exit "$maintenance_worker_status"

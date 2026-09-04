@@ -37,7 +37,7 @@ import {
   type WriteUploadInput,
 } from "./types";
 
-const terminalStates = new Set(["ready", "awaiting-confirmation", "succeeded", "failed", "intervention-required"]);
+const terminalStates = new Set(["ready", "succeeded", "failed", "intervention-required"]);
 const jobTypeSchema = z.enum(["backup", "inspect-restore", "restore"]);
 const isoDateSchema = z.iso.datetime({ offset: true });
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/);
@@ -334,7 +334,7 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
     }
   }
 
-  private async assertIdle(): Promise<void> {
+  private async assertIdle(allowedAwaitingJobId?: string): Promise<void> {
     const admissionPath = path.join(this.statusDirectory, "active-job.json");
     const admission = await readValidatedJson(admissionPath, admissionSchema, { missing: "null" });
     if (admission) {
@@ -343,7 +343,19 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
         diskStatusSchema,
         { missing: "null" },
       );
-      if (!admittedStatus || admittedStatus.id !== admission.jobId || !terminalStates.has(admittedStatus.state)) {
+      const allowedAwaiting = admittedStatus !== null
+        && admittedStatus.id === allowedAwaitingJobId
+        && admittedStatus.type === "inspect-restore"
+        && admittedStatus.state === "awaiting-confirmation";
+      const expiredAwaiting = admittedStatus?.type === "inspect-restore"
+        && admittedStatus.state === "awaiting-confirmation"
+        && admittedStatus.expiresAt !== undefined
+        && admittedStatus.expiresAt <= Math.floor(this.clock() / 1_000);
+      if (
+        !admittedStatus
+        || admittedStatus.id !== admission.jobId
+        || (!terminalStates.has(admittedStatus.state) && !allowedAwaiting && !expiredAwaiting)
+      ) {
         throw busy();
       }
       await unlink(admissionPath).catch(() => { throw stateInvalid(); });
@@ -364,7 +376,15 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
     for (const name of statusNames) {
       if (!/^[0-9a-f-]{36}\.json$/.test(name)) continue;
       const value = await readValidatedJson(path.join(this.statusDirectory, name), diskStatusSchema);
-      if (value && !terminalStates.has(value.state)) throw busy();
+      const allowedAwaiting = value !== null
+        && value.id === allowedAwaitingJobId
+        && value.type === "inspect-restore"
+        && value.state === "awaiting-confirmation";
+      const expiredAwaiting = value?.type === "inspect-restore"
+        && value.state === "awaiting-confirmation"
+        && value.expiresAt !== undefined
+        && value.expiresAt <= Math.floor(this.clock() / 1_000);
+      if (value && !terminalStates.has(value.state) && !allowedAwaiting && !expiredAwaiting) throw busy();
     }
   }
 
@@ -505,7 +525,6 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
     await this.requireSpool();
     const release = await this.acquireSubmissionLock();
     try {
-      await this.assertIdle();
       const inspection = await this.readDiskStatus(restoreId);
       if (
         inspection.type !== "inspect-restore"
@@ -514,6 +533,7 @@ export class FileMaintenanceGateway implements MaintenanceGateway {
         || inspection.expiresAt === undefined
         || inspection.expiresAt <= Math.floor(this.clock() / 1_000)
       ) throw notFound();
+      await this.assertIdle(restoreId);
       const id = this.nextId();
       await this.submit({
         schemaVersion: 1,

@@ -10,6 +10,8 @@ const library = path.join(process.cwd(), "ops/lib/install-host.sh");
 const unitTemplate = path.join(process.cwd(), "ops/templates/fitgridweb.service");
 const maintenancePathTemplate = path.join(process.cwd(), "ops/templates/fitgridweb-maintenance.path");
 const maintenanceServiceTemplate = path.join(process.cwd(), "ops/templates/fitgridweb-maintenance.service");
+const maintenanceRecoveryTemplate = path.join(process.cwd(), "ops/templates/fitgridweb-maintenance-recovery.service");
+const maintenanceSweepTimerTemplate = path.join(process.cwd(), "ops/templates/fitgridweb-maintenance-sweep.timer");
 const backupServiceTemplate = path.join(process.cwd(), "ops/templates/fitgridweb-backup.service");
 const backupTimerTemplate = path.join(process.cwd(), "ops/templates/fitgridweb-backup.timer");
 const logrotateTemplate = path.join(process.cwd(), "ops/templates/fitgridweb-ops.logrotate");
@@ -160,6 +162,8 @@ describe("boot recovery", () => {
     const source = await readFile(unitTemplate, "utf8");
     expect(source).toContain("Requires=docker.service");
     expect(source).toContain("After=network-online.target docker.service");
+    expect(source).toContain("Requires=fitgridweb-maintenance-recovery.service");
+    expect(source).toMatch(/After=.*fitgridweb-maintenance-recovery\.service/);
     expect(source).toContain("docker-compose.low-memory.yml up --no-build -d --wait db app");
     expect(source).toContain("docker-compose.low-memory.yml stop app db");
     expect(source).not.toMatch(/caddy|sing-box|ufw|firewall/i);
@@ -236,9 +240,20 @@ describe("maintenance installation", () => {
       .toContain(`PathExistsGlob=${files.web}/inbox/*.json`);
     const service = await readFile(maintenanceServiceTemplate, "utf8");
     expect(service).toContain("Requires=docker.service");
+    expect(service).toContain("User=root\nGroup=root");
+    expect(service).toContain("RuntimeDirectoryMode=0755");
     expect(service).toContain("ExecStart=/opt/fitgridweb/ops/maintenance-worker.sh");
     expect(service).toContain("UMask=0077");
     expect(service).not.toContain("fitgridweb.service");
+    const recovery = await readFile(maintenanceRecoveryTemplate, "utf8");
+    expect(recovery).toContain("Before=fitgridweb.service");
+    expect(recovery).toContain("User=root\nGroup=root");
+    expect(recovery).toContain("RuntimeDirectoryMode=0755");
+    expect(recovery).toContain("ExecStart=/opt/fitgridweb/ops/maintenance-worker.sh");
+    expect(recovery).not.toMatch(/ConditionPathExists|PathExistsGlob/);
+    const sweep = await readFile(maintenanceSweepTimerTemplate, "utf8");
+    expect(sweep).toContain("OnUnitInactiveSec=1min");
+    expect(sweep).toContain("Unit=fitgridweb-maintenance.service");
     const timer = await readFile(backupTimerTemplate, "utf8");
     expect(timer).toContain("OnCalendar=*-*-* 02:30:00");
     expect(timer).toContain("Persistent=true");
@@ -249,6 +264,9 @@ describe("maintenance installation", () => {
     expect(await readFile(files.logrotate, "utf8")).toContain(`${files.rootOps}/audit.jsonl`);
     expect((await stat(files.logrotate)).mode & 0o777).toBe(0o600);
     expect(await readFile(files.logrotate, "utf8")).toContain("rotate 180");
+    const installLog = await readFile(files.log, "utf8");
+    expect(installLog).toContain("systemctl enable fitgridweb-maintenance-recovery.service");
+    expect(installLog).toContain("systemctl enable --now fitgridweb-maintenance-sweep.timer");
   });
 
   it("enables unattended backup only on a writable filesystem distinct from root", async () => {
