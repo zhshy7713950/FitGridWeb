@@ -767,6 +767,56 @@ fitgrid_install_main grid.example.com 3300 443 /etc/nginx/conf.d/fitgridweb.conf
     expect(log).not.toMatch(/down|-v|volume rm|system prune/);
   });
 
+  it("keeps upgrade-added environment variables when rolling back to a legacy image", async () => {
+    const files = await fixture();
+    const legacyEnvironment = [
+      "DOMAIN=grid.example.com",
+      "APP_BASE_PATH=/fitgrid",
+      "APP_PORT=3300",
+      "PUBLIC_HTTPS_PORT=443",
+      "PUBLIC_PORT_SUFFIX=",
+      "BETTER_AUTH_URL=https://grid.example.com/fitgrid",
+      `APP_IMAGE=${oldImage}`,
+      "POSTGRES_DB=fitgridweb",
+      "POSTGRES_USER=fitgrid_migrate",
+      "POSTGRES_PASSWORD=legacy-postgres",
+      "APP_DATABASE_USER=fitgrid_app",
+      "APP_DATABASE_PASSWORD=legacy-app",
+      "DATABASE_URL=postgresql://fitgrid_app:legacy-app@db:5432/fitgridweb",
+      "MIGRATION_DATABASE_URL=postgresql://fitgrid_migrate:legacy-postgres@db:5432/fitgridweb",
+      "BETTER_AUTH_SECRET=legacy-auth",
+      "OWNER_REF_SECRET=legacy-owner",
+      "CURSOR_SIGNING_SECRET=legacy-cursor",
+      "LOG_LEVEL=info",
+      `BACKUP_DIR=${files.root}/backups`,
+      `BACKUP_REMOTE_DIR=${files.root}/remote`,
+      `BACKUP_ENCRYPTION_KEY_FILE=${files.root}/backup.key`,
+      "BACKUP_RETENTION_DAYS=14",
+    ].join("\n") + "\n";
+    const upgradedEnvironment = [
+      legacyEnvironment.replace(`APP_IMAGE=${oldImage}`, `APP_IMAGE=${newImage}`).trimEnd(),
+      `ADMIN_OPS_WEB_DIR=${files.root}/admin-ops/web`,
+      `ADMIN_OPS_ROOT_DIR=${files.root}/admin-ops/root`,
+      `PORTABLE_BACKUP_DIR=${files.root}/portable-backups`,
+      `PORTABLE_BACKUP_HISTORY_FILE=${files.root}/admin-ops/web/status/backups.json`,
+      "PORTABLE_BACKUP_MAX_BYTES=536870912",
+      "PORTABLE_BACKUP_READER_GID=1001",
+    ].join("\n") + "\n";
+    await writeFile(files.oldEnvironment, legacyEnvironment);
+    await writeFile(files.environment, upgradedEnvironment);
+
+    const result = run(
+      `rollback_app "${files.project}" "${files.environment}" "${files.oldEnvironment}"`,
+      files,
+    );
+
+    expect(result.status).toBe(1);
+    expect(await readFile(files.environment, "utf8")).toBe(
+      upgradedEnvironment.replace(`APP_IMAGE=${newImage}`, `APP_IMAGE=${oldImage}`),
+    );
+    expect(await readFile(files.log, "utf8")).toContain("stage rollback-app");
+  });
+
   it("verifies loopback and public health endpoints", async () => {
     const files = await fixture();
     expect(run(`deploy_release "${files.project}" "${files.environment}" "${files.oldEnvironment}" 3300`, files).status).toBe(0);

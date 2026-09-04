@@ -33,11 +33,26 @@ restore_environment() {
   environment_file=$1
   old_environment=${2:-}
   [ -n "$old_environment" ] && [ -f "$old_environment" ] || return 1
+  old_image=$(awk -F= '$1 == "APP_IMAGE" { sub(/^[^=]*=/, ""); print; exit }' "$old_environment")
+  [ -n "$old_image" ] || return 1
   temporary=
   if ! temporary=$(mktemp "${environment_file}.rollback.XXXXXX"); then
     return 1
   fi
-  if ! cp "$old_environment" "$temporary"; then
+  if ! cp "$environment_file" "$temporary"; then
+    rm -f "$temporary" || true
+    return 1
+  fi
+  if ! restored_environment=$(awk -v image="$old_image" '
+    BEGIN { found = 0 }
+    /^APP_IMAGE=/ { print "APP_IMAGE=" image; found = 1; next }
+    { print }
+    END { if (!found) exit 1 }
+  ' "$temporary"); then
+    rm -f "$temporary" || true
+    return 1
+  fi
+  if ! printf '%s\n' "$restored_environment" >"$temporary"; then
     rm -f "$temporary" || true
     return 1
   fi
