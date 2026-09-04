@@ -98,11 +98,15 @@ rollback_host_activation() {
   activation_app_unit_backup=${8:-}
   activation_app_unit_had_previous=$9
 
+  activation_allow_unit_starts=true
   if ! restore_fitgrid_systemd_unit \
     "$activation_app_unit" "$activation_app_unit_backup" "$activation_app_unit_had_previous"; then
+    activation_allow_unit_starts=false
     fitgrid_error "systemd 应用 unit 恢复失败；请立即人工检查"
+    if ! systemctl stop fitgridweb.service; then
+      fitgrid_error "systemd 应用服务停止失败；请立即人工检查"
+    fi
   fi
-  activation_allow_unit_starts=true
   if [ -n "$activation_old_environment" ]; then
     if ! restore_environment "$activation_environment_file" "$activation_old_environment"; then
       activation_allow_unit_starts=false

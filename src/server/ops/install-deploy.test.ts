@@ -102,7 +102,10 @@ case $action in
     rm -f "$UNIT_STATE_DIRECTORY/enabled/$unit"
     [ "$start_now" = false ] || rm -f "$UNIT_STATE_DIRECTORY/active/$unit" ;;
   start) : >"$UNIT_STATE_DIRECTORY/active/$unit" ;;
-  stop) rm -f "$UNIT_STATE_DIRECTORY/active/$unit" ;;
+  stop)
+    if [ "$unit" != fitgridweb.service ] || [ "\${FAIL_APP_STOP:-0}" != 1 ]; then
+      rm -f "$UNIT_STATE_DIRECTORY/active/$unit"
+    fi ;;
   restart)
     if [ "\${FAIL_ACTIVATION_STAGE:-}" = app-restart ]; then
       rm -f "$UNIT_STATE_DIRECTORY/active/$unit"
@@ -120,6 +123,7 @@ case "$action:$unit" in
   enable:fitgridweb.service) failure_stage=app-enable ;;
   restart:fitgridweb.service) failure_stage=app-restart ;;
 esac
+[ "$action:$unit" != stop:fitgridweb.service ] || [ "\${FAIL_APP_STOP:-0}" != 1 ] || exit 1
 [ -z "$failure_stage" ] || [ "\${FAIL_ACTIVATION_STAGE:-}" != "$failure_stage" ]`);
   await executable(bin, "sleep", ":");
   return {
@@ -163,6 +167,22 @@ mktemp() {
     *) printf '%s\\n' "${files.environmentBackup}" ;;
   esac
 }
+cp() {
+  if [ "\${FAIL_UNIT_RESTORE_STAGE:-}" = cp ] \
+    && [ "\${1:-}" = "${files.appUnitBackup}" ] \
+    && [ "\${2:-}" = "${files.appUnitRestoreTemporary}" ]; then
+    return 1
+  fi
+  command cp "$@"
+}
+mv() {
+  if [ "\${FAIL_UNIT_RESTORE_STAGE:-}" = mv ] \
+    && [ "\${1:-}" = "${files.appUnitRestoreTemporary}" ] \
+    && [ "\${2:-}" = "${files.appUnit}" ]; then
+    return 1
+  fi
+  command mv "$@"
+}
 ensure_environment() {
   printf 'APP_IMAGE=${newImage}\\nPORTABLE_BACKUP_MAX_BYTES=536870912\\nBACKUP_REMOTE_DIR=${files.root}/remote\\n' >"$1"
 }
@@ -185,7 +205,14 @@ install_systemd_unit() {
   [ "\${FAIL_ACTIVATION_STAGE:-}" != app-install ]
 }
 cleanup_old_app_images() { :; }
+test_daemon_reload_count=0
 systemctl() {
+  if [ "\${1:-}" = daemon-reload ]; then
+    test_daemon_reload_count=$((test_daemon_reload_count + 1))
+    command systemctl "$@" || return 1
+    [ "\${FAIL_UNIT_RESTORE_STAGE:-}" != daemon ] || [ "$test_daemon_reload_count" -ne 2 ]
+    return $?
+  fi
   if [ "\${1:-}" = start ] && [ "\${2:-}" = fitgridweb.service ]; then
     if grep -Fq '${oldImage}' '${files.environment}'; then app_environment=old; else app_environment=new; fi
     if grep -Fq 'legacy app unit' "$APP_UNIT_FIXTURE"; then app_unit=legacy; else app_unit=new; fi
@@ -378,6 +405,49 @@ restore_fitgrid_unit_states "$saved_states"
     expect(log).toContain("docker compose --project-name fitgridweb");
     expect(log).toContain("stop app");
   });
+
+  it.each([
+    ["cp", "app-restart", false, "new app unit\n"],
+    ["mv", "app-restart", false, "new app unit\n"],
+    ["daemon", "app-restart", false, "legacy app unit\n"],
+    ["daemon", "final-health", false, "legacy app unit\n"],
+    ["daemon", "final-health", true, "legacy app unit\n"],
+  ])(
+    "stops the app and suppresses state restart when unit restore %s fails after %s (stop failure: %s)",
+    async (restoreFailure, activationFailure, stopFails, expectedUnit) => {
+      const files = await fixture();
+      const appUnitName = "fitgridweb.service";
+      await writeFile(files.environment, await readFile(files.oldEnvironment, "utf8"));
+      await writeFile(files.appUnit, "legacy app unit\n");
+      await writeFile(path.join(files.unitState, "enabled", appUnitName), "");
+      await writeFile(path.join(files.unitState, "active", appUnitName), "");
+
+      const result = run(installLifecycleCommand(files, true), files, {
+        APP_UNIT_FIXTURE: files.appUnit,
+        FAIL_ACTIVATION_STAGE: activationFailure,
+        FAIL_APP_STOP: stopFails ? "1" : "0",
+        FAIL_UNIT_RESTORE_STAGE: restoreFailure,
+        UNIT_STATE_DIRECTORY: files.unitState,
+      });
+
+      expect(result.status).toBe(1);
+      expect(await readFile(files.environment, "utf8")).toContain(`APP_IMAGE=${oldImage}`);
+      expect(await readFile(files.appUnit, "utf8")).toBe(expectedUnit);
+      expect(await readdir(path.join(files.unitState, "enabled"))).toEqual([appUnitName]);
+      expect(await readdir(path.join(files.unitState, "active"))).toEqual(stopFails ? [appUnitName] : []);
+      const log = await readFile(files.log, "utf8");
+      const firstPublicHealth = log.indexOf("phase public-health");
+      const activationFailurePoint = activationFailure === "final-health"
+        ? log.indexOf("phase public-health", firstPublicHealth + 1)
+        : log.indexOf("systemctl restart fitgridweb.service");
+      const stop = log.indexOf("systemctl stop fitgridweb.service", activationFailurePoint);
+      const restoreApp = log.indexOf("stage rollback-app", stop);
+      expect(stop).toBeGreaterThan(activationFailurePoint);
+      expect(restoreApp).toBeGreaterThan(stop);
+      expect(log).not.toContain("phase app-state-start");
+      if (stopFails) expect(result.stderr).toContain("systemd 应用服务停止失败；请立即人工检查");
+    },
+  );
 
   it("restores a legacy app unit and preserves its prior service state when app enable fails", async () => {
     const files = await fixture();
