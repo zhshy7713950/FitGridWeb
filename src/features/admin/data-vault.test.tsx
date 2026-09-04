@@ -44,7 +44,7 @@ function api(overrides: Partial<MaintenanceApi> = {}): MaintenanceApi {
     confirmRestore: vi.fn().mockResolvedValue(queued("restore", RESTORE_ID)),
     checkHealth: vi.fn().mockResolvedValue(true),
     download: vi.fn(),
-    navigate: vi.fn(),
+    replaceLocation: vi.fn(),
     clearClientSession: vi.fn(),
     ...overrides,
   };
@@ -157,8 +157,8 @@ describe("data vault backup custody", () => {
   it("requests a token then downloads without buffering or using login navigation", async () => {
     const issueDownload = vi.fn().mockResolvedValue("/fitgrid/api/v1/admin/backups/a/download?token=t");
     const download = vi.fn();
-    const navigate = vi.fn();
-    render(<DataVault api={api({ issueDownload, download, navigate })} initialBackups={[{
+    const replaceLocation = vi.fn();
+    render(<DataVault api={api({ issueDownload, download, replaceLocation })} initialBackups={[{
       id: "backup-a",
       createdAt: "2026-09-03T07:00:00.000Z",
       size: 1024,
@@ -171,7 +171,7 @@ describe("data vault backup custody", () => {
       "/fitgrid/api/v1/admin/backups/a/download?token=t",
       "fitgridweb-20260903T070000Z.fitgridbackup",
     );
-    expect(navigate).not.toHaveBeenCalled();
+    expect(replaceLocation).not.toHaveBeenCalled();
   });
 
   it("creates, clicks, and removes a safe browser download anchor", () => {
@@ -346,7 +346,7 @@ describe("data vault destructive recovery", () => {
   it("clears client session and navigates to the base-path login after restore success", async () => {
     vi.useFakeTimers();
     const clearClientSession = vi.fn();
-    const navigate = vi.fn();
+    const replaceLocation = vi.fn();
     const preview = {
       ...status("awaiting-confirmation", "inspect-restore", RESTORE_ID),
       backupCreatedAt: "2026-09-03T06:30:00.000Z",
@@ -358,7 +358,7 @@ describe("data vault destructive recovery", () => {
     const getJob = vi.fn()
       .mockResolvedValueOnce(preview)
       .mockResolvedValueOnce({ ...status("succeeded", "restore", RESTORE_ID) });
-    render(<DataVault api={api({ getJob, clearClientSession, navigate })} initialBackups={[]} />);
+    render(<DataVault api={api({ getJob, clearClientSession, replaceLocation })} initialBackups={[]} />);
     fireEvent.change(screen.getByLabelText("选择便携备份文件"), {
       target: { files: [archiveFile()] },
     });
@@ -374,13 +374,13 @@ describe("data vault destructive recovery", () => {
     await act(async () => {});
 
     expect(clearClientSession).toHaveBeenCalledTimes(1);
-    expect(navigate).toHaveBeenCalledWith("/login");
+    expect(replaceLocation).toHaveBeenCalledWith("/login");
   });
 
   it("checks health through expected downtime and resumes the final restore status", async () => {
     vi.useFakeTimers();
     const clearClientSession = vi.fn();
-    const navigate = vi.fn();
+    const replaceLocation = vi.fn();
     const checkHealth = vi.fn().mockResolvedValue(true);
     const preview = {
       ...status("awaiting-confirmation", "inspect-restore", RESTORE_ID),
@@ -399,7 +399,7 @@ describe("data vault destructive recovery", () => {
       getJob,
       checkHealth,
       clearClientSession,
-      navigate,
+      replaceLocation,
     })} initialBackups={[]} />);
     fireEvent.change(screen.getByLabelText("选择便携备份文件"), {
       target: { files: [archiveFile()] },
@@ -420,8 +420,57 @@ describe("data vault destructive recovery", () => {
     expect(screen.getByText("服务已恢复，正在读取最终结果…")).toBeInTheDocument();
     await act(async () => vi.advanceTimersByTimeAsync(1_000));
     expect(clearClientSession).toHaveBeenCalledTimes(1);
-    expect(navigate).toHaveBeenCalledWith("/login");
+    expect(replaceLocation).toHaveBeenCalledWith("/login");
   });
+
+  it.each([
+    ["failed", "RESTORE_FAILED", "维护任务失败：RESTORE_FAILED", false],
+    ["intervention-required", "ROLLBACK_FAILED", "维护任务需要人工处理：ROLLBACK_FAILED", true],
+  ] as const)(
+    "shows an accessible %s result inside the restore dialog and allows it to close",
+    async (terminalState, code, message, intervention) => {
+      vi.useFakeTimers();
+      const preview = {
+        ...status("awaiting-confirmation", "inspect-restore", RESTORE_ID),
+        backupCreatedAt: "2026-09-03T06:30:00.000Z",
+        postgresMajor: 17,
+        database: "fitgridweb",
+        expiresAt: 1_788_418_200,
+        preview: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0 },
+      };
+      const getJob = vi.fn()
+        .mockResolvedValueOnce(preview)
+        .mockResolvedValueOnce({
+          ...status(terminalState, "restore", RESTORE_ID),
+          code,
+          rolledBack: terminalState === "failed",
+        });
+      render(<DataVault api={api({ getJob })} initialBackups={[]} />);
+      fireEvent.change(screen.getByLabelText("选择便携备份文件"), {
+        target: { files: [archiveFile()] },
+      });
+      fireEvent.change(screen.getByLabelText("备份密码"), { target: { value: "portable-password" } });
+      fireEvent.submit(screen.getByRole("button", { name: "上传并检查" }).closest("form")!);
+      await act(async () => {});
+      fireEvent.click(screen.getByRole("button", { name: "恢复全部数据" }));
+      fireEvent.change(screen.getByLabelText("当前密码"), { target: { value: "current-password" } });
+      fireEvent.change(screen.getByLabelText("输入“恢复全部数据”以确认"), {
+        target: { value: "恢复全部数据" },
+      });
+      fireEvent.submit(screen.getByRole("button", { name: "确认替换全部数据" }).closest("form")!);
+      await act(async () => {});
+
+      const dialog = screen.getByRole("dialog", { name: "确认整库恢复" });
+      expect(within(dialog).getByRole("alert")).toHaveTextContent(message);
+      expect(within(dialog).getByRole("button", { name: "关闭恢复确认" })).toBeEnabled();
+      if (intervention) {
+        expect(dialog).toHaveTextContent("journalctl -u fitgridweb-maintenance.service");
+        expect(dialog).toHaveTextContent("运维手册");
+      }
+      fireEvent.click(within(dialog).getByRole("button", { name: "关闭恢复确认" }));
+      expect(screen.queryByRole("dialog", { name: "确认整库恢复" })).not.toBeInTheDocument();
+    },
+  );
 
   it("does not reuse a prior healthy probe during a later disconnect", async () => {
     vi.useFakeTimers();

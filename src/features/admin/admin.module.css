@@ -678,6 +678,22 @@
   font-weight: 700;
 }
 
+.interventionNotice {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--negative);
+  color: var(--text-muted);
+  background: var(--canvas);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.interventionNotice strong,
+.interventionNotice code {
+  color: var(--negative);
+}
+
 .ledgerHeading {
   min-height: 46px;
   display: flex;

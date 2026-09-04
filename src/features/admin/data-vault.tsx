@@ -60,7 +60,7 @@ export type MaintenanceApi = {
   ): Promise<QueuedMaintenanceJob>;
   checkHealth(signal?: AbortSignal): Promise<boolean>;
   download(url: string, suggestedFilename: string): void;
-  navigate(path: string): void;
+  replaceLocation(path: string): void;
   clearClientSession(): void;
 };
 
@@ -92,7 +92,7 @@ const defaultMaintenanceApi: MaintenanceApi = {
   confirmRestore: confirmRestoreRequest,
   checkHealth: checkMaintenanceHealth,
   download: downloadMaintenanceArchive,
-  navigate: (path) => window.location.assign(path),
+  replaceLocation: (path) => window.location.replace(path),
   clearClientSession: () => window.sessionStorage.clear(),
 };
 
@@ -343,12 +343,14 @@ function BackupDialog({
 function RestoreConfirmationDialog({
   pending,
   accepted,
+  terminalState,
   error,
   onClose,
   onSubmit,
 }: {
   pending: boolean;
   accepted: boolean;
+  terminalState: "failed" | "intervention-required" | null;
   error: PublicError | null;
   onClose(): void;
   onSubmit(input: ConfirmRestoreInput): void;
@@ -360,7 +362,7 @@ function RestoreConfirmationDialog({
   const cancelRef = useRef<HTMLButtonElement | null>(null);
   const titleId = useId();
   const descriptionId = useId();
-  const locked = pending || accepted;
+  const locked = pending || (accepted && terminalState === null);
   const canConfirm = currentPassword.length > 0 && phrase === "恢复全部数据" && !locked;
   useVaultModal(layerRef, dialogRef, cancelRef, locked, onClose);
 
@@ -395,30 +397,44 @@ function RestoreConfirmationDialog({
           <h2 id={titleId}>确认整库恢复</h2>
           <p id={descriptionId}>这会用已验证备份替换整座生产数据库，所有现有会话都会失效。</p>
           <div className={styles.downtimeWarning}>预计服务会短暂离线。开始后请勿关闭页面。</div>
-          <div className={styles.vaultFields}>
-            <label>
-              <span>当前密码</span>
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={currentPassword}
-                disabled={locked}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-              />
-            </label>
-            <label>
-              <span>输入“恢复全部数据”以确认</span>
-              <input
-                type="text"
-                autoComplete="off"
-                value={phrase}
-                disabled={locked}
-                onChange={(event) => setPhrase(event.target.value)}
-              />
-            </label>
-          </div>
+          {terminalState === null ? (
+            <div className={styles.vaultFields}>
+              <label>
+                <span>当前密码</span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  disabled={locked}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>输入“恢复全部数据”以确认</span>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  value={phrase}
+                  disabled={locked}
+                  onChange={(event) => setPhrase(event.target.value)}
+                />
+              </label>
+            </div>
+          ) : null}
           {error ? <ErrorNotice error={error} /> : null}
-          {accepted ? (
+          {terminalState === "failed" ? (
+            <p className={styles.maintenanceNotice} role="status">
+              恢复没有完成；生产数据已自动回滚或尚未开始替换。关闭后可重新上传备份。
+            </p>
+          ) : terminalState === "intervention-required" ? (
+            <div className={styles.interventionNotice} role="status">
+              <strong>服务器仍处于维护模式，请不要再次恢复。</strong>
+              <span>
+                请通过 SSH 执行 <code>journalctl -u fitgridweb-maintenance.service</code>，
+                并按运维手册的“人工介入”章节处理。
+              </span>
+            </div>
+          ) : accepted ? (
             <p className={styles.maintenanceNotice} role="status">
               服务器正在恢复数据，请勿关闭页面
             </p>
@@ -427,9 +443,11 @@ function RestoreConfirmationDialog({
             <button ref={cancelRef} type="button" disabled={locked} onClick={onClose}>
               关闭恢复确认
             </button>
-            <button type="submit" className={styles.destructiveAction} disabled={!canConfirm}>
-              {pending ? "正在接受恢复…" : accepted ? "恢复进行中…" : "确认替换全部数据"}
-            </button>
+            {terminalState === null ? (
+              <button type="submit" className={styles.destructiveAction} disabled={!canConfirm}>
+                {pending ? "正在接受恢复…" : accepted ? "恢复进行中…" : "确认替换全部数据"}
+              </button>
+            ) : null}
           </div>
         </form>
       </div>
@@ -541,7 +559,7 @@ export function DataVault({
     ) {
       finishedRestoreJob.current = job.id;
       api.clearClientSession();
-      api.navigate(withBasePath("/login"));
+      api.replaceLocation(withBasePath("/login"));
     }
     if (
       job
@@ -592,7 +610,7 @@ export function DataVault({
     ) return;
     finishedRestoreJob.current = activeJobId;
     api.clearClientSession();
-    api.navigate(withBasePath("/login"));
+    api.replaceLocation(withBasePath("/login"));
   }, [activeJobId, api, healthRecovered, jobController.error?.status, restoreAccepted]);
 
   const closeBackupDialog = useCallback(() => {
@@ -602,10 +620,19 @@ export function DataVault({
   }, []);
 
   const closeRestoreDialog = useCallback(() => {
-    if (restoreLock.current || restoreAccepted) return;
+    const terminal = activeOperation === "restore"
+      && jobController.job?.type === "restore"
+      && (jobController.job.state === "failed" || jobController.job.state === "intervention-required");
+    if ((restoreLock.current || restoreAccepted) && !terminal) return;
+    restoreLock.current = false;
+    if (terminal) {
+      setRestoreAccepted(false);
+      setActiveOperation(null);
+      setActiveJobId(null);
+    }
     setRestoreDialogOpen(false);
     setRestoreError(null);
-  }, [restoreAccepted]);
+  }, [activeOperation, jobController.job, restoreAccepted]);
 
   async function submitBackup(input: CreatePortableBackupInput) {
     if (backupLock.current || maintenanceLock.current) return;
@@ -722,6 +749,10 @@ export function DataVault({
     && backupJob?.state !== "failed" && backupJob?.state !== "intervention-required");
   const preview = inspectionPreview?.preview;
   const restoreStatus = activeOperation === "restore" ? jobController.job : null;
+  const restoreTerminalState = restoreStatus?.type === "restore"
+    && (restoreStatus.state === "failed" || restoreStatus.state === "intervention-required")
+    ? restoreStatus.state
+    : null;
   const terminalJobError: PublicError | null = jobController.job
     && (jobController.job.state === "failed" || jobController.job.state === "intervention-required")
     ? {
@@ -907,7 +938,8 @@ export function DataVault({
         <RestoreConfirmationDialog
           pending={restorePending}
           accepted={restoreAccepted}
-          error={restoreError}
+          terminalState={restoreTerminalState}
+          error={restoreError ?? (restoreTerminalState ? terminalJobError : null)}
           onClose={closeRestoreDialog}
           onSubmit={(input) => void submitRestore(input)}
         />
