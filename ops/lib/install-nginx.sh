@@ -172,7 +172,7 @@ render_dedicated_nginx_site() {
   cat <<EOF
 # fitgridweb-vhost-managed
 server {
-    listen ${public_port} ssl;
+    listen ${public_port} ssl http2;
     server_name ${domain};
 
     ssl_certificate ${certificate};

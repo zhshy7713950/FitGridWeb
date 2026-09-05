@@ -7,6 +7,7 @@ import {
   realpath as fsRealpath,
   readFile,
   readdir,
+  rmdir,
   stat,
   symlink,
   unlink,
@@ -149,6 +150,7 @@ async function workerFixture(options: WorkerOptions = {}) {
   const commandLog = path.join(root, "commands.log");
   const dockerArgsLog = path.join(root, "docker-args.log");
   const healthUrlLog = path.join(root, "health-urls.log");
+  const runtimeSqlLog = path.join(root, "runtime-connections.sql");
   const flockArgsLog = path.join(root, "flock-args.log");
   const audit = path.join(rootOps, "audit.jsonl");
   const sha256Log = path.join(root, "sha256.log");
@@ -274,7 +276,19 @@ case "$*" in
   *" stop app"*)
     printf 'stop-app\n' >>"$COMMAND_LOG"
     if [ "\${MAINTENANCE_RESTORE_SOURCE:-}" = rollback ] && [ "$FAIL_ROLLBACK_QUIESCE" = true ]; then exit 9; fi ;;
-  *"pg_terminate_backend"*) printf 'terminate-app-connections\n' >>"$COMMAND_LOG" ;;
+  *"--set=runtime_user="*)
+    runtime_sql=$(cat)
+    printf '%s\n' "$runtime_sql" >"$RUNTIME_SQL_LOG"
+    case "$runtime_sql" in
+      *"pg_terminate_backend"*":'runtime_user'"*) printf 'terminate-app-connections\n' >>"$COMMAND_LOG" ;;
+      *)
+        case "$*" in
+          *"pg_terminate_backend"*)
+            [ "$REQUIRE_RUNTIME_SQL_STDIN" != true ] || exit 19
+            printf 'terminate-app-connections\n' >>"$COMMAND_LOG" ;;
+          *) exit 19 ;;
+        esac ;;
+    esac ;;
   *"pg_restore --data-only"*) exit 71 ;;
   *"pg_restore --clean"*)
     restored_payload=$(cat)
@@ -373,6 +387,13 @@ fi
 if [ "$target" = "$ROOT_OPS_DIRECTORY/audit.jsonl" ] \
   && [ -n "$FAIL_AUDIT_SYNC_CODE" ] \
   && tail -n 1 "$target" | /usr/bin/jq -e --arg code "$FAIL_AUDIT_SYNC_CODE" '.code == $code' >/dev/null 2>&1; then
+  exit 9
+fi
+if [ "$FAIL_CONSUMED_STATUS_SYNC" = true ] \
+  && [ "$target" = "$STATUS_DIRECTORY" ] \
+  && [ ! -e "$STATUS_DIRECTORY/$CONSUMED_STATUS_ID.json" ] \
+  && [ ! -f "$FAIL_CONSUMED_STATUS_SYNC_FILE" ]; then
+  : >"$FAIL_CONSUMED_STATUS_SYNC_FILE"
   exit 9
 fi
 case "$target" in *"$FAIL_SYNC_TARGET"*) [ -z "$FAIL_SYNC_TARGET" ] || exit 9 ;; esac`,
@@ -509,6 +530,8 @@ exec "${realSha256sum}" "$@"`,
     EXPECTED_UPLOAD_CONTENT: "",
     EXPORT_SQL_LOG: path.join(root, "export.sql"),
     RESTORE_SQL_LOG: path.join(root, "restore.sql"),
+    RUNTIME_SQL_LOG: runtimeSqlLog,
+    REQUIRE_RUNTIME_SQL_STDIN: "false",
     DOCKER_ARGS_LOG: dockerArgsLog,
     HEALTH_URL_LOG: healthUrlLog,
     MAINTENANCE_ROOT_UID: String(testRootUid),
@@ -542,6 +565,9 @@ exec "${realSha256sum}" "$@"`,
     FAIL_AUDIT_SYNC_OPERATION: "",
     FAIL_AUDIT_SYNC_STATUS: "",
     FAIL_AUDIT_SYNC_CODE: "",
+    FAIL_CONSUMED_STATUS_SYNC: "false",
+    FAIL_CONSUMED_STATUS_SYNC_FILE: path.join(root, "fail-consumed-status-sync-once"),
+    CONSUMED_STATUS_ID: INSPECT_JOB,
     FAIL_ROLLBACK_AUDIT_APPEND: "false",
     FAIL_RESTORE_SUCCESS_AUDIT_APPEND: "false",
     FAIL_COMPLETED_LEDGER: "false",
@@ -679,6 +705,7 @@ exec "${realSha256sum}" "$@"`,
     commandSequence: async () => (await readFile(commandLog, "utf8")).trim().split("\n").filter(Boolean),
     dockerCommands: async () => (await readFile(dockerArgsLog, "utf8")).trim().split("\n").filter(Boolean),
     healthUrls: async () => (await readFile(healthUrlLog, "utf8")).trim().split("\n").filter(Boolean),
+    runtimeSql: () => readFile(runtimeSqlLog, "utf8"),
     maintenance: () => readJson(path.join(statuses, "maintenance.json")),
     rootMaintenance: () => readJson(path.join(rootOps, "maintenance.json")),
   };
@@ -827,6 +854,83 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(result.status, result.stderr).toBe(0);
     expect(await files.status(JOB_A)).toMatchObject({ state: "ready" });
     expect(await readdir(files.inbox)).toEqual([]);
+  });
+
+  it("supplies runtime connection termination SQL on stdin for psql variable expansion", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+
+    const result = files.runWorker({ REQUIRE_RUNTIME_SQL_STDIN: "true" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await files.runtimeSql()).toContain("pg_terminate_backend");
+    expect(await files.runtimeSql()).toContain(":'runtime_user'");
+  });
+
+  it("releases admission after a normally completed backup", async () => {
+    const files = await workerFixture();
+    await files.enqueue(
+      { schemaVersion: 1, id: JOB_A, type: "backup", actorId: ADMIN, requestId: "01JRELEASE" },
+      "backup password",
+    );
+    await writeFile(path.join(files.statuses, "active-job.json"), JSON.stringify({
+      schemaVersion: 1,
+      jobId: JOB_A,
+      createdAt: "2026-09-03T07:00:00Z",
+    }));
+
+    const result = files.runWorker();
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await files.status(JOB_A)).toMatchObject({ state: "ready" });
+    await expect(stat(path.join(files.statuses, "active-job.json"))).rejects.toThrow();
+  });
+
+  it("keeps admission when terminal persistence moves a backup into intervention", async () => {
+    const files = await workerFixture();
+    await files.enqueue(
+      { schemaVersion: 1, id: JOB_A, type: "backup", actorId: ADMIN, requestId: "01JTERMINAL" },
+      "backup password",
+    );
+    await writeFile(path.join(files.statuses, "active-job.json"), JSON.stringify({
+      schemaVersion: 1,
+      jobId: JOB_A,
+      createdAt: "2026-09-03T07:00:00Z",
+    }));
+
+    const result = files.runWorker({ FAIL_COMPLETED_LEDGER: "true" });
+
+    expect(result.status).not.toBe(0);
+    expect(await files.status(JOB_A)).toMatchObject({
+      state: "intervention-required",
+      code: "TERMINAL_STATE_WRITE_FAILED",
+    });
+    expect(await stat(path.join(files.statuses, "active-job.json"))).toBeDefined();
+  });
+
+  it("keeps admission when the public intervention status also fails to publish", async () => {
+    const files = await workerFixture();
+    await files.enqueue(
+      { schemaVersion: 1, id: JOB_A, type: "backup", actorId: ADMIN, requestId: "01JINTERVENTION" },
+      "backup password",
+    );
+    await writeFile(path.join(files.statuses, "active-job.json"), JSON.stringify({
+      schemaVersion: 1,
+      jobId: JOB_A,
+      createdAt: "2026-09-03T07:00:00Z",
+    }));
+
+    const result = files.runWorker({
+      FAIL_COMPLETED_LEDGER: "true",
+      FAIL_STATUS_STATE: "intervention-required",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(await files.status(JOB_A)).toMatchObject({ state: "ready" });
+    expect(await stat(path.join(files.rootOps, "intervention", JOB_A, "job.json"))).toBeDefined();
+    expect(await files.rootMaintenance()).toMatchObject({ active: true, jobId: JOB_A });
+    expect(await stat(path.join(files.statuses, "active-job.json"))).toBeDefined();
   });
 
   it("persists terminal job IDs in root state and rejects replay after cleanup", async () => {
@@ -1178,6 +1282,96 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     );
   });
 
+  it("consumes the inspection status after a successful restore", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await writeFile(path.join(files.statuses, `${INSPECT_JOB}.json`), JSON.stringify({
+      schemaVersion: 1,
+      id: INSPECT_JOB,
+      type: "inspect-restore",
+      state: "awaiting-confirmation",
+      actorId: ADMIN,
+      requestId: "01JUPLOAD",
+    }));
+    await files.enqueueRestore();
+
+    const result = files.runWorker();
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "succeeded" });
+    await expect(stat(path.join(files.statuses, `${INSPECT_JOB}.json`))).rejects.toThrow();
+  });
+
+  it("consumes the inspection status without removing restore intervention status", async () => {
+    const files = await workerFixture({ restoredHealth: false, rollbackHealth: false });
+    await files.prepareRestore();
+    await writeFile(path.join(files.statuses, `${INSPECT_JOB}.json`), JSON.stringify({
+      schemaVersion: 1,
+      id: INSPECT_JOB,
+      type: "inspect-restore",
+      state: "awaiting-confirmation",
+      actorId: ADMIN,
+      requestId: "01JUPLOAD",
+    }));
+    await files.enqueueRestore();
+
+    const result = files.runWorker();
+
+    expect(result.status).not.toBe(0);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "intervention-required" });
+    await expect(stat(path.join(files.statuses, `${INSPECT_JOB}.json`))).rejects.toThrow();
+  });
+
+  it("retains admission and retries when a replaced inspection status cannot be removed", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    const inspectionStatus = path.join(files.statuses, `${INSPECT_JOB}.json`);
+    await mkdir(inspectionStatus);
+    await files.enqueueRestore();
+    await writeFile(path.join(files.statuses, "active-job.json"), JSON.stringify({
+      schemaVersion: 1,
+      jobId: RESTORE_JOB,
+      createdAt: "2026-09-03T07:00:00Z",
+    }));
+
+    const failedCleanup = files.runWorker();
+
+    expect(failedCleanup.status).not.toBe(0);
+    expect(await stat(path.join(files.statuses, "active-job.json"))).toBeDefined();
+    expect(await stat(path.join(files.rootOps, "claimed", `${RESTORE_JOB}.json`))).toBeDefined();
+
+    await rmdir(inspectionStatus);
+    const retry = files.runWorker();
+
+    expect(retry.status, retry.stderr).toBe(0);
+    await expect(stat(path.join(files.statuses, "active-job.json"))).rejects.toThrow();
+    await expect(stat(path.join(files.rootOps, "claimed", `${RESTORE_JOB}.json`))).rejects.toThrow();
+  });
+
+  it("retains admission until consumed inspection status deletion is durable", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await writeFile(path.join(files.statuses, `${INSPECT_JOB}.json`), "awaiting confirmation");
+    await files.enqueueRestore();
+    await writeFile(path.join(files.statuses, "active-job.json"), JSON.stringify({
+      schemaVersion: 1,
+      jobId: RESTORE_JOB,
+      createdAt: "2026-09-03T07:00:00Z",
+    }));
+
+    const failedSync = files.runWorker({ FAIL_CONSUMED_STATUS_SYNC: "true" });
+
+    expect(failedSync.status).not.toBe(0);
+    expect(await stat(path.join(files.statuses, "active-job.json"))).toBeDefined();
+    expect(await stat(path.join(files.rootOps, "claimed", `${RESTORE_JOB}.json`))).toBeDefined();
+
+    const retry = files.runWorker({ FAIL_CONSUMED_STATUS_SYNC: "true" });
+
+    expect(retry.status, retry.stderr).toBe(0);
+    await expect(stat(path.join(files.statuses, "active-job.json"))).rejects.toThrow();
+    await expect(stat(path.join(files.rootOps, "claimed", `${RESTORE_JOB}.json`))).rejects.toThrow();
+  });
+
   it("enters intervention when the fence cannot become durable before marker activation", async () => {
     const files = await workerFixture();
     await files.prepareRestore();
@@ -1467,6 +1661,11 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     const files = await workerFixture();
     await files.prepareRestore();
     await files.enqueueRestore();
+    await writeFile(path.join(files.statuses, "active-job.json"), JSON.stringify({
+      schemaVersion: 1,
+      jobId: RESTORE_JOB,
+      createdAt: "2026-09-03T07:00:00Z",
+    }));
 
     const result = files.runWorker({ FAIL_COMPLETED_LEDGER: "true" });
 
@@ -1490,6 +1689,7 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(await readdir(files.uploads)).toEqual([]);
     expect(await readdir(path.join(files.rootOps, "claimed"))).toEqual([]);
     expect(await readdir(path.join(files.rootOps, "work"))).toEqual([]);
+    expect(await stat(path.join(files.statuses, "active-job.json"))).toBeDefined();
 
     const outsideSecret = path.join(files.root, "outside-secret");
     await writeFile(outsideSecret, "must survive orphan cleanup");

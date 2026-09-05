@@ -657,6 +657,17 @@ maintenance_replay_exists() {
   return 0
 }
 
+maintenance_consume_restore_inspection_status() {
+  [ "${maintenance_job_type:-}" = restore ] || return 0
+  maintenance_is_uuid "${maintenance_restore_id:-}" || return 1
+  maintenance_consumed_status="$ADMIN_OPS_DIR/status/$maintenance_restore_id.json"
+  if [ -e "$maintenance_consumed_status" ] || [ -L "$maintenance_consumed_status" ]; then
+    [ -f "$maintenance_consumed_status" ] && [ ! -L "$maintenance_consumed_status" ] || return 1
+    rm -f "$maintenance_consumed_status" || return 1
+  fi
+  portable_sync_filesystem "$ADMIN_OPS_DIR/status"
+}
+
 maintenance_cleanup_current() {
   if [ "${maintenance_preserve_recovery:-false}" != true ]; then
     [ -z "${maintenance_current_secret:-}" ] || rm -f "$maintenance_current_secret"
@@ -889,8 +900,13 @@ maintenance_require_restore_space() {
 
 maintenance_terminate_runtime_connections() {
   fitgrid_compose exec -T db psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --set=ON_ERROR_STOP=1 \
-    --set="runtime_user=$APP_DATABASE_USER" \
-    --command "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND usename = :'runtime_user' AND pid <> pg_backend_pid()" >/dev/null
+    --set="runtime_user=$APP_DATABASE_USER" >/dev/null <<'EOSQL'
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = current_database()
+  AND usename = :'runtime_user'
+  AND pid <> pg_backend_pid();
+EOSQL
 }
 
 maintenance_restore_trusted_dump() {
@@ -1237,6 +1253,26 @@ maintenance_process_claimed_job() {
     maintenance_enter_intervention TERMINAL_STATE_WRITE_FAILED || :
     maintenance_job_status=1
   fi
+  maintenance_finished_state=$(jq -er '.state | strings' "$(maintenance_status_file)" 2>/dev/null) || maintenance_finished_state=
+  if ! maintenance_consume_restore_inspection_status; then
+    maintenance_preserve_recovery=true
+    maintenance_job_status=1
+  elif maintenance_intervention_is_terminal_id "$maintenance_job_id"; then
+    :
+  else
+    case "$maintenance_finished_state" in
+      ready|succeeded|failed)
+        if ! maintenance_reconcile_admission "$maintenance_job_id"; then
+          maintenance_preserve_recovery=true
+          maintenance_job_status=1
+        fi
+        ;;
+      *)
+        maintenance_preserve_recovery=true
+        maintenance_job_status=1
+        ;;
+    esac
+  fi
   maintenance_cleanup_current
   return "$maintenance_job_status"
 }
@@ -1266,6 +1302,9 @@ maintenance_recover_claimed_jobs() {
         if [ "$maintenance_recovery_authority_state" -eq 0 ] \
           && { [ "$maintenance_job_type" != restore ] || [ "$maintenance_recovery_marker_state" -ne 0 ]; }; then
           maintenance_recovery_terminalized=false
+        fi
+        if [ "$maintenance_recovery_terminalized" = true ]; then
+          maintenance_consume_restore_inspection_status || maintenance_recovery_terminalized=false
         fi
         if [ "$maintenance_recovery_terminalized" = true ]; then
           maintenance_reconcile_admission "$maintenance_job_id" || maintenance_recovery_terminalized=false
@@ -1330,6 +1369,12 @@ maintenance_recover_claimed_jobs() {
           [ -e "$maintenance_stale_work" ] || continue
           rm -rf "$maintenance_stale_work"
         done
+        continue
+      fi
+      if ! maintenance_consume_restore_inspection_status; then
+        maintenance_preserve_recovery=true
+        maintenance_cleanup_current
+        maintenance_recovery_status=1
         continue
       fi
       maintenance_cleanup_current

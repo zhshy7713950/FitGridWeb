@@ -128,7 +128,7 @@ describe("dedicated nginx site preparation", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(await readFile(files.site, "utf8")).toBe(sourceSite);
     const dedicated = await readFile(files.dedicatedSite, "utf8");
-    expect(dedicated).toContain("listen 443 ssl;");
+    expect(dedicated).toContain("listen 443 ssl http2;");
     expect(dedicated).toContain("server_name grid.example.com;");
     expect(dedicated).toContain(`ssl_certificate ${files.certificate};`);
     expect(dedicated).toContain(`ssl_certificate_key ${files.certificateKey};`);
