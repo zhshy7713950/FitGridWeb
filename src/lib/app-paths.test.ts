@@ -18,6 +18,7 @@ describe("application paths", () => {
     "/settings",
     "/settings/security/",
     "/admin/users",
+    "/admin/data/",
     "/fitgrid/admin",
     "/grids\\evil",
   ])(
@@ -48,6 +49,8 @@ describe("application paths", () => {
     "/settings/security?mode=password#current",
     "/admin",
     "/admin?cursor=safe#users",
+    "/admin/data",
+    "/admin/data?job=active#history",
   ])("keeps the exact account return path %s", (value) => {
     expect(safeReturnPath(value)).toBe(value);
   });
@@ -75,6 +78,8 @@ describe("application paths", () => {
     ["/fitgrid/settings/security?mode=password#current", "/fitgrid", "/settings/security?mode=password#current"],
     ["/admin?cursor=safe#users", "", "/admin?cursor=safe#users"],
     ["/fitgrid/admin?cursor=safe#users", "/fitgrid", "/admin?cursor=safe#users"],
+    ["/admin/data?job=active#history", "", "/admin/data?job=active#history"],
+    ["/fitgrid/admin/data?job=active#history", "/fitgrid", "/admin/data?job=active#history"],
   ] as const)("preserves an allowed anonymous return path %s", (visiblePath, basePath, returnTo) => {
     expect(unauthorizedRoute(visiblePath, basePath)).toBe(
       `/login?returnTo=${encodeURIComponent(returnTo)}`,
@@ -84,6 +89,7 @@ describe("application paths", () => {
   it.each([
     "/fitgrid/fitgrid/settings/security",
     "/fitgrid/fitgrid/admin",
+    "/fitgrid/fitgrid/admin/data",
   ])("rejects a double base path %s", (visiblePath) => {
     expect(unauthorizedRoute(visiblePath, "/fitgrid")).toBe("/login?returnTo=%2Fgrids");
   });

@@ -75,6 +75,7 @@ describe("AppShell", () => {
       "/settings/security",
     );
     expect(screen.queryByRole("link", { name: "账号管理" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "数据管理" })).not.toBeInTheDocument();
 
     rerender(
       <AppShell user={{ id: "u2", username: "admin", role: "admin", status: "active" }}>
@@ -83,6 +84,17 @@ describe("AppShell", () => {
     );
 
     expect(screen.getByRole("link", { name: "账号管理" })).toHaveAttribute("href", "/admin");
+    expect(screen.getByRole("link", { name: "数据管理" })).toHaveAttribute(
+      "href",
+      "/admin/data",
+    );
+    expect(
+      screen.getByRole("navigation", { name: "主导航" }).querySelectorAll("a"),
+    ).toHaveLength(4);
+    expect(
+      Array.from(screen.getByRole("navigation", { name: "主导航" }).querySelectorAll("a"))
+        .map((link) => link.textContent),
+    ).toEqual(["网格产品", "账号管理", "数据管理", "安全设置"]);
   });
 
   it.each([
@@ -90,6 +102,7 @@ describe("AppShell", () => {
     ["/grids/grid-1/edit", "网格产品"],
     ["/settings/security", "安全设置"],
     ["/admin", "账号管理"],
+    ["/admin/data", "数据管理"],
   ])("marks only the matching navigation link current at %s", (pathname, currentLabel) => {
     usePathname.mockReturnValue(pathname);
 
@@ -103,7 +116,7 @@ describe("AppShell", () => {
     expect(screen.getAllByRole("link").filter((link) => link.hasAttribute("aria-current"))).toHaveLength(1);
   });
 
-  it.each(["/settings", "/settings/security/", "/admin/users", "/invite/token"])(
+  it.each(["/settings", "/settings/security/", "/admin/users", "/admin/data/", "/invite/token"])(
     "does not mark an unrelated navigation link current at %s",
     (pathname) => {
       usePathname.mockReturnValue(pathname);
@@ -157,7 +170,7 @@ describe("AppShell", () => {
     expect(screen.getByRole("link", { name: label })).toHaveAttribute("href", href);
   });
 
-  it.each(["/grids", "/settings/security", "/admin"])(
+  it.each(["/grids", "/settings/security", "/admin", "/admin/data"])(
     "does not show a hierarchical back link on the primary page %s",
     (pathname) => {
       usePathname.mockReturnValue(pathname);

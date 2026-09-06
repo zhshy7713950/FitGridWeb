@@ -27,6 +27,15 @@ function AccountsIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+function DataIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
+      <ellipse cx="12" cy="5" rx="7" ry="3" />
+      <path d="M5 5v7c0 1.7 3.1 3 7 3s7-1.3 7-3V5M5 12v7c0 1.7 3.1 3 7 3s7-1.3 7-3v-7" />
+    </svg>
+  );
+}
+
 function appPathname(pathname: string): string {
   const basePath = browserBasePath();
   if (basePath && pathname.startsWith(`${basePath}/`)) return pathname.slice(basePath.length);
@@ -78,16 +87,22 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
           <GridIcon />
           <span>网格产品</span>
         </Link>
+        {user.role === "admin" ? (
+          <>
+            <Link href="/admin" aria-current={pathname === "/admin" ? "page" : undefined}>
+              <AccountsIcon />
+              <span>账号管理</span>
+            </Link>
+            <Link href="/admin/data" aria-current={pathname === "/admin/data" ? "page" : undefined}>
+              <DataIcon />
+              <span>数据管理</span>
+            </Link>
+          </>
+        ) : null}
         <Link href="/settings/security" aria-current={pathname === "/settings/security" ? "page" : undefined}>
           <SecurityIcon />
           <span>安全设置</span>
         </Link>
-        {user.role === "admin" ? (
-          <Link href="/admin" aria-current={pathname === "/admin" ? "page" : undefined}>
-            <AccountsIcon />
-            <span>账号管理</span>
-          </Link>
-        ) : null}
       </nav>
       <main className={styles.content}>{children}</main>
     </div>

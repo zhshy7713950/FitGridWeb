@@ -241,10 +241,13 @@ describe.sequential("database-free UI demo", () => {
     await page.goto(`${baseUrl}/grids`, { waitUntil: "domcontentloaded" });
     const securityLink = page.getByRole("link", { name: "安全设置" });
     const adminLink = page.getByRole("link", { name: "账号管理" });
+    const dataLink = page.getByRole("link", { name: "数据管理" });
     await expect.poll(() => securityLink.isVisible()).toBe(true);
     expect(await adminLink.isVisible()).toBe(true);
+    expect(await dataLink.isVisible()).toBe(true);
     expect(await securityLink.getAttribute("href")).toBe(`${appBasePath}/settings/security`);
     expect(await adminLink.getAttribute("href")).toBe(`${appBasePath}/admin`);
+    expect(await dataLink.getAttribute("href")).toBe(`${appBasePath}/admin/data`);
 
     await securityLink.click();
     await page.waitForURL(`${baseUrl}/settings/security`);
@@ -267,7 +270,7 @@ describe.sequential("database-free UI demo", () => {
     expect(consoleErrors).toEqual([]);
   }, 30_000);
 
-  it("creates an invitation with manual-copy fallback and confirms one status change", async () => {
+  it("separates data custody from account administration", async () => {
     const { page, consoleErrors } = await newPage({
       width: 1440,
       height: 900,
@@ -280,6 +283,12 @@ describe.sequential("database-free UI demo", () => {
     expect(await page.getByText("管理员权限已验证").isVisible()).toBe(true);
     expect(await page.getByText(/产品数量/).count()).toBe(0);
     expect(await page.getByRole("button", { name: /查看产品/ }).count()).toBe(0);
+    expect(await page.getByRole("heading", { name: "数据保险库" }).count()).toBe(0);
+
+    await page.getByRole("link", { name: "数据管理" }).click();
+    await page.waitForURL(`${baseUrl}/admin/data`);
+    await expect.poll(() => page.getByRole("heading", { level: 1, name: "数据管理" }).isVisible())
+      .toBe(true);
     expect(await page.getByRole("heading", { name: "数据保险库" }).isVisible()).toBe(true);
     const history = page.getByRole("list", { name: "历史备份" });
     await expect.poll(() => history.getByRole("listitem").count()).toBe(2);
@@ -313,7 +322,12 @@ describe.sequential("database-free UI demo", () => {
     ));
     const downloadedArchive = await downloadEvent;
     expect(downloadedArchive.suggestedFilename()).toBe("fitgridweb-20260903T080000Z.fitgridbackup");
-    expect(page.url()).toBe(`${baseUrl}/admin`);
+    expect(page.url()).toBe(`${baseUrl}/admin/data`);
+
+    await page.getByRole("link", { name: "账号管理" }).click();
+    await page.waitForURL(`${baseUrl}/admin`);
+    await expect.poll(() => page.getByRole("heading", { level: 1, name: "账号管理" }).isVisible())
+      .toBe(true);
 
     await page.getByRole("button", { name: "创建邀请" }).click();
     const invitationInput = page.getByLabel("新邀请链接");
@@ -349,9 +363,18 @@ describe.sequential("database-free UI demo", () => {
     expect(await memberRow.getByRole("button", { name: "启用 ledger.operator" }).isEnabled())
       .toBe(true);
 
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize({ width: 320, height: 844 });
     await expectTopNavigation(page);
     await expectNoHorizontalOverflow(page);
+    for (const label of ["网格产品", "账号管理", "数据管理", "安全设置"]) {
+      const link = page.getByRole("link", { name: label });
+      expect(await link.isVisible()).toBe(true);
+      const linkBox = await link.boundingBox();
+      const labelBox = await link.locator("span").boundingBox();
+      expect(linkBox).not.toBeNull();
+      expect(labelBox).not.toBeNull();
+      expect(labelBox!.x + labelBox!.width).toBeLessThanOrEqual(linkBox!.x + linkBox!.width);
+    }
     expect(await page.getByRole("button", { name: "创建新邀请" }).isEnabled()).toBe(true);
     expect(consoleErrors).toEqual([]);
   }, 30_000);
