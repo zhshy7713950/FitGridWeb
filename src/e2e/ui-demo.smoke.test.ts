@@ -372,10 +372,23 @@ describe.sequential("database-free UI demo", () => {
       page.getByRole("button", { name: "登录工作台" }).click(),
     ]);
     await expect.poll(() => page.getByText("已载入 20 项", { exact: false }).count()).toBe(1);
+    const mobileMenuTrigger = page.getByRole("button", { name: "更多操作" });
+    expect(await mobileMenuTrigger.isVisible()).toBe(true);
+    expect(await page.getByRole("button", { name: "刷新" }).isVisible()).toBe(false);
+    await mobileMenuTrigger.click();
+    let mobileMenu = page.getByRole("group", { name: "更多操作菜单" });
     const expectedImportHref = `${appBasePath}/grids/import`;
-    expect(await page.getByRole("link", { name: "导入数据" }).getAttribute("href"))
+    expect(await mobileMenu.getByRole("link", { name: "导入数据" }).getAttribute("href"))
       .toBe(expectedImportHref);
     expectExactlyOneBasePrefix(expectedImportHref);
+    await page.keyboard.press("Escape");
+    await expect.poll(() => mobileMenu.count()).toBe(0);
+    const mobileProductFontSize = await page.getByRole("cell", { name: "518880", exact: true })
+      .evaluate((element) => window.getComputedStyle(element).fontSize);
+    const mobileProductHeaderFontSize = await page.getByRole("columnheader", { name: "产品代码" })
+      .evaluate((element) => window.getComputedStyle(element).fontSize);
+    expect(mobileProductFontSize).toBe("12px");
+    expect(mobileProductHeaderFontSize).toBe("12px");
     const exportPaths: string[] = [];
     await page.route("**/api/v1/grid-trades/export?format=*", async (route) => {
       const requestUrl = new URL(route.request().url());
@@ -390,7 +403,9 @@ describe.sequential("database-free UI demo", () => {
         status: 200,
       });
     });
-    await page.getByRole("button", { name: "数据备份" }).click();
+    await mobileMenuTrigger.click();
+    mobileMenu = page.getByRole("group", { name: "更多操作菜单" });
+    await mobileMenu.getByRole("button", { name: "数据备份" }).click();
     const backupDialog = page.getByRole("dialog", { name: "数据备份" });
     expect(await backupDialog.isVisible()).toBe(true);
     expect(await backupDialog.getByRole("button", { name: "下载 Android 兼容 JSON" }).isVisible())
@@ -429,11 +444,35 @@ describe.sequential("database-free UI demo", () => {
     await page.getByRole("button", { name: "加载更多" }).click();
     await expect.poll(() => rows.count()).toBe(24);
 
-    await page.getByRole("button", { name: "刷新" }).click();
+    await mobileMenuTrigger.click();
+    mobileMenu = page.getByRole("group", { name: "更多操作菜单" });
+    await mobileMenu.getByRole("button", { name: "刷新" }).click();
     await expect.poll(() => page.getByRole("status", { name: "正在刷新…" }).count()).toBe(1);
     await expect.poll(() => page.getByRole("status", { name: "正在刷新…" }).count()).toBe(0);
     await page.getByRole("cell", { name: "518880", exact: true }).click();
     await page.waitForURL(`${baseUrl}/grids/demo-grid-01`);
+    const detailMenuTrigger = page.getByRole("button", { name: "更多操作" });
+    await expect.poll(() => detailMenuTrigger.isVisible()).toBe(true);
+    expect(await page.getByRole("button", { name: "重新计算" }).isVisible()).toBe(false);
+    await detailMenuTrigger.click();
+    const detailMenu = page.getByRole("group", { name: "更多操作菜单" });
+    expect(await detailMenu.locator("button, a").allTextContents()).toEqual([
+      "重新计算",
+      "编辑产品",
+      "删除产品",
+    ]);
+    await page.keyboard.press("Escape");
+    const mobileTableBox = await page.getByRole("region", { name: "网格计算结果" }).boundingBox();
+    const mobileParametersBox = await page.locator('[aria-label="产品参数摘要"]').boundingBox();
+    expect(mobileTableBox).not.toBeNull();
+    expect(mobileParametersBox).not.toBeNull();
+    expect(mobileParametersBox!.y).toBeGreaterThanOrEqual(mobileTableBox!.y + mobileTableBox!.height);
+    expect(await page.getByRole("columnheader", { name: "序号" }).evaluate(
+      (element) => window.getComputedStyle(element).fontSize,
+    )).toBe("12px");
+    expect(await page.locator("tbody td:nth-child(3)").first().evaluate(
+      (element) => window.getComputedStyle(element).fontSize,
+    )).toBe("14px");
     const mobileBackHref = await page.getByRole("link", { name: "返回网格产品" }).getAttribute("href");
     expect(mobileBackHref).toBe(`${appBasePath}/grids`);
     expectExactlyOneBasePrefix(new URL(mobileBackHref!, baseUrl).pathname);
@@ -482,6 +521,8 @@ describe.sequential("database-free UI demo", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect.poll(() => page.locator("tbody tr").count()).toBe(20);
+    expect(await page.getByRole("button", { name: "更多操作" }).isVisible()).toBe(false);
+    expect(await page.getByRole("button", { name: "刷新" }).isVisible()).toBe(true);
     expect(await page.getByRole("table", { name: "网格产品" }).isVisible()).toBe(true);
     expect(await page.locator("thead th:visible").allTextContents()).toEqual([
       "产品名称",
@@ -533,6 +574,21 @@ describe.sequential("database-free UI demo", () => {
 
     await page.getByRole("link", { name: "黄金 ETF" }).click();
     await page.waitForURL(`${baseUrl}/grids/demo-grid-01`);
+    expect(await page.getByRole("button", { name: "更多操作" }).isVisible()).toBe(false);
+    expect(await page.getByRole("button", { name: "重新计算" }).isVisible()).toBe(true);
+    const desktopParametersBox = await page.locator('[aria-label="产品参数摘要"]').boundingBox();
+    const desktopTableBox = await page.getByRole("region", { name: "网格计算结果" }).boundingBox();
+    expect(desktopParametersBox).not.toBeNull();
+    expect(desktopTableBox).not.toBeNull();
+    expect(desktopParametersBox!.y + desktopParametersBox!.height).toBeLessThanOrEqual(
+      desktopTableBox!.y,
+    );
+    expect(await page.getByRole("columnheader", { name: "序号" }).evaluate(
+      (element) => window.getComputedStyle(element).fontSize,
+    )).toBe("10px");
+    expect(await page.locator("tbody td:nth-child(3)").first().evaluate(
+      (element) => window.getComputedStyle(element).fontSize,
+    )).toBe("12px");
     const accountBarBox = await page.getByRole("banner").boundingBox();
     const desktopBackBox = await page.getByRole("link", { name: "返回网格产品" }).boundingBox();
     expect(accountBarBox).not.toBeNull();

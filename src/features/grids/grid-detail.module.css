@@ -18,6 +18,8 @@
 
 .detailContent {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .heading {
@@ -731,24 +733,22 @@
 
 @media (max-width: 767px) {
   .heading {
-    align-items: stretch;
-    flex-direction: column;
+    align-items: center;
     gap: 14px;
   }
 
-  .actions {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .titleBlock {
+    flex: 1 1 auto;
   }
 
-  .actions button,
-  .actions a {
-    min-height: 44px;
-    padding-inline: 7px;
+  .actions {
+    display: none;
   }
 
   .instrumentStrip {
+    order: 2;
     grid-template-columns: 1fr 1fr;
+    margin: 14px 0 0;
   }
 
   .instrumentStrip div:nth-child(2) {
@@ -759,8 +759,23 @@
     border-bottom: 1px solid var(--detail-line);
   }
 
+  .tableRegion {
+    order: 1;
+  }
+
   .financialTable {
-    min-width: 1240px;
+    min-width: 1360px;
+    font-size: 14px;
+  }
+
+  .financialTable th {
+    font-size: 12px;
+  }
+
+  .financialTable tfoot th,
+  .financialTable tfoot td,
+  .gridType {
+    font-size: 14px;
   }
 
   .inspector {

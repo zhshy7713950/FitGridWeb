@@ -131,6 +131,45 @@ beforeEach(() => {
 });
 
 describe("GridDetailView", () => {
+  it("offers recalculate, edit, and dangerous delete from the mobile action menu", async () => {
+    const user = userEvent.setup();
+    const onRecalculate = vi.fn();
+    render(
+      <GridDetailView
+        detail={detail}
+        onRecalculate={onRecalculate}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "更多操作" }));
+    let menu = screen.getByRole("group", { name: "更多操作菜单" });
+    expect(Array.from(menu.querySelectorAll("button, a")).map((item) => item.textContent)).toEqual([
+      "重新计算",
+      "编辑产品",
+      "删除产品",
+    ]);
+    expect(within(menu).getByRole("link", { name: "编辑产品" })).toHaveAttribute(
+      "href",
+      `/grids/${detail.id}/edit`,
+    );
+    expect(within(menu).getByRole("button", { name: "删除产品" })).toHaveAttribute(
+      "data-danger",
+      "true",
+    );
+
+    await user.click(within(menu).getByRole("button", { name: "重新计算" }));
+    expect(onRecalculate).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("group", { name: "更多操作菜单" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "更多操作" }));
+    menu = screen.getByRole("group", { name: "更多操作菜单" });
+    await user.click(within(menu).getByRole("button", { name: "删除产品" }));
+    const dialog = screen.getByRole("dialog", { name: "永久删除产品" });
+    await user.click(within(dialog).getByRole("button", { name: "关闭" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "更多操作" })).toHaveFocus());
+  });
+
   it("keeps the internal algorithm version out of the product interface", () => {
     render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
 

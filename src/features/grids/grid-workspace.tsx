@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type MouseEvent, type UIEvent } from "reac
 import { ExportDialog } from "@/features/data-transfer/export-dialog";
 
 import { formatDecimal } from "./decimal-display";
+import { MobileActionMenu } from "./mobile-action-menu";
 import type { GridTradeSummary } from "./types";
 import { useGridTrades, type GridTradeListController } from "./use-grid-trades";
 import styles from "./grid-workspace.module.css";
@@ -143,6 +144,20 @@ export function GridWorkspaceView({
           <button type="button" onClick={() => setExportOpen(true)}>数据备份</button>
           <Link className={styles.primaryAction} href="/grids/new">新建产品</Link>
         </div>
+        <MobileActionMenu label="更多操作">
+          <button
+            type="button"
+            disabled={refreshBusy}
+            aria-disabled={refreshBusy}
+            aria-busy={refreshBusy}
+            onClick={refreshWithFeedback}
+          >
+            刷新
+          </button>
+          <Link href="/grids/import">导入数据</Link>
+          <button type="button" onClick={() => setExportOpen(true)}>数据备份</button>
+          <Link href="/grids/new">新建产品</Link>
+        </MobileActionMenu>
       </header>
 
       {refreshBusy ? (
@@ -206,7 +221,7 @@ export function GridWorkspaceView({
         ) : (
           <div className={styles.empty} role="region" aria-label="账号产品空状态">
             <p>{emptyText}</p>
-            <div className={styles.emptyActions}>
+            <div className={`${styles.emptyActions} ${styles.accountEmptyActions}`}>
               <Link className={styles.primaryAction} href="/grids/new">新建产品</Link>
               <Link href="/grids/import">导入数据</Link>
               <button type="button" onClick={() => setExportOpen(true)}>数据备份</button>

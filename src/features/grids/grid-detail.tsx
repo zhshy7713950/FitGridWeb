@@ -10,6 +10,7 @@ import { lockDocumentForModal } from "@/lib/modal-isolation";
 import { formatDecimal, formatRatioAsPercent } from "./decimal-display";
 import { deleteGridTrade, getGridTrade, recalculateGridTrade } from "./grid-api";
 import { GridRowInspector } from "./grid-row-inspector";
+import { MobileActionMenu } from "./mobile-action-menu";
 import type { GridItem, GridTradeDetail } from "./types";
 import styles from "./grid-detail.module.css";
 
@@ -349,6 +350,7 @@ export function GridDetailView({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const rowTriggerRef = useRef<HTMLButtonElement | null>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const restoreFocusRef = useRef(false);
   const restoreDeleteFocusRef = useRef(false);
   const items = detail.calculation.items;
@@ -419,14 +421,37 @@ export function GridDetailView({
           </button>
           <Link href={`/grids/${detail.id}/edit`}>编辑产品</Link>
           <button
-            ref={deleteTriggerRef}
             className={styles.deleteAction}
             type="button"
-            onClick={() => setDeleteOpen(true)}
+            onClick={(event) => {
+              deleteTriggerRef.current = event.currentTarget;
+              setDeleteOpen(true);
+            }}
           >
             删除产品
           </button>
         </div>
+        <MobileActionMenu label="更多操作" triggerRef={mobileMenuTriggerRef}>
+          <button
+            type="button"
+            disabled={recalculating}
+            aria-busy={recalculating}
+            onClick={() => void onRecalculate()}
+          >
+            {recalculating ? "正在计算…" : "重新计算"}
+          </button>
+          <Link href={`/grids/${detail.id}/edit`}>编辑产品</Link>
+          <button
+            type="button"
+            data-danger="true"
+            onClick={() => {
+              deleteTriggerRef.current = mobileMenuTriggerRef.current;
+              setDeleteOpen(true);
+            }}
+          >
+            删除产品
+          </button>
+        </MobileActionMenu>
         </header>
 
         <dl className={styles.instrumentStrip} aria-label="产品参数摘要">

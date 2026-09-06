@@ -13,6 +13,7 @@ const navigation = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 
 import { GridWorkspaceView } from "./grid-workspace";
+import styles from "./grid-workspace.module.css";
 
 const product = {
   id: "g1",
@@ -96,6 +97,33 @@ it("links each product name to its stable detail route and offers all account ac
     "/grids/import",
   );
   await userEvent.click(screen.getByRole("button", { name: "数据备份" }));
+  expect(screen.getByRole("dialog", { name: "数据备份" })).toBeInTheDocument();
+});
+
+it("offers the four heading actions in order from the mobile action menu", async () => {
+  const user = userEvent.setup();
+  const value = controller();
+  render(<GridWorkspaceView controller={value} />);
+
+  await user.click(screen.getByRole("button", { name: "更多操作" }));
+  const menu = screen.getByRole("group", { name: "更多操作菜单" });
+  expect(Array.from(menu.querySelectorAll("button, a")).map((item) => item.textContent)).toEqual([
+    "刷新",
+    "导入数据",
+    "数据备份",
+    "新建产品",
+  ]);
+  expect(within(menu).getByRole("link", { name: "导入数据" })).toHaveAttribute(
+    "href",
+    "/grids/import",
+  );
+  expect(within(menu).getByRole("link", { name: "新建产品" })).toHaveAttribute(
+    "href",
+    "/grids/new",
+  );
+
+  await user.click(within(menu).getByRole("button", { name: "数据备份" }));
+  expect(screen.queryByRole("group", { name: "更多操作菜单" })).not.toBeInTheDocument();
   expect(screen.getByRole("dialog", { name: "数据备份" })).toBeInTheDocument();
 });
 
@@ -251,6 +279,8 @@ it("offers create, import and backup for an empty account but only clearing for 
   expect(screen.getByText("还没有网格产品")).toBeInTheDocument();
   expect(screen.getAllByRole("link", { name: "新建产品" })).toHaveLength(2);
   const accountEmpty = screen.getByRole("region", { name: "账号产品空状态" });
+  expect(within(accountEmpty).getByRole("link", { name: "新建产品" }).parentElement)
+    .toHaveClass(styles.accountEmptyActions);
   expect(within(accountEmpty).getByRole("link", { name: "导入数据" })).toHaveAttribute(
     "href",
     "/grids/import",
@@ -267,6 +297,7 @@ it("offers create, import and backup for an empty account but only clearing for 
   const searchEmpty = screen.getByRole("region", { name: "搜索结果空状态" });
   expect(within(searchEmpty).queryByRole("link")).not.toBeInTheDocument();
   const clear = within(searchEmpty).getByRole("button", { name: "清除搜索" });
+  expect(clear.parentElement).not.toHaveClass(styles.accountEmptyActions);
   expect(within(searchEmpty).getAllByRole("button")).toEqual([clear]);
   await userEvent.click(clear);
   expect(emptySearch.clearQuery).toHaveBeenCalledTimes(1);

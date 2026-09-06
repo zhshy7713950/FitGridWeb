@@ -319,17 +319,19 @@
 
 @media (max-width: 767px) {
   .heading {
-    align-items: stretch;
-    flex-direction: column;
+    align-items: center;
   }
 
   .headingActions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: none;
   }
 
-  .headingActions > * {
+  .heading > :first-child {
     min-width: 0;
+  }
+
+  .accountEmptyActions {
+    display: none;
   }
 
   .listViewport {
@@ -340,7 +342,7 @@
   .productTable th,
   .productTable td {
     padding: 10px 7px;
-    font-size: 10px;
+    font-size: 12px;
     line-height: 1.35;
   }
 

@@ -1,0 +1,82 @@
+.menu {
+  position: relative;
+  z-index: 5;
+  display: none;
+  flex: 0 0 auto;
+}
+
+.trigger {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #2b3444;
+  border-radius: 5px;
+  color: #e6eaf2;
+  background: #111722;
+}
+
+.trigger svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+.trigger[aria-expanded="true"] {
+  border-color: #2962ff;
+  background: color-mix(in srgb, #2962ff 16%, #111722);
+}
+
+.panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 184px;
+  overflow: hidden;
+  padding: 5px;
+  border: 1px solid #2b3444;
+  border-radius: 6px;
+  background: #111722;
+  box-shadow: 0 16px 38px rgb(0 0 0 / 42%);
+}
+
+.panel > button,
+.panel > a {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 4px;
+  color: #e6eaf2;
+  background: transparent;
+  font-weight: 650;
+  text-align: left;
+  text-decoration: none;
+}
+
+.panel > button:hover,
+.panel > a:hover,
+.panel > button:focus-visible,
+.panel > a:focus-visible {
+  background: color-mix(in srgb, #2962ff 14%, #111722);
+}
+
+.panel > [data-danger="true"] {
+  color: #f23645;
+}
+
+.panel > button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+@media (max-width: 767px) {
+  .menu {
+    display: block;
+  }
+}
