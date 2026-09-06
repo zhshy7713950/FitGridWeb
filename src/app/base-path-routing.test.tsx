@@ -21,9 +21,13 @@ vi.mock("@/features/admin/admin-workspace", () => ({
     <p>admin-workspace:{currentUserId}</p>
   ),
 }));
+vi.mock("@/features/admin/data-management-workspace", () => ({
+  DataManagementWorkspace: () => <p>data-management-workspace</p>,
+}));
 
 import ProtectedLayout from "./(protected)/layout";
 import AdminPage from "./(protected)/admin/page";
+import AdminDataPage from "./(protected)/admin/data/page";
 import InvitePage from "./invite/[token]/page";
 import LoginPage from "./login/page";
 import HomePage from "./page";
@@ -121,6 +125,41 @@ describe("server redirects with a configured Next.js base path", () => {
     const markup = renderToStaticMarkup(await AdminPage());
 
     expect(markup).toContain("admin-workspace:00000000-0000-4000-8000-000000000001");
+    expect(getOptionalSession).not.toHaveBeenCalled();
+  });
+
+  it("preserves /admin/data when an anonymous request reaches the data role guard", async () => {
+    getOptionalSession.mockResolvedValue(null);
+
+    await expect(AdminDataPage()).rejects.toThrow(
+      "redirect:/login?returnTo=%2Fadmin%2Fdata",
+    );
+    expect(redirect).toHaveBeenCalledWith("/login?returnTo=%2Fadmin%2Fdata");
+  });
+
+  it("redirects a member away from data management without disclosing it", async () => {
+    getOptionalSession.mockResolvedValue({ ...user, id: "member-1", role: "member" });
+
+    await expect(AdminDataPage()).rejects.toThrow("redirect:/grids");
+    expect(redirect).toHaveBeenCalledWith("/grids");
+  });
+
+  it("renders data management only after the server role guard passes", async () => {
+    getOptionalSession.mockResolvedValue(user);
+
+    const markup = renderToStaticMarkup(await AdminDataPage());
+
+    expect(markup).toContain("data-management-workspace");
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("uses the development-only demo admin for data management", async () => {
+    vi.stubEnv("NEXT_PUBLIC_UI_DEMO_MODE", "1");
+    vi.stubEnv("NODE_ENV", "development");
+
+    const markup = renderToStaticMarkup(await AdminDataPage());
+
+    expect(markup).toContain("data-management-workspace");
     expect(getOptionalSession).not.toHaveBeenCalled();
   });
 });

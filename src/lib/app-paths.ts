@@ -38,7 +38,8 @@ export function safeReturnPath(value: string | null | undefined): AppRoute {
   const isAllowedPath = parsed.pathname === "/grids"
     || parsed.pathname.startsWith("/grids/")
     || parsed.pathname === "/settings/security"
-    || parsed.pathname === "/admin";
+    || parsed.pathname === "/admin"
+    || parsed.pathname === "/admin/data";
   if (!isAllowedPath) return DEFAULT_ROUTE;
 
   return `${parsed.pathname}${parsed.search}${parsed.hash}` as AppRoute;

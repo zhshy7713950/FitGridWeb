@@ -61,16 +61,15 @@ afterEach(() => {
 });
 
 describe("administrator ledger", () => {
-  it("places the data vault between invitation custody and the identity ledger", () => {
+  it("keeps data-vault operations out of account management", () => {
     render(<AdminWorkspaceView currentUserId="admin-1" controller={controller()} />);
 
     const invitationTitle = screen.getByRole("heading", { name: "创建一次性邀请" });
-    const vaultTitle = screen.getByRole("heading", { name: "数据保险库" });
     const ledgerTitle = screen.getByRole("heading", { name: "身份与状态账本" });
-    expect(invitationTitle.compareDocumentPosition(vaultTitle) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(invitationTitle.compareDocumentPosition(ledgerTitle) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
-    expect(vaultTitle.compareDocumentPosition(ledgerTitle) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "数据保险库" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "创建备份" })).not.toBeInTheDocument();
   });
 
   it("renders only username, role, status, created time, and account action fields", () => {
