@@ -492,10 +492,10 @@ describe.sequential("database-free UI demo", () => {
     expect(mobileParametersBox!.y).toBeGreaterThanOrEqual(mobileTableBox!.y + mobileTableBox!.height);
     expect(await page.getByRole("columnheader", { name: "序号" }).evaluate(
       (element) => window.getComputedStyle(element).fontSize,
-    )).toBe("12px");
+    )).toBe("14px");
     expect(await page.locator("tbody td:nth-child(3)").first().evaluate(
       (element) => window.getComputedStyle(element).fontSize,
-    )).toBe("14px");
+    )).toBe("16px");
     const mobileBackHref = await page.getByRole("link", { name: "返回网格产品" }).getAttribute("href");
     expect(mobileBackHref).toBe(`${appBasePath}/grids`);
     expectExactlyOneBasePrefix(new URL(mobileBackHref!, baseUrl).pathname);
@@ -608,10 +608,10 @@ describe.sequential("database-free UI demo", () => {
     );
     expect(await page.getByRole("columnheader", { name: "序号" }).evaluate(
       (element) => window.getComputedStyle(element).fontSize,
-    )).toBe("10px");
+    )).toBe("14px");
     expect(await page.locator("tbody td:nth-child(3)").first().evaluate(
       (element) => window.getComputedStyle(element).fontSize,
-    )).toBe("12px");
+    )).toBe("16px");
     const accountBarBox = await page.getByRole("banner").boundingBox();
     const desktopBackBox = await page.getByRole("link", { name: "返回网格产品" }).boundingBox();
     expect(accountBarBox).not.toBeNull();
