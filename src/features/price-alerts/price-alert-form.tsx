@@ -24,8 +24,8 @@ export function PriceAlertForm({ initial, onSubmit }: {
     if (kind === "price" && (!/^\d+(\.\d+)?$/.test(targetPrice) || !Number.isFinite(Number(targetPrice)) || Number(targetPrice) <= 0)) {
       setError("目标价格必须大于 0"); return;
     }
-    if (kind !== "price" && (!/^\d+$/.test(days) || Number(days) < 2 || Number(days) > 250)) {
-      setError("均线天数必须为 2–250 的整数"); return;
+    if (kind !== "price" && (!/^\d+$/.test(days) || Number(days) < 2 || Number(days) > 500)) {
+      setError("均线天数必须为 2–500 的整数"); return;
     }
     if (kind === "ma_deviation" && (!/^\d+(\.\d{1,2})?$/.test(percent) || Number(percent) < 0.01 || Number(percent) > 99.99)) {
       setError("偏离幅度必须为 0.01–99.99，最多两位小数"); return;
@@ -55,7 +55,7 @@ export function PriceAlertForm({ initial, onSubmit }: {
       </> : <>
         <label htmlFor="alert-days">均线天数</label>
         <input id="alert-days" inputMode="numeric" value={days} onChange={(event) => setDays(event.target.value)} aria-describedby="ma-help" />
-        <p className={styles.hint} id="ma-help">2–250 天。动态均线包含当前价格，以及此前 N−1 个交易日的复权收盘价。</p>
+        <p className={styles.hint} id="ma-help">2–500 天。动态均线包含当前价格，以及此前 N−1 个交易日的复权收盘价。</p>
       </>}
       {kind === "ma_deviation" ? <>
         <label htmlFor="alert-percent">偏离幅度（%）</label>

@@ -23,11 +23,11 @@ export function parseDiagnosticArgs(args: string[]): DiagnosticArgs {
     if (arg === "--force-failover") forceFailover = true;
     else if (arg === "--days") {
       const raw = args[++index];
-      if (!raw || !/^\d+$/.test(raw) || Number(raw) < 2 || Number(raw) > 250) throw new Error("--days 必须为 2–250 的整数");
+      if (!raw || !/^\d+$/.test(raw) || Number(raw) < 2 || Number(raw) > 500) throw new Error("--days 必须为 2–500 的整数");
       days = Number(raw);
     } else if (["cn", "us", "all"].includes(arg) && !selectedMarket) {
       market = arg as DiagnosticArgs["market"]; selectedMarket = true;
-    } else throw new Error("用法：diagnose.ts [cn|us|all] [--days 2..250] [--force-failover]");
+    } else throw new Error("用法：diagnose.ts [cn|us|all] [--days 2..500] [--force-failover]");
   }
   return { market, days, forceFailover };
 }
@@ -133,7 +133,7 @@ export async function diagnoseInstrument(
   options: { days: number; forceFailover?: boolean; now?: number },
   source: typeof fetchSource = fetchSource,
 ): Promise<DiagnosticResult> {
-  if (!Number.isInteger(options.days) || options.days < 2 || options.days > 250) throw new Error("均线天数必须为 2–250 的整数");
+  if (!Number.isInteger(options.days) || options.days < 2 || options.days > 500) throw new Error("均线天数必须为 2–500 的整数");
   const now = options.now ?? Date.now();
   const selection = selectDiagnosticWindow(instrument.market, now);
   const providers: ProviderDiagnostic[] = [];
@@ -145,7 +145,7 @@ export async function diagnoseInstrument(
       let result: SourceResult;
       if (simulated) result = { provider, bars: [], basis: null, fetchedAt: new Date(now).toISOString(), durationMs: 0, error: "主来源模拟失败：未发出请求" };
       else {
-        try { result = await source(provider, instrument, window, true, null, { timeoutMs: 5000 }); }
+        try { result = await source(provider, instrument, window, options.days, null, { timeoutMs: 5000 }); }
         catch { result = { provider, bars: [], basis: null, fetchedAt: new Date().toISOString(), durationMs: 0, error: "行情诊断请求失败" }; }
       }
       providers.push(summarize(result, provider === primary ? "primary" : "backup", window, options.days, now, simulated));
@@ -175,7 +175,7 @@ async function main() {
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   void main().catch(() => {
-    console.error(JSON.stringify({ pass: false, error: "诊断参数或执行失败；用法：diagnose.ts [cn|us|all] [--days 2..250] [--force-failover]" }));
+    console.error(JSON.stringify({ pass: false, error: "诊断参数或执行失败；用法：diagnose.ts [cn|us|all] [--days 2..500] [--force-failover]" }));
     process.exitCode = 2;
   });
 }

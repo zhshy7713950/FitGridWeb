@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { ApiError } from "@/server/http/api-error";
-import { calendarWarning, nextScanAt } from "./calendar";
+import { calendarWarning, dateInZone, nextScanAt, segments, ZONES } from "./calendar";
 import { decryptKey, encryptKey, sendBark } from "./bark";
-import { AlertRepository } from "./repository";
-import { resolveInstrument } from "./market-data";
-import type { Market } from "./types";
+import { AlertRepository, asInstrument } from "./repository";
+import { assertDailyBasis, fetchDailyBasis, resolveInstrument } from "./market-data";
+import { ruleSchema } from "./engine";
+import type { Instrument, Market, Provider } from "./types";
 
 export interface AlertConfiguration { encryptionKey: string; baseUrl: string; beforeRequest: () => Promise<void> }
 export class PriceAlertService {
@@ -16,6 +17,50 @@ export class PriceAlertService {
   async resolve(market: Market, code: string) {
     try { return await this.repository.saveInstrument(await resolveInstrument(market, code, { beforeRequest: this.config.beforeRequest })); }
     catch (error) { if (error instanceof ApiError) throw error; throw new ApiError(422, "INSTRUMENT_UNAVAILABLE", error instanceof Error && /^(请输入|首版|美股|腾讯未|Yahoo 标的)/.test(error.message) ? error.message : "无法核对产品，请检查代码或稍后重试"); }
+  }
+  private async requireHistory(product: Instrument, days: number) {
+    const now = this.repository.clock();
+    const next = nextScanAt(product.market, now);
+    if (next === null) throw new ApiError(503, "HISTORY_UNAVAILABLE", "交易日历尚未覆盖，暂时无法验证均线历史");
+    const sessionDate = dateInZone(next, ZONES[product.market]);
+    const currentDate = dateInZone(now, ZONES[product.market]);
+    const inSession = sessionDate === currentDate && segments(product.market, currentDate).some((s) => now >= s.start && now < s.end);
+    const providers: Provider[] = [product.market === "cn" ? "tencent" : "yahoo"];
+    if (product.eastmoney) providers.push("eastmoney");
+    let maximum = 0;
+    let unavailable = false;
+    for (const provider of providers) {
+      let basis = inSession ? await this.repository.basis(product.id, provider, sessionDate) : null;
+      if (basis) { try { assertDailyBasis(basis, product.market, sessionDate, provider); } catch { basis = null; } }
+      if (!basis || basis.closes.length < days - 1) {
+        try { basis = await fetchDailyBasis(provider, product, sessionDate, { beforeRequest: this.config.beforeRequest }); }
+        catch { unavailable = true; continue; }
+        if (inSession) await this.repository.saveSource(product, { provider, bars: [], basis, fetchedAt: basis.fetchedAt, error: null, durationMs: 0 }, sessionDate, false);
+      }
+      maximum = Math.max(maximum, basis.closes.length);
+      if (basis.closes.length >= days - 1) return;
+    }
+    if (unavailable) throw new ApiError(503, "HISTORY_UNAVAILABLE", "行情源暂时无法完整验证均线历史，请稍后重试");
+    throw new ApiError(422, "HISTORY_INSUFFICIENT", `当前只有 ${maximum} 个历史交易日的数据，最多支持 ${Math.min(500, maximum + 1)} 日动态均线，不能设置 ${days} 日`);
+  }
+  async create(ownerId: string, input: Parameters<AlertRepository["create"]>[1]) {
+    const condition = ruleSchema.parse(input.condition);
+    if (condition.kind !== "price") {
+      const product = await this.repository.prisma.marketInstrument.findUnique({ where: { id: input.instrumentId } });
+      if (!product) throw new ApiError(422, "INSTRUMENT_INVALID", "请先核对产品代码");
+      await this.requireHistory(asInstrument(product), condition.days);
+    }
+    return this.repository.create(ownerId, { ...input, condition });
+  }
+  async update(ownerId: string, id: string, input: Parameters<AlertRepository["update"]>[2]) {
+    const rule = await this.repository.detail(ownerId, id);
+    if (!rule || rule.deletedAt) throw new ApiError(404, "ALERT_NOT_FOUND", "预警不存在");
+    if (rule.version !== input.expectedVersion) throw new ApiError(409, "EDIT_CONFLICT", "预警已更新，请重新载入后再操作");
+    const condition = ruleSchema.parse(input.condition ?? rule.condition);
+    if (!input.deleted && (input.condition !== undefined || input.enabled === true) && condition.kind !== "price") {
+      await this.requireHistory(asInstrument(rule.instrument), condition.days);
+    }
+    return this.repository.update(ownerId, id, input);
   }
   async list(ownerId: string) {
     const now = new Date(this.repository.clock());

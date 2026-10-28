@@ -11,6 +11,12 @@ const condition = { kind: "price" as const, direction: "up" as const, targetPric
 const state = { armed: true, cursor: null, activeFrom: start };
 
 describe("minute alert engine", () => {
+  it("accepts 500-day rules and rejects 501 while preserving dynamic MA arithmetic", () => {
+    expect(ruleSchema.safeParse({ kind: "ma_touch", direction: "up", days: 500 }).success).toBe(true);
+    expect(ruleSchema.safeParse({ kind: "ma_touch", direction: "up", days: 501 }).success).toBe(false);
+    expect(triggerThreshold({ kind: "ma_touch", direction: "up", days: 500 }, "49900").toString()).toBe("100");
+  });
+
   it("records an equality touch even when close retreats and rearms only for next minute", () => {
     const result = evaluateBars(condition, state, [bar(0, "100", "99"), bar(1, "101", "100")]);
     expect(result.events.map((e) => e.minuteStart)).toEqual([start, start + 60000]);

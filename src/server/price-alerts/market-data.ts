@@ -106,7 +106,7 @@ export function parseDaily(provider: Provider, body: unknown, product: Instrumen
     unique.set(row.date, row.close);
   }
   if (!unique.size) throw new Error("均线日线数据不足");
-  const basis = { provider, sessionDate, fetchedAt, adjustment: provider === "yahoo" ? "Yahoo adjusted close (splits/dividends)" : "前复权 qfq", closes: [...unique].sort(([a], [b]) => a.localeCompare(b)).slice(-249).map(([date, close]) => ({ date, close })) };
+  const basis = { provider, sessionDate, fetchedAt, adjustment: provider === "yahoo" ? "Yahoo adjusted close (splits/dividends)" : "前复权 qfq", closes: [...unique].sort(([a], [b]) => a.localeCompare(b)).slice(-499).map(([date, close]) => ({ date, close })) };
   assertDailyBasis(basis, product.market, sessionDate, provider);
   return basis;
 }
@@ -155,10 +155,14 @@ export async function fetchJson(url: string, options: RequestOptions = {}): Prom
 }
 export function sourceUrl(provider: Provider, product: Instrument, daily = false): string {
   if (provider === "tencent") return daily
-    ? `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${product.tencent},day,,,400,qfq`
+    ? `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${product.tencent},day,,,640,qfq`
     : `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${product.tencent},m1,,50`;
-  if (provider === "yahoo") return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(product.yahoo!)}?interval=${daily ? "1d&range=2y&includeAdjustedClose=true" : "1m&range=1d"}&includePrePost=false`;
-  return `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${encodeURIComponent(product.eastmoney!)}&klt=${daily ? 101 : 1}&fqt=${daily ? 1 : 0}&lmt=${daily ? 400 : 50}&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56`;
+  if (provider === "yahoo") return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(product.yahoo!)}?interval=${daily ? "1d&range=5y&includeAdjustedClose=true" : "1m&range=1d"}&includePrePost=false`;
+  return `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${encodeURIComponent(product.eastmoney!)}&klt=${daily ? 101 : 1}&fqt=${daily ? 1 : 0}&lmt=${daily ? 600 : 50}&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56`;
+}
+
+export async function fetchDailyBasis(provider: Provider, product: Instrument, sessionDate: string, options: RequestOptions): Promise<DailyBasis> {
+  return parseDaily(provider, await fetchJson(sourceUrl(provider, product, true), options), product, sessionDate, new Date().toISOString());
 }
 
 export async function selectSources(primary: SourceResult, needsMA: boolean, backupFetch: () => Promise<SourceResult>, requiredDays = 2) {
@@ -169,7 +173,7 @@ export async function selectSources(primary: SourceResult, needsMA: boolean, bac
   return { price: price ?? (backup.error ? null : backup), ma: ma ?? (!backup.error && backup.basis ? backup : null), backup };
 }
 
-export async function fetchSource(provider: Provider, product: Instrument, window: ScanWindow, needsMA: boolean, basis: DailyBasis | null, options: RequestOptions): Promise<SourceResult> {
+export async function fetchSource(provider: Provider, product: Instrument, window: ScanWindow, requiredDays: number, basis: DailyBasis | null, options: RequestOptions): Promise<SourceResult> {
   const started = performance.now(); let bars: MinuteBar[] = []; let error: string | null = null;
   let dailyError: string | null = null;
   if (basis) { try { assertDailyBasis(basis, product.market, window.sessionDate, provider); } catch { basis = null; } }
@@ -179,7 +183,7 @@ export async function fetchSource(provider: Provider, product: Instrument, windo
     const assessed = assessWindow(parseMinutes(provider, body, product, { window, receivedAt }), window, receivedAt);
     if (assessed.missing.length) throw new Error(`分钟覆盖不完整，缺少 ${assessed.missing.length} 分钟`);
     bars = assessed.bars;
-    if (needsMA && basis?.sessionDate !== window.sessionDate) {
+    if (requiredDays > 0 && (!basis || basis.closes.length < requiredDays - 1)) {
       try { basis = parseDaily(provider, await fetchJson(sourceUrl(provider, product, true), options), product, window.sessionDate, new Date().toISOString()); }
       catch (cause) { basis = null; dailyError = cause instanceof Error && /^(均线日线|日线|Yahoo|腾讯|东方财富|行情返回 HTTP)/.test(cause.message) ? cause.message : "均线日线不可用"; }
     }

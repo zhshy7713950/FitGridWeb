@@ -1,0 +1,10 @@
+# SDD ledger — plan: docs/superpowers/plans/2026-10-28-price-alerts-expansion.md
+
+- Base:59d26cc6696be97b2cb487da46c00dcc93692d25; existing isolated codex/price-alerts worktree, clean before task.
+- Authorization: user approved modifying preflight and real search and confirmed temporary-only3day cleanup; research first completed before product edits.
+- Research: Tencent3×640 completed qfq closes; YahooSPY/AAPL1254 adjusted closes; Eastmoney daily connections failed; Eastmoney search returned unrelated profile JSONP and is excluded from new candidate search.
+- Pre-flight: service methods own HTTP mutation checks; repository remains transaction/persistence boundary. New candidate IDs absent until resolve. Future-session manual validation must not pollute runtime daily cache.
+- Ruling: implement inline in existing worktree using already authorized recommendations, without another generic approval round. Existing public release remains59d26cc until a later publish; no production actions.
+- Tooling: Postman CLI/local simulations absent; existing OpenAPI and native HTTP server tests will be reused rather than introducing unrelated workspace/deployment setup.
+- Builder check: no important human questions; found outbox has no updatedAt. Ruling: retain terminal queues by acceptedAt, otherwise expiresAt, rather than adding a migration solely for retention; cancellation/failure evidence persists30days in events. Existing old cancelled queues may be pruned immediately once their validity ended over3days ago, which is acceptable for temporary queue data.
+- Task1 complete:500/501,499closes, old249cache refresh RED→GREEN; save/edit/resume preflight distinguishes proven shortages from unavailable feeds, keeps closed-session preflight out of future runtime caches.15files/103tests pass with real restricted PG; typecheck pass. Initial diagnostic tests expected oldboolean fetch argument; updated to requiredDays20 after source API change.

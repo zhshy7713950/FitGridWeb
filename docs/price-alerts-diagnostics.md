@@ -21,7 +21,7 @@ sudo docker compose --project-name fitgridweb \
 | --- | --- |
 | 不传参数 | 全部五个产品，N=20，分别检查主、备用来源 |
 | `cn --days 20` | 600519.SH、510300.SH、159919.SZ |
-| `us --days 250` | AAPL.US、SPY.US；N 可以为 2–250 的整数 |
+| `us --days 500` | AAPL.US、SPY.US；N 可以为 2–500 的整数 |
 | `all --days 20 --force-failover` | 主来源标为模拟失败，只真实请求备用来源的分钟线和日线 |
 
 在源码环境中可直接运行 `node_modules/.bin/tsx src/server/price-alerts/diagnose.ts cn --days 20`。参数只允许市场选择、均线天数和受控故障开关，不接受自定义 URL、设备 Key 或数据库参数。

@@ -158,7 +158,7 @@ export class AlertScheduler {
       if (provider === "eastmoney" && !product.eastmoney) return { provider, bars: [], basis: null, fetchedAt: new Date(this.repository.clock()).toISOString(), durationMs: 0, error: "该产品未配置可用备用源" } satisfies SourceResult;
       return this.limiter.run(provider, async () => {
         await beforeRequest();
-        return (this.options.source ?? fetchSource)(provider, product, range, maxDays > 0, await this.repository.basis(product.id, provider, window.sessionDate), { signal: requestSignal, beforeRequest });
+        return (this.options.source ?? fetchSource)(provider, product, range, maxDays, await this.repository.basis(product.id, provider, window.sessionDate), { signal: requestSignal, beforeRequest });
       });
     };
     const primary = await get(product.market === "cn" ? "tencent" : "yahoo");

@@ -5,7 +5,7 @@ import type { AlertCondition, EvaluationState, MinuteBar, Trigger } from "./type
 
 const direction = z.enum(["up", "down"]);
 const positiveDecimal = z.string().regex(/^(?:0|[1-9]\d{0,19})(?:\.\d{1,10})?$/).refine((v) => new Decimal(v).gt(0), "价格必须大于零");
-const days = z.number().int().min(2).max(250);
+const days = z.number().int().min(2).max(500);
 export const ruleSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("price"), direction, targetPrice: positiveDecimal }),
   z.strictObject({ kind: z.literal("ma_touch"), direction, days }),

@@ -43,7 +43,7 @@ describe("real source selection boundary", () => {
     const result = await diagnoseInstrument(cn, { now, days: 20, forceFailover: false }, fetcher);
     expect(fetcher.mock.calls.map(([provider]) => provider)).toEqual(["tencent", "eastmoney"]);
     expect(fetcher.mock.calls.every((call) => call[1] === cn)).toBe(true);
-    expect(fetcher).toHaveBeenNthCalledWith(1, "tencent", cn, expect.any(Object), true, null, expect.objectContaining({ timeoutMs: 5000 }));
+    expect(fetcher).toHaveBeenNthCalledWith(1, "tencent", cn, expect.any(Object), 20, null, expect.objectContaining({ timeoutMs: 5000 }));
     expect(result).toMatchObject({ symbol: "600519.SH", pass: true, dualSourcePass: true, primaryError: null });
     expect(result.providers[0]).toMatchObject({ completeMinuteCount: 10, daily: { count: 19, requiredCount: 19, historySum: "47.5", adjustment: "前复权 qfq" }, pass: true });
     expect(JSON.stringify(result)).not.toContain('"closes"');
@@ -51,7 +51,7 @@ describe("real source selection boundary", () => {
   it("forces only a simulated primary failure, then really invokes backup minute plus daily", async () => {
     const fetcher = vi.fn(async (provider: Provider, _instrument: Instrument, window: ScanWindow) => sourceResult(provider, window));
     const result = await diagnoseInstrument(us, { now: Date.parse("2026-10-27T14:00:00Z"), days: 20, forceFailover: true }, fetcher);
-    expect(fetcher).toHaveBeenCalledExactlyOnceWith("eastmoney", us, expect.any(Object), true, null, expect.any(Object));
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith("eastmoney", us, expect.any(Object), 20, null, expect.any(Object));
     expect(result).toMatchObject({ mode: "forced-failover", pass: true, dualSourcePass: false });
     expect(result.providers[0]).toMatchObject({ provider: "yahoo", simulatedFailure: true, pass: false });
     expect(result.providers[1]).toMatchObject({ provider: "eastmoney", simulatedFailure: false, minuteLabelTimeZone: "Asia/Shanghai", minuteLabel: "end", pass: true });
@@ -92,9 +92,9 @@ describe("real source selection boundary", () => {
   });
 });
 
-it("accepts only fixed market selectors and MA days 2 through 250", () => {
+it("accepts only fixed market selectors and MA days 2 through 500", () => {
   expect(parseDiagnosticArgs([])).toEqual({ market: "all", days: 20, forceFailover: false });
-  expect(parseDiagnosticArgs(["us", "--days", "250", "--force-failover"])).toEqual({ market: "us", days: 250, forceFailover: true });
-  for (const args of [["--days", "1"], ["--days", "251"], ["--days", "2.5"], ["--days"], ["eu"], ["--url", "https://example.com"]]) expect(() => parseDiagnosticArgs(args)).toThrow();
+  expect(parseDiagnosticArgs(["us", "--days", "500", "--force-failover"])).toEqual({ market: "us", days: 500, forceFailover: true });
+  for (const args of [["--days", "1"], ["--days", "501"], ["--days", "2.5"], ["--days"], ["eu"], ["--url", "https://example.com"]]) expect(() => parseDiagnosticArgs(args)).toThrow();
   expect(DIAGNOSTIC_INSTRUMENTS.map((instrument) => instrument.code)).toEqual(["600519.SH", "510300.SH", "159919.SZ", "AAPL.US", "SPY.US"]);
 });

@@ -717,6 +717,7 @@ paths:
       description: >-
         需同源 Origin 和会话 Cookie。JSON 请求体最多 16 KiB。instrumentId 须先核对解析；
         enabled 必填，客户端新建规则应显式传 false。启用规则前必须成功测试 Bark 通道。
+        均线规则保存前验证 N−1 个有效复权日线；确认不足返回 HISTORY_INSUFFICIENT 并提示可用数量/最大周期，无法验证返回 HISTORY_UNAVAILABLE。
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/PriceAlertCreateRequest'}}}
@@ -737,7 +738,7 @@ paths:
         '413': {$ref: '#/components/responses/PayloadTooLarge'}
         '422':
           $ref: '#/components/responses/ValidationError'
-          description: VALIDATION_FAILED、OWNER_FIELD_FORBIDDEN 或 INSTRUMENT_INVALID
+          description: VALIDATION_FAILED、OWNER_FIELD_FORBIDDEN、INSTRUMENT_INVALID 或 HISTORY_INSUFFICIENT
         '429': {$ref: '#/components/responses/RateLimited'}
         '500': {$ref: '#/components/responses/InternalError'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
@@ -768,6 +769,7 @@ paths:
       description: >-
         需同源 Origin；JSON 最多 16 KiB。expectedVersion 必须匹配当前 version，且至少提供 condition 或 enabled。
         更新递增版本、清空判定游标并重设激活起点，取消旧版本待发送任务；不可修改 instrumentId。
+        修改均线条件或重新启用时先验证历史日线；确认不足返回422 HISTORY_INSUFFICIENT，来源无法验证返回503 HISTORY_UNAVAILABLE。纯暂停不请求日线。
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/PriceAlertUpdateRequest'}}}
@@ -1112,14 +1114,14 @@ components:
           properties:
             kind: {const: ma_touch}
             direction: {type: string, enum: [up, down]}
-            days: {type: integer, minimum: 2, maximum: 250}
+            days: {type: integer, minimum: 2, maximum: 500}
         - type: object
           additionalProperties: false
           required: [kind, direction, days, percent]
           properties:
             kind: {const: ma_deviation}
             direction: {type: string, enum: [up, down]}
-            days: {type: integer, minimum: 2, maximum: 250}
+            days: {type: integer, minimum: 2, maximum: 500}
             percent: {$ref: '#/components/schemas/AlertPercentInput'}
       description: >-
         up 向上、down 向下，等于阈值也触发。均线使用前 N−1 个已完成交易日的同源复权收盘价加候选价动态计算，
