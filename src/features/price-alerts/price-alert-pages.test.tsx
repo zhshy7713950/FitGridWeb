@@ -137,7 +137,7 @@ it("shows cached minute close, currency, source and quote time on each list card
   render(<AlertListPage />); await screen.findByRole("link", { name: "黄金 ETF" });
   const cnCard = screen.getByRole("link", { name: "黄金 ETF" }).closest("article")!;
   expect(within(cnCard).getByText("缓存分钟收盘价")).toBeInTheDocument();
-  expect(within(cnCard).getByText("CNY 6.92")).toBeInTheDocument();
+  expect(within(cnCard).getByText("CNY 6.920")).toBeInTheDocument();
   expect(within(cnCard).getByText("腾讯财经")).toBeInTheDocument();
   expect(within(cnCard).getByText(/来源：/)).toBeInTheDocument();
   expect(within(cnCard).getByText(/行情时间：/)).toBeInTheDocument();
@@ -161,10 +161,10 @@ it("keeps the main price, source and times together with the MA evaluation snaps
   api.get.mockResolvedValue({ ...rule, condition: { kind: "ma_touch", direction: "down", days: 20 }, lastEvaluation: evaluation, instrument: { ...rule.instrument, quote: { ...rule.instrument.quote!, price: "99.99", provider: "yahoo" } } });
   render(<AlertDetailPage id="rule-1" />);
   const snapshot = await screen.findByRole("region", { name: "行情快照" });
-  expect(within(snapshot).getByText("6.80")).toBeInTheDocument();
+  expect(within(snapshot).getByText("6.800")).toBeInTheDocument();
   expect(within(snapshot).getByText("最近有效判断的分钟收盘价")).toBeInTheDocument();
   expect(within(snapshot).getByText("东方财富")).toBeInTheDocument();
-  expect(within(snapshot).getAllByText("6.85")).toHaveLength(2);
+  expect(within(snapshot).getAllByText("6.850")).toHaveLength(2);
   expect(within(snapshot).getByText(new Date(evaluation.minuteEnd).toLocaleString("zh-CN", { hour12: false }))).toBeInTheDocument();
   expect(within(snapshot).getByText(new Date(evaluation.fetchedAt).toLocaleString("zh-CN", { hour12: false }))).toBeInTheDocument();
   expect(within(snapshot).queryByText("99.99")).not.toBeInTheDocument();
@@ -231,4 +231,32 @@ it("shows real empty and failed searches without offering an unverified product"
   await user.click(screen.getByRole("button", { name: "搜索产品" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("产品检索暂时不可用");
   expect(api.resolve).not.toHaveBeenCalled();
+});
+
+it("rounds cached Yahoo prices in both list and detail", async () => {
+  const usd = { ...rule, instrument: { ...rule.instrument, market: "us" as const, currency: "USD" as const, quote: { ...rule.instrument.quote!, price: "35.13999938964844", provider: "yahoo" } } };
+  api.list.mockResolvedValue({ items: [usd], status: { calendarWarnings: [], nextRunAt: null } });
+  api.get.mockResolvedValue(usd);
+  const view = render(<AlertListPage />);
+  expect(await screen.findByText("USD 35.14")).toBeInTheDocument();
+  view.unmount();
+  render(<AlertDetailPage id="rule-1" />);
+  const snapshot = await screen.findByRole("region", { name: "行情快照" });
+  expect(within(snapshot).getByText("股票价格（分钟收盘价）").parentElement).toHaveTextContent("35.14");
+  expect(snapshot).not.toHaveTextContent("35.13999938964844");
+});
+it("clearly identifies the calculated MA price and formats historical trigger values", async () => {
+  api.get.mockResolvedValue({ ...rule, instrument: { ...rule.instrument, market: "us", currency: "USD" }, condition: { kind: "ma_touch", direction: "down", days: 120 }, lastEvaluation: { price: "35.13999938964844", provider: "yahoo", minuteEnd: "2026-10-27T03:01:00Z", fetchedAt: "2026-10-27T03:01:15Z", ma: "33.015343221", threshold: "32.9986855964", adjustment: null } });
+  api.events.mockResolvedValue({ items: [{ id: "evt-1", minuteStart: "2026-10-27T03:00:00Z", minuteEnd: "2026-10-27T03:01:00Z", price: "34.9976005554", threshold: "32.9986855964", ma: "33.015343221", provider: "yahoo", evidence: { condition: { kind: "ma_touch", direction: "up", days: 20 } }, delivery: { status: "accepted", lastError: null, acceptedAt: null, attempts: 1 } }], nextCursor: null });
+  render(<AlertDetailPage id="rule-1" />);
+  const snapshot = await screen.findByRole("region", { name: "行情快照" });
+  expect(within(snapshot).getByText("MA120 均线价格（计算值）").parentElement).toHaveTextContent("33.02");
+  expect(within(snapshot).getByText("触发边界价格").parentElement).toHaveTextContent("33.00");
+  expect(screen.getByText(/触发时股价 35.00 · 触发边界价格 33.00 · 触发时均线价格（MA20）33.02/)).toBeInTheDocument();
+});
+it("explicitly marks an unavailable MA calculation instead of showing an unexplained dash", async () => {
+  api.get.mockResolvedValue({ ...rule, condition: { kind: "ma_touch", direction: "down", days: 120 } });
+  render(<AlertDetailPage id="rule-1" />);
+  const snapshot = await screen.findByRole("region", { name: "行情快照" });
+  expect(within(snapshot).getByText("MA120 均线价格（计算值）").parentElement).toHaveTextContent("尚未计算");
 });

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ClientApiError } from "@/lib/api-client";
 import { alertApi } from "./price-alert-api";
+import { formatPrice } from "./price-display";
 import { PriceAlertForm } from "./price-alert-form";
 import type { AlertCondition, AlertDTO, AlertInput, ChannelStatus, Instrument, InstrumentCandidate } from "./types";
 import styles from "./price-alerts.module.css";
@@ -92,7 +93,7 @@ export function AlertListPage() {
         <div><Link className={styles.identity} href={`/price-alerts/${rule.id}`}>{rule.instrument.name || rule.instrument.code}</Link><span className={styles.code}>{rule.instrument.market === "cn" ? "A 股" : "美股"} · {rule.instrument.code}</span>
           <div className={styles.cachedQuote}>
             <span className={styles.hint}>缓存分钟收盘价</span>
-            <span className={styles.quoteValue}>{rule.instrument.currency} {rule.instrument.quote?.price ?? "—"}</span>
+            <span className={styles.quoteValue}>{rule.instrument.currency} {formatPrice(rule.instrument.quote?.price, rule.instrument)}</span>
             {rule.instrument.quote ? <><span>来源：<span>{provider(rule.instrument.quote.provider)}</span></span><span>行情时间：<time dateTime={rule.instrument.quote.minuteEnd}>{time(rule.instrument.quote.minuteEnd)}</time></span></> : <span>暂无缓存行情</span>}
           </div>
         </div>
@@ -147,12 +148,15 @@ export function AlertDetailPage({ id }: { id: string }) {
     <Link className={styles.back} href="/price-alerts">← 返回股价提醒</Link><State {...data} />
     {actionError ? <ErrorNotice error={actionError} reload={() => { setActionError(""); data.reload(); }} /> : null}
     {rule && !data.loading && !data.error ? <>
-      <div className={styles.columns}><section className={styles.panel} aria-label="行情快照"><p className={styles.code}>{rule.instrument.market === "cn" ? "A 股" : "美股"} · {rule.instrument.code} · {rule.instrument.currency}</p><p className={styles.price}>{snapshot?.price ?? "—"}</p><p className={styles.hint}>{evaluation ? "最近有效判断的分钟收盘价" : "缓存分钟收盘价"}</p><p>{conditionText(rule.condition)}</p><AlertStatus rule={rule} />
-        <dl className={styles.metrics}><div><dt>行情来源</dt><dd>{snapshot ? provider(snapshot.provider) : "暂无"}</dd></div><div><dt>行情时间</dt><dd>{time(snapshot?.minuteEnd)}</dd></div><div><dt>获取时间</dt><dd>{time(snapshot?.fetchedAt)}</dd></div><div><dt>开始观察</dt><dd>{time(rule.activeFrom)}</dd></div><div><dt>动态均线</dt><dd>{evaluation?.ma ?? "—"}</dd></div><div><dt>最近触发边界</dt><dd>{evaluation?.threshold ?? "—"}</dd></div></dl>
+      <div className={styles.columns}><section className={styles.panel} aria-label="行情快照"><p className={styles.code}>{rule.instrument.market === "cn" ? "A 股" : "美股"} · {rule.instrument.code} · {rule.instrument.currency}</p><dl className={styles.priceSummary}>
+          <div><dt>股票价格（分钟收盘价）</dt><dd className={styles.price}>{formatPrice(snapshot?.price, rule.instrument)}</dd></div>
+          {rule.condition.kind !== "price" ? <div><dt>MA{rule.condition.days} 均线价格（计算值）</dt><dd className={styles.price}>{evaluation?.ma != null ? formatPrice(evaluation.ma, rule.instrument) : "尚未计算"}</dd></div> : null}
+        </dl><p className={styles.hint}>{evaluation ? "最近有效判断的分钟收盘价" : "缓存分钟收盘价"}</p><p>{conditionText(rule.condition)}</p><AlertStatus rule={rule} />
+        <dl className={styles.metrics}><div><dt>行情来源</dt><dd>{snapshot ? provider(snapshot.provider) : "暂无"}</dd></div><div><dt>行情时间</dt><dd>{time(snapshot?.minuteEnd)}</dd></div><div><dt>获取时间</dt><dd>{time(snapshot?.fetchedAt)}</dd></div><div><dt>开始观察</dt><dd>{time(rule.activeFrom)}</dd></div><div><dt>触发边界价格</dt><dd>{formatPrice(evaluation?.threshold, rule.instrument)}</dd></div></dl>
         {!evaluation && rule.condition.kind !== "price" ? <p className={styles.hint}>均线尚未就绪，等待有效判断</p> : null}
         {evaluation ? <p className={styles.hint}>最近判断：{time(evaluation.minuteEnd)} · {provider(evaluation.provider)}{evaluation.adjustment ? ` · ${evaluation.adjustment}` : ""}</p> : null}
       </section><aside className={styles.panel}><h2>观察说明</h2><p className={styles.hint}>动态均线包含当前价格。达到边界也会触发；分钟收盘离开条件范围后，才会再次提醒。</p><p className={styles.hint}>新建或恢复提醒，从下一个完整分钟开始观察。首次已符合条件时也会提醒一次。每条提醒每轮检查最多推送一次。</p><p className={styles.hint}>页面只展示已保存的行情。Bark 接收成功并不代表设备已经展示通知。</p>{rule.continuityDegraded ? <p className={styles.warning}>历史行情有缺口，可能漏过触发；保留原有观察状态，后续完整分钟继续监控。</p> : null}{rule.lastError ? <p role="alert" className={styles.error}>{rule.lastError}</p> : null}{!rule.instrument.eastmoney ? <p className={styles.warning}>此产品暂时没有备用行情来源。</p> : null}</aside></div>
-      <section className={`${styles.panel} ${styles.events}`}><h2>提醒记录</h2>{data.value?.events.items.length ? data.value.events.items.map((event) => <article className={styles.event} key={event.id}><time dateTime={event.minuteEnd}>{time(event.minuteEnd)}</time><p>{event.evidence.condition ? conditionText(event.evidence.condition) : "价格到达条件"} · 价格 {event.price} · 边界 {event.threshold}{event.ma ? ` · MA ${event.ma}` : ""}</p><div className={styles.actions}><span className={styles.badge}>{deliveryLabels[event.delivery.status]}</span>{event.evidence.delayed ? <span className={styles.badge}>延迟补发</span> : null}</div><p className={styles.hint}>{provider(event.provider)} · 尝试 {event.delivery.attempts} 次{event.delivery.acceptedAt ? ` · 接收于 ${time(event.delivery.acceptedAt)}` : ""}</p>{event.delivery.lastError ? <p className={styles.error}>{event.delivery.lastError}</p> : null}</article>) : <p className={styles.hint}>还没有提醒记录。</p>}{moreError ? <ErrorNotice error={moreError} /> : null}{data.value?.events.nextCursor ? <button disabled={morePending} onClick={() => void more()}>{morePending ? "正在加载…" : "加载更早记录"}</button> : null}</section>
+      <section className={`${styles.panel} ${styles.events}`}><h2>提醒记录</h2>{data.value?.events.items.length ? data.value.events.items.map((event) => <article className={styles.event} key={event.id}><time dateTime={event.minuteEnd}>{time(event.minuteEnd)}</time><p>{event.evidence.condition ? conditionText(event.evidence.condition) : "价格到达条件"} · 触发时股价 {formatPrice(event.price, rule.instrument)} · 触发边界价格 {formatPrice(event.threshold, rule.instrument)}{event.ma ? ` · 触发时均线价格${event.evidence.condition && event.evidence.condition.kind !== "price" ? `（MA${event.evidence.condition.days}）` : ""}${formatPrice(event.ma, rule.instrument)}` : ""}</p><div className={styles.actions}><span className={styles.badge}>{deliveryLabels[event.delivery.status]}</span>{event.evidence.delayed ? <span className={styles.badge}>延迟补发</span> : null}</div><p className={styles.hint}>{provider(event.provider)} · 尝试 {event.delivery.attempts} 次{event.delivery.acceptedAt ? ` · 接收于 ${time(event.delivery.acceptedAt)}` : ""}</p>{event.delivery.lastError ? <p className={styles.error}>{event.delivery.lastError}</p> : null}</article>) : <p className={styles.hint}>还没有提醒记录。</p>}{moreError ? <ErrorNotice error={moreError} /> : null}{data.value?.events.nextCursor ? <button disabled={morePending} onClick={() => void more()}>{morePending ? "正在加载…" : "加载更早记录"}</button> : null}</section>
     </> : null}
   </Page>;
 }

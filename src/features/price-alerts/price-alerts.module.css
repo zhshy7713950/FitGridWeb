@@ -35,6 +35,9 @@
 .metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin: 22px 0; }
 .metrics dt { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
 .metrics dd { margin: 0; font-family: ui-monospace, monospace; font-size: 14px; overflow-wrap: anywhere; }
+.priceSummary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 22px 0 12px; }
+.priceSummary dt { color: var(--text-muted); font-size: 13px; margin-bottom: 8px; }
+.priceSummary dd { overflow-wrap: anywhere; }
 .price { font-size: 32px; font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; margin: 12px 0; }
 .panel h2 { font-size: 16px; margin: 0 0 16px; }
 .events { margin-top: 24px; }
