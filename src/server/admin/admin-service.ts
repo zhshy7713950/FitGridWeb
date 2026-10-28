@@ -55,6 +55,11 @@ function response(user: ManagedUser) {
 function isSerializableConflict(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   if ("code" in error && error.code === "P2034") return true;
+  if ("code" in error && error.code === "P2010"
+    && "meta" in error && typeof error.meta === "object" && error.meta !== null
+    && "driverAdapterError" in error.meta) {
+    return isSerializableConflict(error.meta.driverAdapterError);
+  }
   if (!("cause" in error) || typeof error.cause !== "object" || error.cause === null) {
     return false;
   }
