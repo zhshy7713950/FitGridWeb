@@ -44,6 +44,10 @@ model User {
   invitationsUsed Invitation[]    @relation("InvitationConsumer")
   gridTrades      GridTrade[]
   importPreviews  ImportPreview[]
+  priceAlerts     PriceAlert[]
+  alertEvents     PriceAlertEvent[]
+  alertOutbox     PriceAlertOutbox[]
+  alertChannel    PriceAlertChannel?
 
   @@map("users")
 }
@@ -153,4 +157,140 @@ model ImportPreview {
 
   @@index([ownerId, expiresAt])
   @@map("import_previews")
+}
+
+model MarketInstrument {
+  id        String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code      String @unique @db.VarChar(32)
+  name      String @db.VarChar(160)
+  market    String @db.VarChar(2)
+  currency  String @db.VarChar(3)
+  kind      String @db.VarChar(5)
+  tencent   String? @db.VarChar(32)
+  yahoo     String? @db.VarChar(32)
+  eastmoney String? @db.VarChar(40)
+  quote     Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  alerts    PriceAlert[]
+  candles   MarketMinute[]
+  bases     MarketDailyBasis[]
+  @@map("market_instruments")
+}
+
+model MarketMinute {
+  instrumentId String @map("instrument_id") @db.Uuid
+  provider String @db.VarChar(12)
+  start DateTime
+  end DateTime
+  open Decimal @db.Decimal(30, 10)
+  high Decimal @db.Decimal(30, 10)
+  low Decimal @db.Decimal(30, 10)
+  close Decimal @db.Decimal(30, 10)
+  fetchedAt DateTime @map("fetched_at")
+  instrument MarketInstrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+  @@id([instrumentId, provider, start])
+  @@index([start])
+  @@map("market_minutes")
+}
+
+model MarketDailyBasis {
+  instrumentId String @map("instrument_id") @db.Uuid
+  provider String @db.VarChar(12)
+  sessionDate String @map("session_date") @db.VarChar(10)
+  payload Json
+  instrument MarketInstrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+  @@id([instrumentId, provider, sessionDate])
+  @@map("market_daily_bases")
+}
+
+model MarketScan {
+  id String @id @db.VarChar(80)
+  market String @db.VarChar(2)
+  windowEnd DateTime @map("window_end")
+  status String @db.VarChar(16)
+  report Json
+  createdAt DateTime @default(now()) @map("created_at")
+  finishedAt DateTime? @map("finished_at")
+  @@index([createdAt])
+  @@map("market_scans")
+}
+
+model PriceAlert {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  instrumentId String @map("instrument_id") @db.Uuid
+  condition Json
+  enabled Boolean @default(false)
+  version Int @default(1)
+  armed Boolean @default(true)
+  cursor DateTime?
+  activeFrom DateTime @map("active_from")
+  continuityDegraded Boolean @default(false) @map("continuity_degraded")
+  lastError String? @map("last_error") @db.VarChar(240)
+  lastSuccess DateTime? @map("last_success")
+  lastEvaluation Json? @map("last_evaluation")
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  instrument MarketInstrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  events PriceAlertEvent[]
+  outbox PriceAlertOutbox[]
+  @@index([ownerId, enabled, deletedAt])
+  @@map("price_alerts")
+}
+
+model PriceAlertChannel {
+  ownerId String @id @map("owner_id") @db.Uuid
+  keyCipher String @map("key_cipher")
+  version Int @default(1)
+  testedAt DateTime? @map("tested_at")
+  lastError String? @map("last_error") @db.VarChar(240)
+  updatedAt DateTime @updatedAt @map("updated_at")
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  @@map("price_alert_channels")
+}
+
+model PriceAlertEvent {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  ruleId String @map("rule_id") @db.Uuid
+  version Int
+  minuteStart DateTime @map("minute_start")
+  minuteEnd DateTime @map("minute_end")
+  price Decimal @db.Decimal(30, 10)
+  threshold Decimal @db.Decimal(30, 10)
+  ma Decimal? @db.Decimal(30, 10)
+  provider String @db.VarChar(12)
+  evidence Json
+  outboxId String? @map("outbox_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  rule PriceAlert @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  @@unique([ruleId, version, minuteStart])
+  @@index([ownerId, createdAt])
+  @@map("price_alert_events")
+}
+
+model PriceAlertOutbox {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  ruleId String @map("rule_id") @db.Uuid
+  version Int
+  channelVersion Int @map("channel_version")
+  batchEnd DateTime @map("batch_end")
+  payload Json
+  status String @default("pending") @db.VarChar(12)
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now()) @map("next_attempt_at")
+  expiresAt DateTime @map("expires_at")
+  leaseUntil DateTime? @map("lease_until")
+  lastError String? @map("last_error") @db.VarChar(240)
+  acceptedAt DateTime? @map("accepted_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  rule PriceAlert @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  @@unique([ruleId, version, batchEnd])
+  @@index([ownerId, status, nextAttemptAt])
+  @@map("price_alert_outbox")
 }

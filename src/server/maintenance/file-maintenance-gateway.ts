@@ -49,6 +49,9 @@ const previewSchema = z.strictObject({
   gridTrades: z.number().int().nonnegative(),
   invitations: z.number().int().nonnegative(),
   importPreviews: z.number().int().nonnegative(),
+  marketInstruments: z.number().int().nonnegative().optional(),
+  priceAlerts: z.number().int().nonnegative().optional(),
+  priceAlertEvents: z.number().int().nonnegative().optional(),
 });
 
 const diskStatusSchema = z.strictObject({

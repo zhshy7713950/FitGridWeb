@@ -8,6 +8,7 @@ cd "$PROJECT_DIR"
 . "$SCRIPT_DIR/env.sh"
 . "$SCRIPT_DIR/lib/portable-backup.sh"
 . "$SCRIPT_DIR/lib/maintenance-jobs.sh"
+. "$SCRIPT_DIR/lib/price-alerts-timer.sh"
 . "$SCRIPT_DIR/lib/download-audit.sh"
 
 maintenance_recovery_mode=false

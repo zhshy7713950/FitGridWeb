@@ -420,6 +420,7 @@ export function GridDetailView({
             {recalculating ? "正在计算…" : "重新计算"}
           </button>
           <Link href={`/grids/${detail.id}/edit`}>编辑产品</Link>
+          <Link href={`/price-alerts/new?code=${encodeURIComponent(detail.productCode)}`}>创建股价提醒</Link>
           <button
             className={styles.deleteAction}
             type="button"
@@ -441,6 +442,7 @@ export function GridDetailView({
             {recalculating ? "正在计算…" : "重新计算"}
           </button>
           <Link href={`/grids/${detail.id}/edit`}>编辑产品</Link>
+          <Link href={`/price-alerts/new?code=${encodeURIComponent(detail.productCode)}`}>创建股价提醒</Link>
           <button
             type="button"
             data-danger="true"

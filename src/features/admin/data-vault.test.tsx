@@ -277,7 +277,7 @@ describe("data vault destructive recovery", () => {
       postgresMajor: 17,
       database: "fitgridweb",
       expiresAt: 1_788_418_200,
-      preview: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0 },
+      preview: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0, marketInstruments: 5, priceAlerts: 7, priceAlertEvents: 12 },
     };
     const getJob = vi.fn().mockResolvedValue(preview);
     render(<DataVault api={api({ uploadRestore, getJob })} initialBackups={[]} />);
@@ -291,6 +291,8 @@ describe("data vault destructive recovery", () => {
     expect(screen.getByLabelText("备份密码")).toHaveValue("");
     expect(screen.getByText("24 个网格产品")).toBeInTheDocument();
     expect(screen.getByText("2 个用户")).toBeInTheDocument();
+    expect(screen.getByText("7 条预警")).toBeInTheDocument();
+    expect(screen.getByText("12 条触发记录")).toBeInTheDocument();
     expect(screen.getByText("完整性检查通过")).toBeInTheDocument();
     const verifiedPreview = screen.getByRole("region", { name: "恢复预检已通过" });
     expect(within(verifiedPreview).queryByText("4.0 KiB")).not.toBeInTheDocument();

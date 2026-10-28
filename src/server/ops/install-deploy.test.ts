@@ -86,6 +86,10 @@ printf 'stage health\\n' >>"$COMMAND_LOG"
 printf 'systemctl %s\\n' "$*" >>"$COMMAND_LOG"
 [ -n "\${UNIT_STATE_DIRECTORY:-}" ] || exit 0
 case "$*" in
+  "show --property=LoadState --value fitgridweb-price-alerts.timer"|"show --property=LoadState --value fitgridweb-price-alerts.service")
+    for last_arg do :; done
+    if [ -f "$UNIT_STATE_DIRECTORY/enabled/$last_arg" ] || [ -f "$UNIT_STATE_DIRECTORY/active/$last_arg" ]; then printf 'loaded\n'; else printf 'not-found\n'; fi
+    exit ;;
   "show --property=LoadState --value fitgridweb-backup.timer")
     [ "\${FAIL_LEGACY_QUERY:-0}" != 1 ] || exit 5
     if [ -f "$UNIT_STATE_DIRECTORY/enabled/fitgridweb-backup.timer" ] \
@@ -132,6 +136,7 @@ case "$action:$unit" in
   disable:fitgridweb-backup.timer) failure_stage=backup ;;
   enable:fitgridweb.service) failure_stage=app-enable ;;
   restart:fitgridweb.service) failure_stage=app-restart ;;
+  enable:fitgridweb-price-alerts.timer) failure_stage=alert-timer ;;
 esac
 [ "$failure_stage" != backup ] || [ "\${FAIL_ACTIVATION_STAGE:-}" != backup ] || exit 1
 case $action in
@@ -165,7 +170,7 @@ esac
 }
 
 function run(command: string, files: Awaited<ReturnType<typeof fixture>>, env: Record<string, string> = {}) {
-  return spawnSync("sh", ["-c", `. "${hostLibrary}"; . "${library}"; ${command}`], {
+  return spawnSync("sh", ["-c", `. "${path.join(process.cwd(), "ops/lib/price-alerts-timer.sh")}"; . "${hostLibrary}"; . "${library}"; ${command}`], {
     encoding: "utf8",
     env: {
       ...process.env,
@@ -257,6 +262,27 @@ fitgrid_install_main grid.example.com 3300 443 /etc/nginx/conf.d/fitgridweb.conf
 }
 
 describe("deployment state machine", () => {
+  it("stops and waits for the alert timer and service before migration and never resumes on rollback", async () => {
+    const files = await fixture();
+    const command = `
+systemctl() {
+  printf 'systemctl %s\\n' "$*" >>"$COMMAND_LOG"
+  case "$*" in
+    "show --property=LoadState --value "*) printf 'loaded\\n' ;;
+    "show --property=ActiveState --value "*)
+      if [ -f "${files.root}/waited" ]; then printf 'inactive\\n'; else : >"${files.root}/waited"; printf 'activating\\n'; fi ;;
+  esac
+}
+deploy_release "${files.project}" "${files.environment}" "${files.oldEnvironment}" 3300`;
+    const result = run(command, files);
+    expect(result.status, result.stderr).toBe(0);
+    const log = await readFile(files.log, "utf8");
+    expect(log.indexOf("systemctl stop fitgridweb-price-alerts.timer")).toBeGreaterThanOrEqual(0);
+    expect(log.indexOf("systemctl show --property=ActiveState --value fitgridweb-price-alerts.service")).toBeGreaterThanOrEqual(0);
+    expect(log.indexOf("systemctl stop fitgridweb-price-alerts.service")).toBeLessThan(log.indexOf("stage migration"));
+    expect(log).not.toContain("enable --now fitgridweb-price-alerts.timer");
+  });
+
   it.each([
     ["mktemp", ["restore mktemp"]],
     ["cp", ["restore mktemp", "restore cp", "restore rm"]],
@@ -364,6 +390,7 @@ restore_fitgrid_unit_states "$saved_states"
     ["app-enable", false],
     ["app-restart", true],
     ["final-health", true],
+    ["alert-timer", true],
   ])(
     "removes fresh unit activation state when %s activation fails",
     async (failureStage, restarted) => {
@@ -668,6 +695,7 @@ fitgrid_install_main grid.example.com 3300 443 /etc/nginx/conf.d/fitgridweb.conf
       "phase enable fitgridweb.service",
       "phase restart fitgridweb.service",
       "phase health",
+      "phase enable --now fitgridweb-price-alerts.timer",
     ]);
   });
 
@@ -891,7 +919,7 @@ fitgrid_install_main grid.example.com 3300 443 /etc/nginx/conf.d/fitgridweb.conf
     expect(await readFile(files.environment, "utf8")).toContain(`APP_IMAGE=${oldImage}`);
     const log = await readFile(files.log, "utf8");
     expect((log.match(/up --no-build -d --wait app/g) ?? [])).toHaveLength(2);
-    expect(log).not.toMatch(/down|-v|volume rm|system prune/);
+    expect(log).not.toMatch(/\bdown\b|(?:^| )-v(?: |$)|volume rm|system prune/m);
   });
 
   it("keeps upgrade-added environment variables when rolling back to a legacy image", async () => {

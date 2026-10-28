@@ -249,7 +249,7 @@ resolved_sha=$git_ref
 case $resolved_sha in ""|*[!a-fA-F0-9]*) fitgrid_error "内部 commit SHA 无效"; exit 1 ;; esac
 [ "${#resolved_sha}" -eq 40 ] || { fitgrid_error "内部 commit SHA 长度无效"; exit 1; }
 
-for library in install-nginx.sh install-host.sh install-deploy.sh; do
+for library in price-alerts-timer.sh install-nginx.sh install-host.sh install-deploy.sh; do
   [ -f "$script_directory/lib/$library" ] || { fitgrid_error "安装组件缺失：$library"; exit 1; }
   # shellcheck disable=SC1090
   . "$script_directory/lib/$library"

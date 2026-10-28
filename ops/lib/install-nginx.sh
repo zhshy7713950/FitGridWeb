@@ -323,6 +323,10 @@ render_nginx_snippet() {
     if (bytes + 0 <= 0) exit 1
     printf "%.0f", int((bytes + 1048575) / 1048576)
   }') || { fitgrid_error "上传字节上限无效"; return 1; }
+  cat <<'EOF'
+location = /fitgrid/api/internal { return 404; }
+location ^~ /fitgrid/api/internal/ { return 404; }
+EOF
   render_health_location "$app_port"
   printf '\n'
   render_proxy_location = /fitgrid "$app_port" "$upload_mebibytes"

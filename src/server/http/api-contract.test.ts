@@ -35,10 +35,23 @@ import * as health from "@/app/api/v1/health/route";
 import * as invitationAccept from "@/app/api/v1/invitations/[token]/accept/route";
 import * as invitation from "@/app/api/v1/invitations/[token]/route";
 
+import * as priceAlerts from "@/app/api/v1/price-alerts/route";
+import * as priceAlert from "@/app/api/v1/price-alerts/[id]/route";
+import * as priceAlertEvents from "@/app/api/v1/price-alerts/[id]/events/route";
+import * as resolveInstrument from "@/app/api/v1/market/instruments/resolve/route";
+import * as notifications from "@/app/api/v1/settings/notifications/route";
+import * as notificationTest from "@/app/api/v1/settings/notifications/test/route";
+
 type RouteModule = Record<string, unknown>;
 
 const routes: Record<string, RouteModule> = {
   "/health": health,
+  "/price-alerts": priceAlerts,
+  "/price-alerts/{id}": priceAlert,
+  "/price-alerts/{id}/events": priceAlertEvents,
+  "/market/instruments/resolve": resolveInstrument,
+  "/settings/notifications": notifications,
+  "/settings/notifications/test": notificationTest,
   "/auth/login": login,
   "/auth/logout": logout,
   "/auth/session": session,

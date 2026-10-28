@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { UserStatus } from "@/generated/prisma/client";
 import { ApiError } from "@/server/http/api-error";
+import { cancelOutbox } from "@/server/price-alerts/repository";
 import { signScopedToken, verifyScopedToken } from "@/server/security/signed-token";
 
 export interface ManagedUser {
@@ -153,6 +154,9 @@ export class PrismaAdminRepository implements AdminRepository {
             });
             if (status === "disabled") {
               await transaction.session.deleteMany({ where: { userId: id } });
+              await transaction.$queryRaw`SELECT set_config('app.current_user_id', ${id}, true)`;
+              await transaction.priceAlert.updateMany({ where: { enabled: true }, data: { enabled: false, version: { increment: 1 } } });
+              await cancelOutbox(transaction);
             }
             return { kind: "updated", user: managedUser(updated) } as const;
           },

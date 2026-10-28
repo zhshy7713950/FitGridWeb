@@ -57,7 +57,15 @@ export const ModelName = {
   Verification: 'Verification',
   Invitation: 'Invitation',
   GridTrade: 'GridTrade',
-  ImportPreview: 'ImportPreview'
+  ImportPreview: 'ImportPreview',
+  MarketInstrument: 'MarketInstrument',
+  MarketMinute: 'MarketMinute',
+  MarketDailyBasis: 'MarketDailyBasis',
+  MarketScan: 'MarketScan',
+  PriceAlert: 'PriceAlert',
+  PriceAlertChannel: 'PriceAlertChannel',
+  PriceAlertEvent: 'PriceAlertEvent',
+  PriceAlertOutbox: 'PriceAlertOutbox'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -190,6 +198,135 @@ export const ImportPreviewScalarFieldEnum = {
 export type ImportPreviewScalarFieldEnum = (typeof ImportPreviewScalarFieldEnum)[keyof typeof ImportPreviewScalarFieldEnum]
 
 
+export const MarketInstrumentScalarFieldEnum = {
+  id: 'id',
+  code: 'code',
+  name: 'name',
+  market: 'market',
+  currency: 'currency',
+  kind: 'kind',
+  tencent: 'tencent',
+  yahoo: 'yahoo',
+  eastmoney: 'eastmoney',
+  quote: 'quote',
+  createdAt: 'createdAt'
+} as const
+
+export type MarketInstrumentScalarFieldEnum = (typeof MarketInstrumentScalarFieldEnum)[keyof typeof MarketInstrumentScalarFieldEnum]
+
+
+export const MarketMinuteScalarFieldEnum = {
+  instrumentId: 'instrumentId',
+  provider: 'provider',
+  start: 'start',
+  end: 'end',
+  open: 'open',
+  high: 'high',
+  low: 'low',
+  close: 'close',
+  fetchedAt: 'fetchedAt'
+} as const
+
+export type MarketMinuteScalarFieldEnum = (typeof MarketMinuteScalarFieldEnum)[keyof typeof MarketMinuteScalarFieldEnum]
+
+
+export const MarketDailyBasisScalarFieldEnum = {
+  instrumentId: 'instrumentId',
+  provider: 'provider',
+  sessionDate: 'sessionDate',
+  payload: 'payload'
+} as const
+
+export type MarketDailyBasisScalarFieldEnum = (typeof MarketDailyBasisScalarFieldEnum)[keyof typeof MarketDailyBasisScalarFieldEnum]
+
+
+export const MarketScanScalarFieldEnum = {
+  id: 'id',
+  market: 'market',
+  windowEnd: 'windowEnd',
+  status: 'status',
+  report: 'report',
+  createdAt: 'createdAt',
+  finishedAt: 'finishedAt'
+} as const
+
+export type MarketScanScalarFieldEnum = (typeof MarketScanScalarFieldEnum)[keyof typeof MarketScanScalarFieldEnum]
+
+
+export const PriceAlertScalarFieldEnum = {
+  id: 'id',
+  ownerId: 'ownerId',
+  instrumentId: 'instrumentId',
+  condition: 'condition',
+  enabled: 'enabled',
+  version: 'version',
+  armed: 'armed',
+  cursor: 'cursor',
+  activeFrom: 'activeFrom',
+  continuityDegraded: 'continuityDegraded',
+  lastError: 'lastError',
+  lastSuccess: 'lastSuccess',
+  lastEvaluation: 'lastEvaluation',
+  deletedAt: 'deletedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type PriceAlertScalarFieldEnum = (typeof PriceAlertScalarFieldEnum)[keyof typeof PriceAlertScalarFieldEnum]
+
+
+export const PriceAlertChannelScalarFieldEnum = {
+  ownerId: 'ownerId',
+  keyCipher: 'keyCipher',
+  version: 'version',
+  testedAt: 'testedAt',
+  lastError: 'lastError',
+  updatedAt: 'updatedAt'
+} as const
+
+export type PriceAlertChannelScalarFieldEnum = (typeof PriceAlertChannelScalarFieldEnum)[keyof typeof PriceAlertChannelScalarFieldEnum]
+
+
+export const PriceAlertEventScalarFieldEnum = {
+  id: 'id',
+  ownerId: 'ownerId',
+  ruleId: 'ruleId',
+  version: 'version',
+  minuteStart: 'minuteStart',
+  minuteEnd: 'minuteEnd',
+  price: 'price',
+  threshold: 'threshold',
+  ma: 'ma',
+  provider: 'provider',
+  evidence: 'evidence',
+  outboxId: 'outboxId',
+  createdAt: 'createdAt'
+} as const
+
+export type PriceAlertEventScalarFieldEnum = (typeof PriceAlertEventScalarFieldEnum)[keyof typeof PriceAlertEventScalarFieldEnum]
+
+
+export const PriceAlertOutboxScalarFieldEnum = {
+  id: 'id',
+  ownerId: 'ownerId',
+  ruleId: 'ruleId',
+  version: 'version',
+  channelVersion: 'channelVersion',
+  batchEnd: 'batchEnd',
+  payload: 'payload',
+  status: 'status',
+  attempts: 'attempts',
+  nextAttemptAt: 'nextAttemptAt',
+  expiresAt: 'expiresAt',
+  leaseUntil: 'leaseUntil',
+  lastError: 'lastError',
+  acceptedAt: 'acceptedAt',
+  createdAt: 'createdAt'
+} as const
+
+export type PriceAlertOutboxScalarFieldEnum = (typeof PriceAlertOutboxScalarFieldEnum)[keyof typeof PriceAlertOutboxScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -203,6 +340,14 @@ export const JsonNullValueInput = {
 } as const
 
 export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNullValueInput]
+
+
+export const NullableJsonNullValueInput = {
+  DbNull: DbNull,
+  JsonNull: JsonNull
+} as const
+
+export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
 export const QueryMode = {

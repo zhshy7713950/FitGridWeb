@@ -482,8 +482,13 @@ describe.sequential("database-free UI demo", () => {
     expect(await detailMenu.locator("button, a").allTextContents()).toEqual([
       "重新计算",
       "编辑产品",
+      "创建股价提醒",
       "删除产品",
     ]);
+    const alertHref = await detailMenu.getByRole("link", { name: "创建股价提醒" }).getAttribute("href");
+    const alertUrl = new URL(alertHref!, baseUrl);
+    expect(alertUrl.pathname).toBe(`${appBasePath}/price-alerts/new`);
+    expect(alertUrl.searchParams.get("code")).toBe("518880");
     await page.keyboard.press("Escape");
     const mobileTableBox = await page.getByRole("region", { name: "网格计算结果" }).boundingBox();
     const mobileParametersBox = await page.locator('[aria-label="产品参数摘要"]').boundingBox();

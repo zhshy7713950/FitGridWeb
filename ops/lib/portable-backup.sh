@@ -254,10 +254,13 @@ portable_write_manifest() {
   portable_trades=$4
   portable_invitations=$5
   portable_previews=$6
+  portable_instruments=${7:-0}
+  portable_alerts=${8:-0}
+  portable_events=${9:-0}
   portable_created_at=$(portable_timestamp_iso "$portable_timestamp")
   [ -n "$portable_created_at" ] || { portable_fail "Invalid portable backup timestamp"; return 1; }
   portable_major=$(portable_postgres_major) || return 1
-  for portable_count in "$portable_users" "$portable_trades" "$portable_invitations" "$portable_previews"; do
+  for portable_count in "$portable_users" "$portable_trades" "$portable_invitations" "$portable_previews" "$portable_instruments" "$portable_alerts" "$portable_events"; do
     case "$portable_count" in ''|*[!0-9]*) portable_fail "Could not collect portable backup counts"; return 1 ;; esac
   done
   jq -n \
@@ -269,7 +272,10 @@ portable_write_manifest() {
     --argjson gridTrades "$portable_trades" \
     --argjson invitations "$portable_invitations" \
     --argjson importPreviews "$portable_previews" \
-    '{format:"fitgridweb-portable-backup",formatVersion:"3.0.0",dumpMode:"canonical-csv",dataEncoding:"base64-json-row-v1",createdAt:$createdAt,appImage:$appImage,postgresMajor:$postgresMajor,database:$database,counts:{users:$users,gridTrades:$gridTrades,invitations:$invitations,importPreviews:$importPreviews}}' \
+    --argjson marketInstruments "$portable_instruments" \
+    --argjson priceAlerts "$portable_alerts" \
+    --argjson priceAlertEvents "$portable_events" \
+    '{format:"fitgridweb-portable-backup",formatVersion:"4.0.0",dumpMode:"canonical-csv",dataEncoding:"base64-json-row-v1",createdAt:$createdAt,appImage:$appImage,postgresMajor:$postgresMajor,database:$database,counts:{users:$users,gridTrades:$gridTrades,invitations:$invitations,importPreviews:$importPreviews,marketInstruments:$marketInstruments,priceAlerts:$priceAlerts,priceAlertEvents:$priceAlertEvents}}' \
     >"$portable_manifest"
 }
 
@@ -282,6 +288,18 @@ portable_csv_files() {
     sessions.csv \
     users.csv \
     verifications.csv
+  if [ "${1:-4.0.0}" = 4.0.0 ]; then
+    printf '%s\n' market_instruments.csv price_alerts.csv price_alert_events.csv
+  fi
+}
+
+portable_payload_files() {
+  portable_csv_files "${1:-4.0.0}"
+  printf '%s\n' manifest.json payload.sha256
+}
+
+portable_directory_version() {
+  jq -er '.formatVersion' "$1/manifest.json"
 }
 
 portable_export_sql() {
@@ -352,6 +370,27 @@ COPY (
   )::text, 'UTF8'), 'base64'), E'\n', '') AS payload
   FROM public.verifications ORDER BY id
 ) TO STDOUT WITH (FORMAT csv, FORCE_QUOTE *);
+\echo __FITGRID_PORTABLE_V3_MARKET_INSTRUMENTS__
+COPY (
+  SELECT pg_catalog.replace(pg_catalog.encode(pg_catalog.convert_to(pg_catalog.jsonb_build_object(
+    'id', instrument.id, 'code', instrument.code, 'name', instrument.name, 'market', instrument.market, 'currency', instrument.currency, 'kind', instrument.kind, 'tencent', instrument.tencent, 'yahoo', instrument.yahoo, 'eastmoney', instrument.eastmoney, 'quote', instrument.quote, 'created_at', instrument.created_at
+  )::text, 'UTF8'), 'base64'), E'\n', '') AS payload
+  FROM public.market_instruments instrument WHERE EXISTS (SELECT 1 FROM public.price_alerts rule WHERE rule.instrument_id = instrument.id) ORDER BY instrument.id
+) TO STDOUT WITH (FORMAT csv, FORCE_QUOTE *);
+\echo __FITGRID_PORTABLE_V3_PRICE_ALERTS__
+COPY (
+  SELECT pg_catalog.replace(pg_catalog.encode(pg_catalog.convert_to(pg_catalog.jsonb_build_object(
+    'id', "id", 'owner_id', "owner_id", 'instrument_id', "instrument_id", 'condition', "condition", 'enabled', "enabled", 'version', "version", 'armed', "armed", 'cursor', "cursor", 'active_from', "active_from", 'continuity_degraded', "continuity_degraded", 'last_error', "last_error", 'last_success', "last_success", 'last_evaluation', "last_evaluation", 'deleted_at', "deleted_at", 'created_at', "created_at", 'updated_at', "updated_at"
+  )::text, 'UTF8'), 'base64'), E'\n', '') AS payload
+  FROM public.price_alerts ORDER BY id
+) TO STDOUT WITH (FORMAT csv, FORCE_QUOTE *);
+\echo __FITGRID_PORTABLE_V3_PRICE_ALERT_EVENTS__
+COPY (
+  SELECT pg_catalog.replace(pg_catalog.encode(pg_catalog.convert_to(pg_catalog.jsonb_build_object(
+    'id', "id", 'owner_id', "owner_id", 'rule_id', "rule_id", 'version', "version", 'minute_start', "minute_start", 'minute_end', "minute_end", 'price', "price", 'threshold', "threshold", 'ma', "ma", 'provider', "provider", 'evidence', "evidence", 'outbox_id', "outbox_id", 'created_at', "created_at"
+  )::text, 'UTF8'), 'base64'), E'\n', '') AS payload
+  FROM public.price_alert_events ORDER BY id
+) TO STDOUT WITH (FORMAT csv, FORCE_QUOTE *);
 COMMIT;
 \echo __FITGRID_PORTABLE_V3_END__
 EOSQL
@@ -374,6 +413,9 @@ portable_split_export() {
     $0 == "__FITGRID_PORTABLE_V3_SESSIONS__" { begin_section("sessions.csv"); next }
     $0 == "__FITGRID_PORTABLE_V3_USERS__" { begin_section("users.csv"); next }
     $0 == "__FITGRID_PORTABLE_V3_VERIFICATIONS__" { begin_section("verifications.csv"); next }
+    $0 == "__FITGRID_PORTABLE_V3_MARKET_INSTRUMENTS__" { begin_section("market_instruments.csv"); next }
+    $0 == "__FITGRID_PORTABLE_V3_PRICE_ALERTS__" { begin_section("price_alerts.csv"); next }
+    $0 == "__FITGRID_PORTABLE_V3_PRICE_ALERT_EVENTS__" { begin_section("price_alert_events.csv"); next }
     $0 == "__FITGRID_PORTABLE_V3_END__" {
       if (ended) { invalid = 1; exit }
       current = ""
@@ -396,7 +438,10 @@ portable_split_export() {
       expected[5] = "sessions.csv"
       expected[6] = "users.csv"
       expected[7] = "verifications.csv"
-      for (position = 1; position <= 7; position++) if (!seen[expected[position]]) invalid = 1
+      expected[8] = "market_instruments.csv"
+      expected[9] = "price_alerts.csv"
+      expected[10] = "price_alert_events.csv"
+      for (position = 1; position <= 10; position++) if (!seen[expected[position]]) invalid = 1
       if (oversized) exit 2
       exit (invalid || !ended)
     }
@@ -446,8 +491,7 @@ portable_csv_count() {
 portable_write_payload_checksums() {
   portable_checksum_directory=$1
   (cd "$portable_checksum_directory" && sha256sum \
-    accounts.csv grid_trades.csv import_previews.csv invitations.csv \
-    sessions.csv users.csv verifications.csv >payload.sha256)
+    $(portable_csv_files) >payload.sha256)
 }
 
 portable_age_run() (
@@ -472,8 +516,7 @@ portable_age_encrypt() {
   portable_encrypt_work=$2
   portable_encrypt_output=$3
   (cd "$portable_encrypt_work" && tar -cf - \
-    accounts.csv grid_trades.csv import_previews.csv invitations.csv \
-    sessions.csv users.csv verifications.csv manifest.json payload.sha256) |
+    $(portable_payload_files)) |
     (umask 077; portable_age_run "$portable_encrypt_passphrase" -e -j batchpass >"$portable_encrypt_output")
 }
 
@@ -512,22 +555,20 @@ portable_extract_member_bounded() {
 portable_validate_members() {
   portable_tar=$1
   portable_directory=$2
-  portable_expected='accounts.csv
-grid_trades.csv
-import_previews.csv
-invitations.csv
-manifest.json
-payload.sha256
-sessions.csv
-users.csv
-verifications.csv'
   portable_members=$(LC_ALL=C tar -tf "$portable_tar") || return 1
   portable_sorted_members=$(printf '%s\n' "$portable_members" | LC_ALL=C sort)
-  [ "$portable_sorted_members" = "$portable_expected" ] || { portable_fail "Portable archive members are invalid"; return 1; }
+  portable_archive_version=
+  for portable_candidate_version in 3.0.0 4.0.0; do
+    portable_expected=$(portable_payload_files "$portable_candidate_version" | LC_ALL=C sort)
+    if [ "$portable_sorted_members" = "$portable_expected" ]; then
+      portable_archive_version=$portable_candidate_version
+      break
+    fi
+  done
+  [ -n "$portable_archive_version" ] || { portable_fail "Portable archive members are invalid"; return 1; }
   portable_max=$(portable_max_bytes) || return 1
   portable_total=0
-  for portable_member in accounts.csv grid_trades.csv import_previews.csv invitations.csv \
-    sessions.csv users.csv verifications.csv manifest.json payload.sha256; do
+  for portable_member in $(portable_payload_files "$portable_archive_version"); do
     portable_listing=$(LC_ALL=C tar -tvf "$portable_tar" "$portable_member") || return 1
     case "$portable_listing" in -*) : ;; *) portable_fail "Portable archive contains a non-regular member"; return 1 ;; esac
     portable_remaining=$((portable_max - portable_total))
@@ -548,51 +589,47 @@ portable_validate_manifest() {
     type == "object" and
     (keys | sort) == ["appImage", "counts", "createdAt", "dataEncoding", "database", "dumpMode", "format", "formatVersion", "postgresMajor"] and
     .format == "fitgridweb-portable-backup" and
-    .formatVersion == "3.0.0" and
+    (.formatVersion == "3.0.0" or .formatVersion == "4.0.0") and
     .dumpMode == "canonical-csv" and
     .dataEncoding == "base64-json-row-v1" and
     (.createdAt | type == "string") and
     (.appImage | type == "string") and
     (.database | type == "string") and
     (.postgresMajor | type == "number" and . == $expectedMajor) and
-    (.counts | type == "object" and (keys | sort) == ["gridTrades", "importPreviews", "invitations", "users"]) and
-    all([.counts.users, .counts.gridTrades, .counts.invitations, .counts.importPreviews][];
+    ((.formatVersion == "3.0.0" and (.counts | type == "object" and (keys | sort) == ["gridTrades", "importPreviews", "invitations", "users"])) or
+     (.formatVersion == "4.0.0" and (.counts | type == "object" and (keys | sort) == ["gridTrades", "importPreviews", "invitations", "marketInstruments", "priceAlertEvents", "priceAlerts", "users"]))) and
+    all(.counts[];
       type == "number" and floor == . and . >= 0)
   ' "$portable_manifest" >/dev/null || { portable_fail "Portable backup manifest is incompatible"; return 1; }
 }
 
 portable_validate_manifest_counts() {
   portable_count_directory=$1
-  portable_expected_users=$(jq -r '.counts.users' "$portable_count_directory/manifest.json") || return 1
-  portable_expected_trades=$(jq -r '.counts.gridTrades' "$portable_count_directory/manifest.json") || return 1
-  portable_expected_invitations=$(jq -r '.counts.invitations' "$portable_count_directory/manifest.json") || return 1
-  portable_expected_previews=$(jq -r '.counts.importPreviews' "$portable_count_directory/manifest.json") || return 1
-  [ "$(portable_csv_count "$portable_count_directory/users.csv")" = "$portable_expected_users" ] \
-    && [ "$(portable_csv_count "$portable_count_directory/grid_trades.csv")" = "$portable_expected_trades" ] \
-    && [ "$(portable_csv_count "$portable_count_directory/invitations.csv")" = "$portable_expected_invitations" ] \
-    && [ "$(portable_csv_count "$portable_count_directory/import_previews.csv")" = "$portable_expected_previews" ] \
-    || { portable_fail "Portable backup manifest counts do not match its canonical data"; return 1; }
+  portable_count_version=$(portable_directory_version "$portable_count_directory") || return 1
+  portable_count_pairs='users:users grid_trades:gridTrades invitations:invitations import_previews:importPreviews'
+  if [ "$portable_count_version" = 4.0.0 ]; then
+    portable_count_pairs="$portable_count_pairs market_instruments:marketInstruments price_alerts:priceAlerts price_alert_events:priceAlertEvents"
+  fi
+  for portable_count_pair in $portable_count_pairs; do
+    portable_expected_count=$(jq -r ".counts.${portable_count_pair#*:}" "$portable_count_directory/manifest.json") || return 1
+    [ "$(portable_csv_count "$portable_count_directory/${portable_count_pair%:*}.csv")" = "$portable_expected_count" ] \
+      || { portable_fail "Portable backup manifest counts do not match its canonical data"; return 1; }
+  done
 }
 
 portable_validate_payload_checksums() {
   portable_checksum_directory=$1
-  LC_ALL=C awk '
-    BEGIN {
-      expected[1] = "accounts.csv"
-      expected[2] = "grid_trades.csv"
-      expected[3] = "import_previews.csv"
-      expected[4] = "invitations.csv"
-      expected[5] = "sessions.csv"
-      expected[6] = "users.csv"
-      expected[7] = "verifications.csv"
-    }
+  portable_checksum_version=$(portable_directory_version "$portable_checksum_directory") || return 1
+  portable_checksum_files=$(portable_csv_files "$portable_checksum_version" | tr '\n' ' ') || return 1
+  LC_ALL=C awk -v files="$portable_checksum_files" '
+    BEGIN { count = split(files, expected, " ") }
     {
-      if (NR > 7 || $1 !~ /^[0-9a-f]{64}$/ || substr($0, 65, 2) != "  " || substr($0, 67) != expected[NR]) {
+      if (NR > count || $1 !~ /^[0-9a-f]{64}$/ || substr($0, 65, 2) != "  " || substr($0, 67) != expected[NR]) {
         invalid = 1
         exit
       }
     }
-    END { exit (invalid || NR != 7) }
+    END { exit (invalid || NR != count) }
   ' "$portable_checksum_directory/payload.sha256" || {
     portable_fail "Portable backup checksum record is invalid"
     return 1
@@ -619,8 +656,8 @@ portable_validate_payload_size() {
   portable_payload_directory=$1
   portable_payload_limit=$(portable_max_bytes) || return 1
   portable_payload_total=0
-  for portable_payload_member in accounts.csv grid_trades.csv import_previews.csv invitations.csv \
-    sessions.csv users.csv verifications.csv manifest.json payload.sha256; do
+  portable_payload_version=$(portable_directory_version "$portable_payload_directory") || return 1
+  for portable_payload_member in $(portable_payload_files "$portable_payload_version"); do
     portable_payload_size=$(portable_file_size "$portable_payload_directory/$portable_payload_member") || return 1
     case "$portable_payload_size" in ''|*[!0-9]*) portable_fail "Portable archive member size is invalid"; return 1 ;; esac
     portable_payload_total=$((portable_payload_total + portable_payload_size))
@@ -636,9 +673,10 @@ portable_validate_plain_archive() {
   portable_directory=$2
   portable_validate_members "$portable_tar" "$portable_directory" || return 1
   portable_validate_manifest "$portable_directory/manifest.json" || return 1
+  [ "$(portable_directory_version "$portable_directory")" = "$portable_archive_version" ] || { portable_fail "Portable archive version and members disagree"; return 1; }
   portable_validate_payload_checksums "$portable_directory" || return 1
   portable_validate_payload_size "$portable_directory" || return 1
-  portable_csv_files | while IFS= read -r portable_csv; do
+  portable_csv_files "$portable_archive_version" | while IFS= read -r portable_csv; do
     portable_validate_csv_file "$portable_directory/$portable_csv" || exit $?
   done || return $?
   portable_validate_manifest_counts "$portable_directory"
@@ -778,13 +816,53 @@ FROM (
   SELECT pg_catalog.convert_from(pg_catalog.decode(payload, 'base64'), 'UTF8')::jsonb AS data
   FROM pg_temp.portable_rows
 ) AS decoded;
-COMMIT;
 EOSQL
+  if [ -f "$portable_restore_directory/price_alerts.csv" ]; then
+    cat <<'EOSQL'
+TRUNCATE pg_temp.portable_rows;
+CREATE TEMP TABLE portable_decoded (data jsonb NOT NULL) ON COMMIT DROP;
+EOSQL
+  portable_emit_copy_section "$portable_restore_directory/market_instruments.csv"
+  cat <<'EOSQL'
+TRUNCATE pg_temp.portable_decoded;
+INSERT INTO pg_temp.portable_decoded SELECT pg_catalog.convert_from(pg_catalog.decode(payload, 'base64'), 'UTF8')::jsonb FROM pg_temp.portable_rows;
+INSERT INTO public.market_instruments
+  ("id", "code", "name", "market", "currency", "kind", "tencent", "yahoo", "eastmoney", "quote", "created_at")
+SELECT (data->>'id')::uuid, (data->>'code')::text, (data->>'name')::text, (data->>'market')::text, (data->>'currency')::text, (data->>'kind')::text, (data->>'tencent')::text, (data->>'yahoo')::text, (data->>'eastmoney')::text, data->'quote', (data->>'created_at')::timestamp(3)
+FROM pg_temp.portable_decoded;
+TRUNCATE pg_temp.portable_rows;
+EOSQL
+  portable_emit_copy_section "$portable_restore_directory/price_alerts.csv"
+  cat <<'EOSQL'
+TRUNCATE pg_temp.portable_decoded;
+INSERT INTO pg_temp.portable_decoded SELECT pg_catalog.convert_from(pg_catalog.decode(payload, 'base64'), 'UTF8')::jsonb FROM pg_temp.portable_rows;
+INSERT INTO public.price_alerts
+  ("id", "owner_id", "instrument_id", "condition", "enabled", "version", "armed", "cursor", "active_from", "continuity_degraded", "last_error", "last_success", "last_evaluation", "deleted_at", "created_at", "updated_at")
+SELECT (data->>'id')::uuid, (data->>'owner_id')::uuid, (data->>'instrument_id')::uuid, data->'condition', false, (data->>'version')::integer, true, NULL, CURRENT_TIMESTAMP, false, NULL, NULL, NULL, (data->>'deleted_at')::timestamp(3), (data->>'created_at')::timestamp(3), (data->>'updated_at')::timestamp(3)
+FROM pg_temp.portable_decoded;
+TRUNCATE pg_temp.portable_rows;
+EOSQL
+  portable_emit_copy_section "$portable_restore_directory/price_alert_events.csv"
+  cat <<'EOSQL'
+TRUNCATE pg_temp.portable_decoded;
+INSERT INTO pg_temp.portable_decoded SELECT pg_catalog.convert_from(pg_catalog.decode(payload, 'base64'), 'UTF8')::jsonb FROM pg_temp.portable_rows;
+INSERT INTO public.price_alert_events
+  ("id", "owner_id", "rule_id", "version", "minute_start", "minute_end", "price", "threshold", "ma", "provider", "evidence", "outbox_id", "created_at")
+SELECT (data->>'id')::uuid, (data->>'owner_id')::uuid, (data->>'rule_id')::uuid, (data->>'version')::integer, (data->>'minute_start')::timestamp(3), (data->>'minute_end')::timestamp(3), (data->>'price')::numeric, (data->>'threshold')::numeric, (data->>'ma')::numeric, (data->>'provider')::text, data->'evidence', NULL, (data->>'created_at')::timestamp(3)
+FROM pg_temp.portable_decoded;
+TRUNCATE pg_temp.portable_rows;
+EOSQL
+  fi
+  printf 'COMMIT;\n'
 }
 
 portable_restore_canonical_data() {
   portable_restore_directory=$1
-  portable_csv_files | while IFS= read -r portable_csv; do
+  portable_restore_version=3.0.0
+  if [ -f "$portable_restore_directory/manifest.json" ]; then
+    portable_restore_version=$(portable_directory_version "$portable_restore_directory") || return 1
+  fi
+  portable_csv_files "$portable_restore_version" | while IFS= read -r portable_csv; do
     [ -f "$portable_restore_directory/$portable_csv" ] && [ ! -L "$portable_restore_directory/$portable_csv" ] \
       || { portable_fail "Portable restore CSV is missing"; exit 1; }
     portable_validate_csv_file "$portable_restore_directory/$portable_csv" || exit $?
@@ -980,7 +1058,10 @@ create_portable_backup() (
   portable_invitations=$(portable_csv_count "$portable_work/invitations.csv")
   portable_previews=$(portable_csv_count "$portable_work/import_previews.csv")
   portable_write_manifest "$portable_work/manifest.json" "$timestamp" \
-    "$portable_users" "$portable_trades" "$portable_invitations" "$portable_previews"
+    "$portable_users" "$portable_trades" "$portable_invitations" "$portable_previews" \
+    "$(portable_csv_count "$portable_work/market_instruments.csv")" \
+    "$(portable_csv_count "$portable_work/price_alerts.csv")" \
+    "$(portable_csv_count "$portable_work/price_alert_events.csv")"
   portable_write_payload_checksums "$portable_work"
   portable_validate_payload_size "$portable_work"
   portable_csv_files | while IFS= read -r portable_csv; do

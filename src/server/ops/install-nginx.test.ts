@@ -204,6 +204,8 @@ describe("nginx managed include", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("location = /fitgrid");
     expect(result.stdout).toContain("location ^~ /fitgrid/");
+    expect(result.stdout).toContain("location = /fitgrid/api/internal { return 404; }");
+    expect(result.stdout).toContain("location ^~ /fitgrid/api/internal/ { return 404; }");
     expect(result.stdout).toContain("proxy_pass http://127.0.0.1:3300;");
     expect(result.stdout).not.toContain("3300/;");
     expect(result.stdout).toContain("proxy_set_header Host $http_host;");

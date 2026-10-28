@@ -403,7 +403,15 @@ export const ModelName = {
   Verification: 'Verification',
   Invitation: 'Invitation',
   GridTrade: 'GridTrade',
-  ImportPreview: 'ImportPreview'
+  ImportPreview: 'ImportPreview',
+  MarketInstrument: 'MarketInstrument',
+  MarketMinute: 'MarketMinute',
+  MarketDailyBasis: 'MarketDailyBasis',
+  MarketScan: 'MarketScan',
+  PriceAlert: 'PriceAlert',
+  PriceAlertChannel: 'PriceAlertChannel',
+  PriceAlertEvent: 'PriceAlertEvent',
+  PriceAlertOutbox: 'PriceAlertOutbox'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -419,7 +427,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "session" | "account" | "verification" | "invitation" | "gridTrade" | "importPreview"
+    modelProps: "user" | "session" | "account" | "verification" | "invitation" | "gridTrade" | "importPreview" | "marketInstrument" | "marketMinute" | "marketDailyBasis" | "marketScan" | "priceAlert" | "priceAlertChannel" | "priceAlertEvent" | "priceAlertOutbox"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -941,6 +949,598 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    MarketInstrument: {
+      payload: Prisma.$MarketInstrumentPayload<ExtArgs>
+      fields: Prisma.MarketInstrumentFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.MarketInstrumentFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketInstrumentPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.MarketInstrumentFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketInstrumentPayload>
+        }
+        findFirst: {
+          args: Prisma.MarketInstrumentFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketInstrumentPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.MarketInstrumentFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketInstrumentPayload>
+        }
+        findMany: {
+          args: Prisma.MarketInstrumentFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketInstrumentPayload>[]
+        }
+        create: {
+          args: Prisma.MarketInstrumentCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketInstrumentPayload>
+        }
+        createMany: {
+          args: Prisma.MarketInstrumentCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.MarketInstrumentCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketInstrumentPayload>[]
+        }
+        delete: {
+          args: Prisma.MarketInstrumentDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketInstrumentPayload>
+        }
+        update: {
+          args: Prisma.MarketInstrumentUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketInstrumentPayload>
+        }
+        deleteMany: {
+          args: Prisma.MarketInstrumentDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.MarketInstrumentUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.MarketInstrumentUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketInstrumentPayload>[]
+        }
+        upsert: {
+          args: Prisma.MarketInstrumentUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketInstrumentPayload>
+        }
+        aggregate: {
+          args: Prisma.MarketInstrumentAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateMarketInstrument>
+        }
+        groupBy: {
+          args: Prisma.MarketInstrumentGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.MarketInstrumentGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.MarketInstrumentCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.MarketInstrumentCountAggregateOutputType> | number
+        }
+      }
+    }
+    MarketMinute: {
+      payload: Prisma.$MarketMinutePayload<ExtArgs>
+      fields: Prisma.MarketMinuteFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.MarketMinuteFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketMinutePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.MarketMinuteFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketMinutePayload>
+        }
+        findFirst: {
+          args: Prisma.MarketMinuteFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketMinutePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.MarketMinuteFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketMinutePayload>
+        }
+        findMany: {
+          args: Prisma.MarketMinuteFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketMinutePayload>[]
+        }
+        create: {
+          args: Prisma.MarketMinuteCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketMinutePayload>
+        }
+        createMany: {
+          args: Prisma.MarketMinuteCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.MarketMinuteCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketMinutePayload>[]
+        }
+        delete: {
+          args: Prisma.MarketMinuteDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketMinutePayload>
+        }
+        update: {
+          args: Prisma.MarketMinuteUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketMinutePayload>
+        }
+        deleteMany: {
+          args: Prisma.MarketMinuteDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.MarketMinuteUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.MarketMinuteUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketMinutePayload>[]
+        }
+        upsert: {
+          args: Prisma.MarketMinuteUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketMinutePayload>
+        }
+        aggregate: {
+          args: Prisma.MarketMinuteAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateMarketMinute>
+        }
+        groupBy: {
+          args: Prisma.MarketMinuteGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.MarketMinuteGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.MarketMinuteCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.MarketMinuteCountAggregateOutputType> | number
+        }
+      }
+    }
+    MarketDailyBasis: {
+      payload: Prisma.$MarketDailyBasisPayload<ExtArgs>
+      fields: Prisma.MarketDailyBasisFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.MarketDailyBasisFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketDailyBasisPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.MarketDailyBasisFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketDailyBasisPayload>
+        }
+        findFirst: {
+          args: Prisma.MarketDailyBasisFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketDailyBasisPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.MarketDailyBasisFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketDailyBasisPayload>
+        }
+        findMany: {
+          args: Prisma.MarketDailyBasisFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketDailyBasisPayload>[]
+        }
+        create: {
+          args: Prisma.MarketDailyBasisCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketDailyBasisPayload>
+        }
+        createMany: {
+          args: Prisma.MarketDailyBasisCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.MarketDailyBasisCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketDailyBasisPayload>[]
+        }
+        delete: {
+          args: Prisma.MarketDailyBasisDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketDailyBasisPayload>
+        }
+        update: {
+          args: Prisma.MarketDailyBasisUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketDailyBasisPayload>
+        }
+        deleteMany: {
+          args: Prisma.MarketDailyBasisDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.MarketDailyBasisUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.MarketDailyBasisUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketDailyBasisPayload>[]
+        }
+        upsert: {
+          args: Prisma.MarketDailyBasisUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketDailyBasisPayload>
+        }
+        aggregate: {
+          args: Prisma.MarketDailyBasisAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateMarketDailyBasis>
+        }
+        groupBy: {
+          args: Prisma.MarketDailyBasisGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.MarketDailyBasisGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.MarketDailyBasisCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.MarketDailyBasisCountAggregateOutputType> | number
+        }
+      }
+    }
+    MarketScan: {
+      payload: Prisma.$MarketScanPayload<ExtArgs>
+      fields: Prisma.MarketScanFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.MarketScanFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketScanPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.MarketScanFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketScanPayload>
+        }
+        findFirst: {
+          args: Prisma.MarketScanFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketScanPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.MarketScanFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketScanPayload>
+        }
+        findMany: {
+          args: Prisma.MarketScanFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketScanPayload>[]
+        }
+        create: {
+          args: Prisma.MarketScanCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketScanPayload>
+        }
+        createMany: {
+          args: Prisma.MarketScanCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.MarketScanCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketScanPayload>[]
+        }
+        delete: {
+          args: Prisma.MarketScanDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketScanPayload>
+        }
+        update: {
+          args: Prisma.MarketScanUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketScanPayload>
+        }
+        deleteMany: {
+          args: Prisma.MarketScanDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.MarketScanUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.MarketScanUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketScanPayload>[]
+        }
+        upsert: {
+          args: Prisma.MarketScanUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MarketScanPayload>
+        }
+        aggregate: {
+          args: Prisma.MarketScanAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateMarketScan>
+        }
+        groupBy: {
+          args: Prisma.MarketScanGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.MarketScanGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.MarketScanCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.MarketScanCountAggregateOutputType> | number
+        }
+      }
+    }
+    PriceAlert: {
+      payload: Prisma.$PriceAlertPayload<ExtArgs>
+      fields: Prisma.PriceAlertFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.PriceAlertFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.PriceAlertFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertPayload>
+        }
+        findFirst: {
+          args: Prisma.PriceAlertFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.PriceAlertFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertPayload>
+        }
+        findMany: {
+          args: Prisma.PriceAlertFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertPayload>[]
+        }
+        create: {
+          args: Prisma.PriceAlertCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertPayload>
+        }
+        createMany: {
+          args: Prisma.PriceAlertCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.PriceAlertCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertPayload>[]
+        }
+        delete: {
+          args: Prisma.PriceAlertDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertPayload>
+        }
+        update: {
+          args: Prisma.PriceAlertUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertPayload>
+        }
+        deleteMany: {
+          args: Prisma.PriceAlertDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.PriceAlertUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.PriceAlertUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertPayload>[]
+        }
+        upsert: {
+          args: Prisma.PriceAlertUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertPayload>
+        }
+        aggregate: {
+          args: Prisma.PriceAlertAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregatePriceAlert>
+        }
+        groupBy: {
+          args: Prisma.PriceAlertGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PriceAlertGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.PriceAlertCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PriceAlertCountAggregateOutputType> | number
+        }
+      }
+    }
+    PriceAlertChannel: {
+      payload: Prisma.$PriceAlertChannelPayload<ExtArgs>
+      fields: Prisma.PriceAlertChannelFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.PriceAlertChannelFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertChannelPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.PriceAlertChannelFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertChannelPayload>
+        }
+        findFirst: {
+          args: Prisma.PriceAlertChannelFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertChannelPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.PriceAlertChannelFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertChannelPayload>
+        }
+        findMany: {
+          args: Prisma.PriceAlertChannelFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertChannelPayload>[]
+        }
+        create: {
+          args: Prisma.PriceAlertChannelCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertChannelPayload>
+        }
+        createMany: {
+          args: Prisma.PriceAlertChannelCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.PriceAlertChannelCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertChannelPayload>[]
+        }
+        delete: {
+          args: Prisma.PriceAlertChannelDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertChannelPayload>
+        }
+        update: {
+          args: Prisma.PriceAlertChannelUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertChannelPayload>
+        }
+        deleteMany: {
+          args: Prisma.PriceAlertChannelDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.PriceAlertChannelUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.PriceAlertChannelUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertChannelPayload>[]
+        }
+        upsert: {
+          args: Prisma.PriceAlertChannelUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertChannelPayload>
+        }
+        aggregate: {
+          args: Prisma.PriceAlertChannelAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregatePriceAlertChannel>
+        }
+        groupBy: {
+          args: Prisma.PriceAlertChannelGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PriceAlertChannelGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.PriceAlertChannelCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PriceAlertChannelCountAggregateOutputType> | number
+        }
+      }
+    }
+    PriceAlertEvent: {
+      payload: Prisma.$PriceAlertEventPayload<ExtArgs>
+      fields: Prisma.PriceAlertEventFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.PriceAlertEventFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertEventPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.PriceAlertEventFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertEventPayload>
+        }
+        findFirst: {
+          args: Prisma.PriceAlertEventFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertEventPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.PriceAlertEventFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertEventPayload>
+        }
+        findMany: {
+          args: Prisma.PriceAlertEventFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertEventPayload>[]
+        }
+        create: {
+          args: Prisma.PriceAlertEventCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertEventPayload>
+        }
+        createMany: {
+          args: Prisma.PriceAlertEventCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.PriceAlertEventCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertEventPayload>[]
+        }
+        delete: {
+          args: Prisma.PriceAlertEventDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertEventPayload>
+        }
+        update: {
+          args: Prisma.PriceAlertEventUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertEventPayload>
+        }
+        deleteMany: {
+          args: Prisma.PriceAlertEventDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.PriceAlertEventUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.PriceAlertEventUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertEventPayload>[]
+        }
+        upsert: {
+          args: Prisma.PriceAlertEventUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertEventPayload>
+        }
+        aggregate: {
+          args: Prisma.PriceAlertEventAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregatePriceAlertEvent>
+        }
+        groupBy: {
+          args: Prisma.PriceAlertEventGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PriceAlertEventGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.PriceAlertEventCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PriceAlertEventCountAggregateOutputType> | number
+        }
+      }
+    }
+    PriceAlertOutbox: {
+      payload: Prisma.$PriceAlertOutboxPayload<ExtArgs>
+      fields: Prisma.PriceAlertOutboxFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.PriceAlertOutboxFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertOutboxPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.PriceAlertOutboxFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertOutboxPayload>
+        }
+        findFirst: {
+          args: Prisma.PriceAlertOutboxFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertOutboxPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.PriceAlertOutboxFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertOutboxPayload>
+        }
+        findMany: {
+          args: Prisma.PriceAlertOutboxFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertOutboxPayload>[]
+        }
+        create: {
+          args: Prisma.PriceAlertOutboxCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertOutboxPayload>
+        }
+        createMany: {
+          args: Prisma.PriceAlertOutboxCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.PriceAlertOutboxCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertOutboxPayload>[]
+        }
+        delete: {
+          args: Prisma.PriceAlertOutboxDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertOutboxPayload>
+        }
+        update: {
+          args: Prisma.PriceAlertOutboxUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertOutboxPayload>
+        }
+        deleteMany: {
+          args: Prisma.PriceAlertOutboxDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.PriceAlertOutboxUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.PriceAlertOutboxUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertOutboxPayload>[]
+        }
+        upsert: {
+          args: Prisma.PriceAlertOutboxUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PriceAlertOutboxPayload>
+        }
+        aggregate: {
+          args: Prisma.PriceAlertOutboxAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregatePriceAlertOutbox>
+        }
+        groupBy: {
+          args: Prisma.PriceAlertOutboxGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PriceAlertOutboxGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.PriceAlertOutboxCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PriceAlertOutboxCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -1094,6 +1694,135 @@ export const ImportPreviewScalarFieldEnum = {
 export type ImportPreviewScalarFieldEnum = (typeof ImportPreviewScalarFieldEnum)[keyof typeof ImportPreviewScalarFieldEnum]
 
 
+export const MarketInstrumentScalarFieldEnum = {
+  id: 'id',
+  code: 'code',
+  name: 'name',
+  market: 'market',
+  currency: 'currency',
+  kind: 'kind',
+  tencent: 'tencent',
+  yahoo: 'yahoo',
+  eastmoney: 'eastmoney',
+  quote: 'quote',
+  createdAt: 'createdAt'
+} as const
+
+export type MarketInstrumentScalarFieldEnum = (typeof MarketInstrumentScalarFieldEnum)[keyof typeof MarketInstrumentScalarFieldEnum]
+
+
+export const MarketMinuteScalarFieldEnum = {
+  instrumentId: 'instrumentId',
+  provider: 'provider',
+  start: 'start',
+  end: 'end',
+  open: 'open',
+  high: 'high',
+  low: 'low',
+  close: 'close',
+  fetchedAt: 'fetchedAt'
+} as const
+
+export type MarketMinuteScalarFieldEnum = (typeof MarketMinuteScalarFieldEnum)[keyof typeof MarketMinuteScalarFieldEnum]
+
+
+export const MarketDailyBasisScalarFieldEnum = {
+  instrumentId: 'instrumentId',
+  provider: 'provider',
+  sessionDate: 'sessionDate',
+  payload: 'payload'
+} as const
+
+export type MarketDailyBasisScalarFieldEnum = (typeof MarketDailyBasisScalarFieldEnum)[keyof typeof MarketDailyBasisScalarFieldEnum]
+
+
+export const MarketScanScalarFieldEnum = {
+  id: 'id',
+  market: 'market',
+  windowEnd: 'windowEnd',
+  status: 'status',
+  report: 'report',
+  createdAt: 'createdAt',
+  finishedAt: 'finishedAt'
+} as const
+
+export type MarketScanScalarFieldEnum = (typeof MarketScanScalarFieldEnum)[keyof typeof MarketScanScalarFieldEnum]
+
+
+export const PriceAlertScalarFieldEnum = {
+  id: 'id',
+  ownerId: 'ownerId',
+  instrumentId: 'instrumentId',
+  condition: 'condition',
+  enabled: 'enabled',
+  version: 'version',
+  armed: 'armed',
+  cursor: 'cursor',
+  activeFrom: 'activeFrom',
+  continuityDegraded: 'continuityDegraded',
+  lastError: 'lastError',
+  lastSuccess: 'lastSuccess',
+  lastEvaluation: 'lastEvaluation',
+  deletedAt: 'deletedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type PriceAlertScalarFieldEnum = (typeof PriceAlertScalarFieldEnum)[keyof typeof PriceAlertScalarFieldEnum]
+
+
+export const PriceAlertChannelScalarFieldEnum = {
+  ownerId: 'ownerId',
+  keyCipher: 'keyCipher',
+  version: 'version',
+  testedAt: 'testedAt',
+  lastError: 'lastError',
+  updatedAt: 'updatedAt'
+} as const
+
+export type PriceAlertChannelScalarFieldEnum = (typeof PriceAlertChannelScalarFieldEnum)[keyof typeof PriceAlertChannelScalarFieldEnum]
+
+
+export const PriceAlertEventScalarFieldEnum = {
+  id: 'id',
+  ownerId: 'ownerId',
+  ruleId: 'ruleId',
+  version: 'version',
+  minuteStart: 'minuteStart',
+  minuteEnd: 'minuteEnd',
+  price: 'price',
+  threshold: 'threshold',
+  ma: 'ma',
+  provider: 'provider',
+  evidence: 'evidence',
+  outboxId: 'outboxId',
+  createdAt: 'createdAt'
+} as const
+
+export type PriceAlertEventScalarFieldEnum = (typeof PriceAlertEventScalarFieldEnum)[keyof typeof PriceAlertEventScalarFieldEnum]
+
+
+export const PriceAlertOutboxScalarFieldEnum = {
+  id: 'id',
+  ownerId: 'ownerId',
+  ruleId: 'ruleId',
+  version: 'version',
+  channelVersion: 'channelVersion',
+  batchEnd: 'batchEnd',
+  payload: 'payload',
+  status: 'status',
+  attempts: 'attempts',
+  nextAttemptAt: 'nextAttemptAt',
+  expiresAt: 'expiresAt',
+  leaseUntil: 'leaseUntil',
+  lastError: 'lastError',
+  acceptedAt: 'acceptedAt',
+  createdAt: 'createdAt'
+} as const
+
+export type PriceAlertOutboxScalarFieldEnum = (typeof PriceAlertOutboxScalarFieldEnum)[keyof typeof PriceAlertOutboxScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -1107,6 +1836,14 @@ export const JsonNullValueInput = {
 } as const
 
 export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNullValueInput]
+
+
+export const NullableJsonNullValueInput = {
+  DbNull: DbNull,
+  JsonNull: JsonNull
+} as const
+
+export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
 export const QueryMode = {
@@ -1430,6 +2167,14 @@ export type GlobalOmitConfig = {
   invitation?: Prisma.InvitationOmit
   gridTrade?: Prisma.GridTradeOmit
   importPreview?: Prisma.ImportPreviewOmit
+  marketInstrument?: Prisma.MarketInstrumentOmit
+  marketMinute?: Prisma.MarketMinuteOmit
+  marketDailyBasis?: Prisma.MarketDailyBasisOmit
+  marketScan?: Prisma.MarketScanOmit
+  priceAlert?: Prisma.PriceAlertOmit
+  priceAlertChannel?: Prisma.PriceAlertChannelOmit
+  priceAlertEvent?: Prisma.PriceAlertEventOmit
+  priceAlertOutbox?: Prisma.PriceAlertOutboxOmit
 }
 
 /* Types for Logging */

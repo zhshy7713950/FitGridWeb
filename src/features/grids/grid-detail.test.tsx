@@ -147,6 +147,7 @@ describe("GridDetailView", () => {
     expect(Array.from(menu.querySelectorAll("button, a")).map((item) => item.textContent)).toEqual([
       "重新计算",
       "编辑产品",
+      "创建股价提醒",
       "删除产品",
     ]);
     expect(within(menu).getByRole("link", { name: "编辑产品" })).toHaveAttribute(
@@ -762,4 +763,9 @@ describe("GridDetail controller", () => {
     expect(api.deleteGridTrade).toHaveBeenCalledTimes(1);
     expect(navigation.replace).toHaveBeenCalledWith("/grids");
   });
+});
+
+it("offers a code-prefilled price alert without coupling it to the grid", () => {
+  render(<GridDetailView detail={detail} onRecalculate={vi.fn()} onDelete={vi.fn()} />);
+  expect(screen.getAllByRole("link", { name: "创建股价提醒" })[0]).toHaveAttribute("href", `/price-alerts/new?code=${encodeURIComponent(detail.productCode)}`);
 });
