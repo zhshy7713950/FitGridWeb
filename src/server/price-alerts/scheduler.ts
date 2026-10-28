@@ -239,14 +239,25 @@ export class AlertScheduler {
   private async cleanup(signal: AbortSignal) {
     await this.guard(signal);
     const now = this.repository.clock();
+    const cutoff = new Date(now - 3 * 86400000);
     const purge = async (removeBatch: () => Promise<number>) => {
       for (;;) { await this.guard(signal); if (await removeBatch() < 1000) return; }
     };
-    await purge(() => this.repository.prisma.$executeRaw`DELETE FROM market_minutes WHERE ctid IN (SELECT ctid FROM market_minutes WHERE start < ${new Date(now - 7 * 86400000)} LIMIT 1000)`);
-    await purge(() => this.repository.prisma.$executeRaw`DELETE FROM market_scans WHERE ctid IN (SELECT ctid FROM market_scans WHERE created_at < ${new Date(now - 7 * 86400000)} AND id <> 'runtime' LIMIT 1000)`);
+    await purge(() => this.repository.prisma.$executeRaw`DELETE FROM market_minutes WHERE ctid IN (SELECT ctid FROM market_minutes WHERE start < ${cutoff} LIMIT 1000)`);
+    await purge(() => this.repository.prisma.$executeRaw`DELETE FROM market_scans WHERE ctid IN (SELECT ctid FROM market_scans WHERE created_at < ${cutoff} AND id <> 'runtime' LIMIT 1000)`);
+    await purge(() => this.repository.prisma.$executeRaw`UPDATE market_instruments SET quote = NULL WHERE id IN (SELECT id FROM market_instruments WHERE quote->>'fetchedAt' < ${cutoff.toISOString()} LIMIT 1000)`);
     const bases = await this.repository.prisma.marketDailyBasis.findMany({ orderBy: { sessionDate: "desc" } });
     const seen = new Map<string, number>();
-    for (const basis of bases) { const key = `${basis.instrumentId}:${basis.provider}`; const count = (seen.get(key) ?? 0) + 1; seen.set(key, count); if (count > 2) await this.repository.prisma.marketDailyBasis.delete({ where: { instrumentId_provider_sessionDate: { instrumentId: basis.instrumentId, provider: basis.provider, sessionDate: basis.sessionDate } } }); }
+    for (const basis of bases) {
+      await this.guard(signal);
+      const fetchedAt = Date.parse((basis.payload as unknown as { fetchedAt: string }).fetchedAt);
+      const key = `${basis.instrumentId}:${basis.provider}`;
+      const count = (seen.get(key) ?? 0) + 1;
+      if (Number.isFinite(fetchedAt) && fetchedAt >= cutoff.getTime()) seen.set(key, count);
+      if (!Number.isFinite(fetchedAt) || fetchedAt < cutoff.getTime() || count > 2) {
+        await this.repository.prisma.marketDailyBasis.delete({ where: { instrumentId_provider_sessionDate: { instrumentId: basis.instrumentId, provider: basis.provider, sessionDate: basis.sessionDate } } });
+      }
+    }
     const owners = await this.repository.prisma.user.findMany({ select: { id: true } });
     let total = 0;
     for (const owner of owners) {
@@ -256,7 +267,7 @@ export class AlertScheduler {
         return (await tx.priceAlertEvent.deleteMany({ where: { id: { in: expired.map((r) => r.id) } } })).count;
       }));
       await purge(() => this.repository.scope(owner.id, async (tx) => {
-        const oldQueue = await tx.priceAlertOutbox.findMany({ where: { status: { notIn: ["pending", "sending"] }, createdAt: { lt: new Date(now - 7 * 86400000) } }, select: { id: true }, take: 1000 });
+        const oldQueue = await tx.priceAlertOutbox.findMany({ where: { status: { notIn: ["pending", "sending"] }, OR: [{ acceptedAt: { lt: cutoff } }, { acceptedAt: null, expiresAt: { lt: cutoff } }] }, select: { id: true }, take: 1000 });
         return (await tx.priceAlertOutbox.deleteMany({ where: { id: { in: oldQueue.map((r) => r.id) } } })).count;
       }));
       await purge(() => this.repository.scope(owner.id, async (tx) => {

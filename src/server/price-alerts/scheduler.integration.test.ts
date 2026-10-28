@@ -64,6 +64,36 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("durable collection and outbox",
     await scheduler.tick();
     expect(fetches).toBe(1);
   });
+  it("expires temporary records after three days while retaining current history and unfinished notifications", async () => {
+    const rule = (await repo.activeRules(owner))[0];
+    const cutoff = new Date(now - 3 * 86400000), old = new Date(now - 4 * 86400000), recent = new Date(now - 86400000);
+    await prisma.marketMinute.createMany({ data: [old, cutoff].map((start) => ({ instrumentId, provider: "eastmoney", start, end: new Date(start.getTime() + 60000), open: "100", high: "100", low: "100", close: "100", fetchedAt: start })) });
+    const scanId = `cn:2026-10-27:retention-${randomUUID()}`;
+    await prisma.marketScan.create({ data: { id: scanId, market: "cn", windowEnd: old, status: "complete", report: {}, createdAt: old } });
+    const closes = Array.from({ length: 499 }, (_, n) => ({ date: new Date(Date.parse("2026-10-23T12:00:00Z") - n * 86400000).toISOString().slice(0, 10), close: "100" })).reverse();
+    for (const [sessionDate, fetchedAt] of [["2026-10-23", old.toISOString()], ["2026-10-26", recent.toISOString()]]) {
+      await prisma.marketDailyBasis.upsert({ where: { instrumentId_provider_sessionDate: { instrumentId, provider: "eastmoney", sessionDate } }, create: { instrumentId, provider: "eastmoney", sessionDate, payload: { provider: "eastmoney", sessionDate, fetchedAt, adjustment: "qfq", closes } }, update: { payload: { provider: "eastmoney", sessionDate, fetchedAt, adjustment: "qfq", closes } } });
+    }
+    await prisma.marketInstrument.update({ where: { id: instrumentId }, data: { quote: { price: "100", fetchedAt: old.toISOString(), minuteEnd: old.toISOString(), provider: "tencent" } } });
+    const ids = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    await repo.scope(owner, async (tx) => {
+      await tx.priceAlertOutbox.createMany({ data: ids.map((id, n) => ({ id, ownerId: owner, ruleId: rule.id, version: 900 + n, channelVersion: 1, batchEnd: new Date(old.getTime() + n * 60000), payload: {}, status: ["accepted", "accepted", "pending", "sending"][n], acceptedAt: n === 0 ? old : n === 1 ? recent : null, expiresAt: old, createdAt: old, nextAttemptAt: new Date(now + 86400000), leaseUntil: new Date(now + 86400000) })) });
+      await tx.priceAlertEvent.create({ data: { ownerId: owner, ruleId: rule.id, version: 999, minuteStart: old, minuteEnd: new Date(old.getTime() + 60000), price: "100", threshold: "100", provider: "tencent", evidence: {}, createdAt: old } });
+    });
+    await prisma.marketScan.update({ where: { id: "runtime" }, data: { report: {} } });
+    await scheduler.tick();
+    expect.soft(await prisma.marketMinute.count({ where: { instrumentId, start: old } })).toBe(0);
+    expect.soft(await prisma.marketMinute.count({ where: { instrumentId, start: cutoff } })).toBe(1);
+    expect.soft(await prisma.marketScan.findUnique({ where: { id: scanId } })).toBeNull();
+    expect.soft(await prisma.marketDailyBasis.count({ where: { instrumentId, provider: "eastmoney", sessionDate: "2026-10-23" } })).toBe(0);
+    const fresh = await prisma.marketDailyBasis.findUnique({ where: { instrumentId_provider_sessionDate: { instrumentId, provider: "eastmoney", sessionDate: "2026-10-26" } } });
+    expect.soft((fresh?.payload as { closes: unknown[] }).closes).toHaveLength(499);
+    expect.soft((await prisma.marketInstrument.findUnique({ where: { id: instrumentId } }))?.quote).toBeNull();
+    expect.soft(await repo.scope(owner, (tx) => tx.priceAlertOutbox.findUnique({ where: { id: ids[0] } }))).toBeNull();
+    expect.soft(await repo.scope(owner, (tx) => tx.priceAlertOutbox.count({ where: { id: { in: ids.slice(1) } } }))).toBe(3);
+    expect.soft(await repo.scope(owner, (tx) => tx.priceAlertEvent.count({ where: { version: 999 } }))).toBe(1);
+    expect.soft(await repo.activeRules(owner)).toHaveLength(2);
+  });
   it("drains all expired cache and private history in bounded batches, not just one thousand a day", async () => {
     const rule = (await repo.activeRules(owner))[0];
     const oldMinute = Date.parse("2026-10-10T01:30:00Z");
