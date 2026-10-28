@@ -24,6 +24,16 @@ const time = "2026-10-27T06:00:00.000Z";
 const price = { kind: "price", direction: "up", targetPrice: "100.01" };
 
 describe("published alert JSON schemas", () => {
+  it("publishes a bounded authenticated candidate search without persisted IDs or caller ownership", () => {
+    const item = { code: "510880.SH", name: "红利ETF华泰柏瑞", market: "cn", currency: "CNY", kind: "etf", exchange: "上海证券交易所" };
+    expect(validate("MarketInstrumentSearchRequest", { market: "cn", query: "红利" })).toBe(true);
+    for (const body of [{ market: "cn", query: " " }, { market: "cn", query: "x".repeat(65) }, { market: "cn", query: "红利", ownerId: id }]) expect(validate("MarketInstrumentSearchRequest", body)).toBe(false);
+    expect(validate("MarketInstrumentSearchResponse", { items: [item] })).toBe(true);
+    expect(validate("MarketInstrumentSearchResponse", { items: [] })).toBe(true);
+    expect(validate("MarketInstrumentSearchResponse", { items: Array(11).fill(item) })).toBe(false);
+    expect(validate("MarketInstrumentCandidate", { ...item, id })).toBe(false);
+  });
+
   it.each([
     [{ kind: "price", direction: "up", targetPrice: "0.0000000001" }, true],
     [{ kind: "price", direction: "down", targetPrice: "99999999999999999999.9999999999" }, true],

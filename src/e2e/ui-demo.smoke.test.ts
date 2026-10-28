@@ -641,4 +641,29 @@ describe.sequential("database-free UI demo", () => {
     expect(await page.getByLabel("密码").inputValue()).toBe("");
     expect(consoleErrors).toEqual([]);
   }, 60_000);
+  it("searches and explicitly confirms an instrument before saving a 500-day rule on mobile", async () => {
+    const { page, consoleErrors } = await newPage();
+    await page.goto(`${baseUrl}/price-alerts/new`, { waitUntil: "networkidle" });
+    await page.getByLabel("产品代码或名称").fill("518880");
+    await page.getByRole("button", { name: "搜索产品" }).click();
+    const confirm = page.getByRole("button", { name: "确认选择 黄金 ETF 518880.SH" });
+    await expect.poll(() => confirm.isVisible()).toBe(true);
+    expect(await page.getByRole("button", { name: "保存提醒" }).count()).toBe(0);
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: "/tmp/fitgrid-expansion-search-mobile.png", fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: "/tmp/fitgrid-expansion-search-desktop.png", fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await confirm.click();
+    await page.getByLabel("提醒条件").selectOption("ma_touch");
+    await page.getByLabel("均线天数").fill("500");
+    await page.getByRole("button", { name: "保存提醒" }).click();
+    await page.waitForURL(new RegExp(`${appBasePath}/price-alerts/demo-alert-\\d+$`));
+    await expect.poll(() => page.getByText("向上触及 MA500", { exact: true }).isVisible()).toBe(true);
+    await expectNoHorizontalOverflow(page);
+    expect(consoleErrors).toEqual([]);
+  }, 60_000);
+
 });

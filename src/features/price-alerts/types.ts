@@ -33,3 +33,7 @@ export interface ChannelStatus {
   configured: boolean; tested: boolean; testedAt: string | null; lastError: string | null; encryptionReady: boolean;
 }
 export interface AlertInput { condition: AlertCondition; enabled: boolean }
+
+export interface InstrumentCandidate {
+  code: string; name: string; market: "cn" | "us"; currency: "CNY" | "USD"; kind: "stock" | "etf"; exchange: string;
+}

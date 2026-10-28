@@ -41,3 +41,9 @@ it("supports a coherent development preview without requesting any server or fee
   expect((await alertApi.get(created.id)).deletedAt).not.toBeNull();
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+it("sends instrument search through the authenticated application API", async () => {
+  const fetcher = vi.fn(async () => Response.json({ items: [] })); vi.stubGlobal("fetch", fetcher);
+  await alertApi.search("cn", "红利");
+  expect(fetcher).toHaveBeenCalledWith("/api/v1/market/instruments/search", expect.objectContaining({ method: "POST", body: JSON.stringify({ market: "cn", query: "红利" }) }));
+});

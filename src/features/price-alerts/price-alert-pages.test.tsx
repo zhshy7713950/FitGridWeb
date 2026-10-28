@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ClientApiError } from "@/lib/api-client";
 import type { AlertDTO, ChannelStatus } from "./types";
-const { push, api } = vi.hoisted(() => ({ push: vi.fn(), api: { list: vi.fn(), get: vi.fn(), update: vi.fn(), remove: vi.fn(), events: vi.fn(), resolve: vi.fn(), create: vi.fn(), channel: vi.fn(), saveChannel: vi.fn(), testChannel: vi.fn(), removeChannel: vi.fn() } }));
+const { push, api } = vi.hoisted(() => ({ push: vi.fn(), api: { list: vi.fn(), get: vi.fn(), update: vi.fn(), remove: vi.fn(), events: vi.fn(), search: vi.fn(), resolve: vi.fn(), create: vi.fn(), channel: vi.fn(), saveChannel: vi.fn(), testChannel: vi.fn(), removeChannel: vi.fn() } }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("./price-alert-api", () => ({ alertApi: api }));
 import { AlertListPage, AlertDetailPage, AlertEditorPage, NotificationSettingsPage } from "./price-alert-pages";
@@ -17,9 +17,30 @@ const channel: ChannelStatus = { configured: true, tested: true, testedAt: "2026
 beforeEach(() => {
   vi.resetAllMocks();
   api.list.mockResolvedValue({ items: [rule], status: { calendarWarnings: [], nextRunAt: null, lastScan: null } });
+  api.search.mockResolvedValue({ items: [{ code: "518880.SH", name: "黄金 ETF", market: "cn", currency: "CNY", kind: "etf", exchange: "上海证券交易所" }] });
   api.get.mockResolvedValue(rule); api.events.mockResolvedValue({ items: [], nextCursor: null }); api.channel.mockResolvedValue(channel);
 });
 afterEach(cleanup);
+it("searches real candidate names and requires an explicit selection before showing alert conditions", async () => {
+  const user = userEvent.setup();
+  const candidate = { code: "510880.SH", name: "红利ETF华泰柏瑞", market: "cn", currency: "CNY", kind: "etf", exchange: "上海证券交易所" };
+  api.search.mockResolvedValue({ items: [candidate] });
+  api.resolve.mockResolvedValue({ ...rule.instrument, code: candidate.code, name: candidate.name });
+  render(<AlertEditorPage />);
+  await user.type(screen.getByLabelText("产品代码或名称"), "红利");
+  await user.click(screen.getByRole("button", { name: "搜索产品" }));
+  expect(await screen.findByText("红利ETF华泰柏瑞")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "保存提醒" })).not.toBeInTheDocument();
+  expect(api.resolve).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: /确认选择.*510880.SH/ }));
+  expect(await screen.findByRole("button", { name: "保存提醒" })).toBeInTheDocument();
+  expect(api.search).toHaveBeenCalledWith("cn", "红利");
+  expect(api.resolve).toHaveBeenCalledWith("cn", "510880.SH");
+  await user.type(screen.getByLabelText("产品代码或名称"), "1");
+  expect(screen.queryByRole("button", { name: "保存提醒" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /确认选择/ })).not.toBeInTheDocument();
+});
+
 it("links to details and sends the displayed version when pausing", async () => {
   const user = userEvent.setup(); api.update.mockResolvedValue({ ...rule, enabled: false, version: 5 });
   render(<AlertListPage />);
@@ -48,14 +69,15 @@ it("shows cached quote source and delivery failures without resolving instrument
 it("requires a fresh instrument confirmation when the new-rule code changes", async () => {
   const user = userEvent.setup(); api.resolve.mockResolvedValue(rule.instrument);
   render(<AlertEditorPage prefill={{ code: "518880", market: "cn" }} />);
-  await user.click(screen.getByRole("button", { name: "确认产品" }));
+  await user.click(screen.getByRole("button", { name: "搜索产品" }));
+  await user.click(await screen.findByRole("button", { name: /确认选择/ }));
   await screen.findByText("黄金 ETF");
-  await user.type(screen.getByLabelText("产品代码"), "1");
+  await user.type(screen.getByLabelText("产品代码或名称"), "1");
   expect(screen.queryByRole("button", { name: "保存提醒" })).not.toBeInTheDocument();
 });
-it("shows a CN code example that includes the exchange required by the resolver", () => {
+it("offers domestic code or name entry without requiring an exchange suffix", () => {
   render(<AlertEditorPage />);
-  expect(screen.getByPlaceholderText("例如 518880.SH")).toBeInTheDocument();
+  expect(screen.getByPlaceholderText("例如 510880 或 红利")).toBeInTheDocument();
 });
 it("clears the secret after replacing the channel and explains paused alerts", async () => {
   const user = userEvent.setup(); api.saveChannel.mockResolvedValue({ ...channel, tested: false });
@@ -189,4 +211,24 @@ it("never offers pause or resume on a deleted detail", async () => {
   render(<AlertDetailPage id="rule-1" />); await screen.findByText("已删除");
   expect(screen.queryByRole("button", { name: /暂停|恢复/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "编辑提醒" })).not.toBeInTheDocument();
+});
+
+it("ignores late search results after the query changes", async () => {
+  let finish!: (value: unknown) => void;
+  api.search.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  const user = userEvent.setup(); render(<AlertEditorPage prefill={{ code: "510880" }} />);
+  await user.click(screen.getByRole("button", { name: "搜索产品" }));
+  await user.type(screen.getByLabelText("产品代码或名称"), "1");
+  await act(async () => { finish({ items: [{ code: "510880.SH", name: "迟到的产品", market: "cn", currency: "CNY", kind: "etf", exchange: "上海证券交易所" }] }); });
+  expect(screen.queryByText("迟到的产品")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /确认选择/ })).not.toBeInTheDocument();
+});
+it("shows real empty and failed searches without offering an unverified product", async () => {
+  const user = userEvent.setup(); api.search.mockResolvedValueOnce({ items: [] }).mockRejectedValueOnce(new ClientApiError(503, "INSTRUMENT_SEARCH_UNAVAILABLE", "产品检索暂时不可用"));
+  render(<AlertEditorPage prefill={{ code: "510880" }} />);
+  await user.click(screen.getByRole("button", { name: "搜索产品" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("没有找到支持的股票或 ETF");
+  await user.click(screen.getByRole("button", { name: "搜索产品" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("产品检索暂时不可用");
+  expect(api.resolve).not.toHaveBeenCalled();
 });

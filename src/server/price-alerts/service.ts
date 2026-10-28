@@ -4,6 +4,7 @@ import { calendarWarning, dateInZone, nextScanAt, segments, ZONES } from "./cale
 import { decryptKey, encryptKey, sendBark } from "./bark";
 import { AlertRepository, asInstrument } from "./repository";
 import { assertDailyBasis, fetchDailyBasis, resolveInstrument } from "./market-data";
+import { searchInstruments } from "./instrument-search";
 import { ruleSchema } from "./engine";
 import type { Instrument, Market, Provider } from "./types";
 
@@ -13,6 +14,10 @@ export class PriceAlertService {
   private secret() {
     if (!/^[a-f0-9]{64}$/i.test(this.config.encryptionKey)) throw new ApiError(503, "NOTIFICATION_NOT_CONFIGURED", "服务器通知配置未完成，请运行新版安装器");
     return this.config.encryptionKey;
+  }
+  async search(market: Market, query: string) {
+    try { return { items: await searchInstruments(market, query, { beforeRequest: this.config.beforeRequest }) }; }
+    catch (error) { if (error instanceof ApiError) throw error; throw new ApiError(503, "INSTRUMENT_SEARCH_UNAVAILABLE", "产品检索暂时不可用，请稍后重试"); }
   }
   async resolve(market: Market, code: string) {
     try { return await this.repository.saveInstrument(await resolveInstrument(market, code, { beforeRequest: this.config.beforeRequest })); }

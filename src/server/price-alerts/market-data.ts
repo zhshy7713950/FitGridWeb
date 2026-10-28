@@ -135,7 +135,7 @@ export function historySum(basis: DailyBasis, days: number): string {
 }
 
 interface RequestOptions { signal?: AbortSignal; timeoutMs?: number; beforeRequest?: () => Promise<void> }
-async function fetchText(url: string, options: RequestOptions = {}, encoding = "utf-8") {
+export async function fetchText(url: string, options: RequestOptions = {}, encoding = "utf-8") {
   await options.beforeRequest?.();
   const signal = AbortSignal.any([AbortSignal.timeout(options.timeoutMs ?? 5000), ...(options.signal ? [options.signal] : [])]);
   const response = await fetch(url, { signal, redirect: "error", headers: { "user-agent": "FitGrid/1.0 (personal price alerts)", accept: "application/json" } });

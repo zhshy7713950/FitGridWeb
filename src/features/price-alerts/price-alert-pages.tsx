@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ClientApiError } from "@/lib/api-client";
 import { alertApi } from "./price-alert-api";
 import { PriceAlertForm } from "./price-alert-form";
-import type { AlertCondition, AlertDTO, AlertInput, ChannelStatus, Instrument } from "./types";
+import type { AlertCondition, AlertDTO, AlertInput, ChannelStatus, Instrument, InstrumentCandidate } from "./types";
 import styles from "./price-alerts.module.css";
 
 function message(error: unknown): string {
@@ -166,15 +166,28 @@ function NewAlert({ prefill }: { prefill?: { code?: string; market?: "cn" | "us"
   const [market, setMarket] = useState<"cn" | "us">(prefill?.market ?? "cn");
   const [code, setCode] = useState(prefill?.code ?? "");
   const [instrument, setInstrument] = useState<Instrument | null>(null);
+  const [candidates, setCandidates] = useState<InstrumentCandidate[]>([]);
+  const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const generation = useRef(0);
   const resolveLock = useRef(false);
-  async function resolve() {
+  function invalidate() {
+    generation.current += 1; setInstrument(null); setCandidates([]); setSearched(false); setError("");
+  }
+  async function search() {
     if (resolveLock.current || !code.trim()) return;
+    resolveLock.current = true; setPending(true); setError(""); setInstrument(null); setCandidates([]); setSearched(false);
+    const current = ++generation.current;
+    try { const result = await alertApi.search(market, code.trim()); if (current === generation.current) { setCandidates(result.items); setSearched(true); } }
+    catch (caught) { if (current === generation.current) setError(message(caught)); }
+    finally { resolveLock.current = false; setPending(false); }
+  }
+  async function confirm(candidate: InstrumentCandidate) {
+    if (resolveLock.current) return;
     resolveLock.current = true; setPending(true); setError("");
     const current = ++generation.current;
-    try { const result = await alertApi.resolve(market, code.trim()); if (current === generation.current) setInstrument(result); }
+    try { const result = await alertApi.resolve(market, candidate.code); if (current === generation.current) { setInstrument(result); setCandidates([]); setSearched(false); } }
     catch (caught) { if (current === generation.current) setError(message(caught)); }
     finally { resolveLock.current = false; setPending(false); }
   }
@@ -184,11 +197,13 @@ function NewAlert({ prefill }: { prefill?: { code?: string; market?: "cn" | "us"
     try { const created = await alertApi.create({ ...input, instrumentId: instrument.id }); router.push(`/price-alerts/${created.id}`); }
     catch (caught) { setError(message(caught)); throw caught; }
   }
-  return <Page title="创建提醒" description="提醒独立于网格产品，可直接选择市场和代码。" actions={<Link href="/settings/notifications">通知设置</Link>}><Link className={styles.back} href="/price-alerts">← 返回股价提醒</Link><div className={styles.columns}><section className={styles.panel}><h2>选择产品</h2><div className={styles.form}>
-    <label htmlFor="alert-market">市场</label><select id="alert-market" value={market} onChange={(event) => { generation.current += 1; setMarket(event.target.value as "cn" | "us"); setInstrument(null); }}><option value="cn">A 股 · 股票 / ETF</option><option value="us">美股 · 股票 / ETF</option></select>
-    <label htmlFor="instrument-code">产品代码</label><input id="instrument-code" autoComplete="off" value={code} placeholder={market === "cn" ? "例如 518880.SH" : "例如 AAPL"} onChange={(event) => { generation.current += 1; setCode(event.target.value); setInstrument(null); }} /><button disabled={pending || !code.trim()} onClick={() => void resolve()}>{pending ? "正在确认…" : "确认产品"}</button>
+  return <Page title="创建提醒" description="搜索股票或 ETF 的代码、名称，确认产品后设置条件。" actions={<Link href="/settings/notifications">通知设置</Link>}><Link className={styles.back} href="/price-alerts">← 返回股价提醒</Link><div className={styles.columns}><section className={styles.panel}><h2>选择产品</h2><div className={styles.form}>
+    <label htmlFor="alert-market">市场</label><select id="alert-market" value={market} onChange={(event) => { invalidate(); setMarket(event.target.value as "cn" | "us"); }}><option value="cn">A 股 · 股票 / ETF</option><option value="us">美股 · 股票 / ETF</option></select>
+    <label htmlFor="instrument-code">产品代码或名称</label><input id="instrument-code" autoComplete="off" maxLength={64} value={code} placeholder={market === "cn" ? "例如 510880 或 红利" : "例如 AAPL 或 Apple"} onChange={(event) => { invalidate(); setCode(event.target.value); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void search(); } }} /><button disabled={pending || !code.trim()} onClick={() => void search()}>{pending ? "正在查询…" : "搜索产品"}</button>
+    {searched && candidates.length === 0 ? <p role="status" className={styles.hint}>没有找到支持的股票或 ETF，请调整代码或名称。</p> : null}
+    {candidates.length ? <div aria-label="检索结果">{candidates.map((candidate) => <div className={styles.event} key={candidate.code}><h3>{candidate.name}</h3><p className={styles.code}>{candidate.code} · {candidate.exchange} · {candidate.kind === "etf" ? "ETF" : "股票"}</p><button disabled={pending} aria-label={`确认选择 ${candidate.name} ${candidate.code}`} onClick={() => void confirm(candidate)}>确认选择</button></div>)}</div> : null}
     {instrument ? <div><h3>{instrument.name}</h3><p className={styles.code}>{instrument.code} · {instrument.currency}</p>{!instrument.eastmoney ? <p className={styles.warning}>此产品暂时没有备用行情来源。</p> : null}</div> : null}
-    </div></section><section className={styles.panel}><h2>设置条件</h2>{instrument ? <PriceAlertForm key={instrument.id} onSubmit={create} /> : <p className={styles.hint}>先确认产品，再设置提醒条件。</p>}{error ? <ErrorNotice error={error} /> : null}</section></div></Page>;
+    </div></section><section className={styles.panel}><h2>设置条件</h2>{instrument ? <PriceAlertForm key={instrument.id} onSubmit={create} /> : <p className={styles.hint}>先搜索并确认产品，再设置提醒条件。</p>}{error ? <ErrorNotice error={error} /> : null}</section></div></Page>;
 }
 function EditAlert({ id }: { id: string }) {
   const router = useRouter();

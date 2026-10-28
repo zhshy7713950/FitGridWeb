@@ -38,6 +38,7 @@ import * as invitation from "@/app/api/v1/invitations/[token]/route";
 import * as priceAlerts from "@/app/api/v1/price-alerts/route";
 import * as priceAlert from "@/app/api/v1/price-alerts/[id]/route";
 import * as priceAlertEvents from "@/app/api/v1/price-alerts/[id]/events/route";
+import * as searchInstruments from "@/app/api/v1/market/instruments/search/route";
 import * as resolveInstrument from "@/app/api/v1/market/instruments/resolve/route";
 import * as notifications from "@/app/api/v1/settings/notifications/route";
 import * as notificationTest from "@/app/api/v1/settings/notifications/test/route";
@@ -50,6 +51,7 @@ const routes: Record<string, RouteModule> = {
   "/price-alerts/{id}": priceAlert,
   "/price-alerts/{id}/events": priceAlertEvents,
   "/market/instruments/resolve": resolveInstrument,
+  "/market/instruments/search": searchInstruments,
   "/settings/notifications": notifications,
   "/settings/notifications/test": notificationTest,
   "/auth/login": login,

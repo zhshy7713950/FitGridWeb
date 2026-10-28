@@ -1,5 +1,5 @@
 import { ClientApiError } from "@/lib/api-client";
-import type { AlertDTO, AlertInput, AlertPage, ChannelStatus, EventPage, Instrument } from "./types";
+import type { AlertDTO, AlertInput, AlertPage, ChannelStatus, EventPage, Instrument, InstrumentCandidate } from "./types";
 
 const stamp = "2026-10-27T03:00:00.000Z";
 const instruments: Instrument[] = [
@@ -27,8 +27,12 @@ export const demoApi = {
     if (before) return { items: [], nextCursor: null };
     return { items: [{ id: `event-${id}`, minuteStart: "2026-10-26T06:20:00Z", minuteEnd: "2026-10-26T06:21:00Z", price: rule.lastEvaluation!.threshold, threshold: rule.lastEvaluation!.threshold, ma: rule.lastEvaluation!.ma, provider: rule.lastEvaluation!.provider, evidence: { condition: rule.condition }, delivery: { status: "accepted", lastError: null, acceptedAt: "2026-10-26T06:30:18Z", attempts: 1 } }], nextCursor: null };
   },
+  search(market: "cn" | "us", query: string): { items: InstrumentCandidate[] } {
+    const value = query.toUpperCase().replace(/\.(SH|SZ|US)$/, "");
+    return { items: instruments.filter((item) => item.market === market && `${item.code} ${item.name}`.toUpperCase().includes(value)).map((item) => ({ code: `${item.code}.${market === "cn" ? "SH" : "US"}`, name: item.name, market: item.market, currency: item.currency, kind: item.kind, exchange: market === "cn" ? "上海证券交易所" : "NASDAQ" })) };
+  },
   resolve(market: "cn" | "us", code: string): Instrument {
-    const instrument = instruments.find((item) => item.market === market && item.code === code.toUpperCase());
+    const instrument = instruments.find((item) => item.market === market && item.code === code.toUpperCase().replace(/\.(SH|SZ|US)$/, ""));
     if (!instrument) throw new ClientApiError(404, "NOT_FOUND", "演示中可使用 518880、510300 或 AAPL");
     return structuredClone(instrument);
   },

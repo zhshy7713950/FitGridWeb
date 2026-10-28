@@ -1,6 +1,6 @@
 import { requestJson } from "@/lib/api-client";
 import { isUiDemoMode } from "@/lib/ui-demo";
-import type { AlertDTO, AlertInput, AlertPage, ChannelStatus, EventPage, Instrument } from "./types";
+import type { AlertDTO, AlertInput, AlertPage, ChannelStatus, EventPage, Instrument, InstrumentCandidate } from "./types";
 
 const loadDemo = process.env.NODE_ENV === "production" ? null : () => import("./demo-price-alerts");
 function json(method: string, body: unknown): RequestInit {
@@ -18,6 +18,10 @@ export const alertApi = {
   events(id: string, before?: string, signal?: AbortSignal): Promise<EventPage> {
     if (isUiDemoMode() && loadDemo) return loadDemo().then((demo) => demo.demoApi.events(id, before));
     return requestJson(`/price-alerts/${encodeURIComponent(id)}/events${before ? `?${new URLSearchParams({ before })}` : ""}`, { signal });
+  },
+  search(market: "cn" | "us", query: string): Promise<{ items: InstrumentCandidate[] }> {
+    if (isUiDemoMode() && loadDemo) return loadDemo().then((demo) => demo.demoApi.search(market, query));
+    return requestJson("/market/instruments/search", json("POST", { market, query }));
   },
   resolve(market: "cn" | "us", code: string): Promise<Instrument> {
     if (isUiDemoMode() && loadDemo) return loadDemo().then((demo) => demo.demoApi.resolve(market, code));

@@ -850,6 +850,35 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
 
+  /market/instruments/search:
+    post:
+      tags: [Market]
+      operationId: searchMarketInstruments
+      summary: 按代码或名称检索真实股票和 ETF 候选
+      description: >-
+        需同源 Origin 和会话 Cookie。沪深使用腾讯真实候选，美股使用 Yahoo 真实候选，筛除指数及不支持的市场。
+        返回最多10项；不保存标的。用户确认候选后再调用 resolve 核对身份并取得 instrumentId。
+        与 resolve 共用每账号10次/分钟限流；读取已有预警仍不触发此接口。
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MarketInstrumentSearchRequest'}}}
+      responses:
+        '200':
+          description: 检索候选；有效空结果为 items 空数组
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/MarketInstrumentSearchResponse'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+          description: INSTRUMENT_SEARCH_UNAVAILABLE，来源超时、错误或响应无法验证
+
   /market/instruments/resolve:
     post:
       tags: [Market]
@@ -1126,6 +1155,37 @@ components:
       description: >-
         up 向上、down 向下，等于阈值也触发。均线使用前 N−1 个已完成交易日的同源复权收盘价加候选价动态计算，
         ma_touch 是触及动态日均线，ma_deviation 是达到动态均线上方或下方 percent 百分比。
+    MarketInstrumentSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [market, query]
+      properties:
+        market: {type: string, enum: [cn, us]}
+        query: {type: string, minLength: 1, maxLength: 64, pattern: '\S'}
+      examples:
+        - {market: cn, query: '510880'}
+        - {market: cn, query: 红利}
+        - {market: us, query: Apple}
+    MarketInstrumentCandidate:
+      type: object
+      additionalProperties: false
+      required: [code, name, market, currency, kind, exchange]
+      properties:
+        code: {type: string, minLength: 1, maxLength: 32}
+        name: {type: string, minLength: 1, maxLength: 160}
+        market: {type: string, enum: [cn, us]}
+        currency: {type: string, enum: [CNY, USD]}
+        kind: {type: string, enum: [stock, etf]}
+        exchange: {type: string, minLength: 1, maxLength: 64}
+    MarketInstrumentSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 10
+          items: {$ref: '#/components/schemas/MarketInstrumentCandidate'}
     MarketInstrumentResolveRequest:
       type: object
       additionalProperties: false
