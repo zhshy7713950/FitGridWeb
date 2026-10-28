@@ -1,0 +1,159 @@
+{
+  "cutoff": "2026-10-27",
+  "window_start": "2021-10-27",
+  "rank_method": "100 * (less + 0.5 * equal) / previous valid observations",
+  "not_a_backtest": true,
+  "instruments": [
+    {
+      "etf": "510300.SH",
+      "name": "华泰柏瑞沪深300ETF",
+      "index": "000300.SH",
+      "frequency": "weekly; current-session observation excluded",
+      "pe": {
+        "date": "2026-10-23",
+        "value": 12.15,
+        "reference_count": 254,
+        "reference_start": "2021-10-29",
+        "percentile": 63.3858
+      },
+      "pb": {
+        "date": "2026-10-23",
+        "value": 1.35,
+        "reference_count": 254,
+        "reference_start": "2021-10-29",
+        "percentile": 45.6693
+      },
+      "dividend_yield_percent": {
+        "date": "2026-10-23",
+        "value": 3.0,
+        "reference_count": 254,
+        "reference_start": "2021-10-29",
+        "percentile": 37.4016
+      },
+      "price": {
+        "date": "2026-10-27",
+        "adjusted_close": 4.123,
+        "history_count": 640,
+        "ma200": 4.69485,
+        "ma500": 4.2937,
+        "deviation_ma200_percent": -12.18036784987805
+      }
+    },
+    {
+      "etf": "510500.SH",
+      "name": "南方中证500ETF",
+      "index": "000905.SH",
+      "frequency": "weekly; current-session observation excluded",
+      "pe": {
+        "date": "2026-10-23",
+        "value": 23.9,
+        "reference_count": 254,
+        "reference_start": "2021-10-29",
+        "percentile": 76.378
+      },
+      "pb": {
+        "date": "2026-10-23",
+        "value": 2.12,
+        "reference_count": 254,
+        "reference_start": "2021-10-29",
+        "percentile": 79.1339
+      },
+      "dividend_yield_percent": {
+        "date": "2026-10-23",
+        "value": 1.77,
+        "reference_count": 254,
+        "reference_start": "2021-10-29",
+        "percentile": 26.1811
+      },
+      "price": {
+        "date": "2026-10-27",
+        "adjusted_close": 6.537,
+        "history_count": 640,
+        "ma200": 7.9993,
+        "ma500": 6.833762,
+        "deviation_ma200_percent": -18.280349530583926
+      }
+    },
+    {
+      "etf": "510880.SH",
+      "name": "华泰柏瑞上证红利ETF",
+      "index": "000015.SH",
+      "frequency": "weekly; current-session observation excluded",
+      "pe": {
+        "date": "2026-10-23",
+        "value": 9.18,
+        "reference_count": 254,
+        "reference_start": "2021-10-29",
+        "percentile": 99.6063
+      },
+      "pb": {
+        "date": "2026-10-23",
+        "value": 0.89,
+        "reference_count": 254,
+        "reference_start": "2021-10-29",
+        "percentile": 99.4094
+      },
+      "dividend_yield_percent": {
+        "date": "2026-10-23",
+        "value": 3.62,
+        "reference_count": 254,
+        "reference_start": "2021-10-29",
+        "percentile": 0.5906
+      },
+      "price": {
+        "date": "2026-10-27",
+        "adjusted_close": 3.397,
+        "history_count": 640,
+        "ma200": 3.242945,
+        "ma500": 3.095402,
+        "deviation_ma200_percent": 4.750466011603649
+      }
+    },
+    {
+      "etf": "SPY.US",
+      "name": "State Street SPDR S&P 500 ETF Trust",
+      "index": "SP500",
+      "frequency": "monthly, plus latest observation; null chart points excluded",
+      "pe": {
+        "date": "2026-10-27",
+        "value": 26.35,
+        "reference_count": 60,
+        "reference_start": "2021-10-31",
+        "percentile": 65.0
+      },
+      "pb": null,
+      "dividend_yield_percent": null,
+      "price": {
+        "date": "2026-10-27",
+        "adjusted_close": 769.6599731445312,
+        "history_count": 1254,
+        "ma200": 724.8131600952148,
+        "ma500": 654.8451286621093,
+        "deviation_ma200_percent": 6.187361863493912
+      }
+    },
+    {
+      "etf": "QQQ.US",
+      "name": "Invesco QQQ",
+      "index": "NDX",
+      "frequency": "monthly, plus latest observation; null chart points excluded",
+      "pe": {
+        "date": "2026-10-27",
+        "value": 27.32,
+        "reference_count": 60,
+        "reference_start": "2021-10-31",
+        "percentile": 23.3333
+      },
+      "pb": null,
+      "dividend_yield_percent": null,
+      "price": {
+        "date": "2026-10-27",
+        "adjusted_close": 721.25,
+        "history_count": 1254,
+        "ma200": 677.0511581420899,
+        "ma500": 595.7060096435547,
+        "deviation_ma200_percent": 6.528139170339364
+      }
+    }
+  ]
+}

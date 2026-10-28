@@ -1,0 +1,132 @@
+[
+  {
+    "file": "csi-300-xls.raw",
+    "bytes": 8192,
+    "sha256": "4c25777367234a6736dfc69fc1dbd28affdb104dfe4aa241ec99544572bd18aa"
+  },
+  {
+    "file": "csi-500-xls.raw",
+    "bytes": 8192,
+    "sha256": "c21df0ac9f401a99795f88634160e6325b2d9311b5ed2024c3286a6c8ece9a9f"
+  },
+  {
+    "file": "csi-div-xls.raw",
+    "bytes": 8192,
+    "sha256": "0619cc27ca940cbb4a00ce1f7d79b8f214ea1321b5dd5057ef43886061a0ac8e"
+  },
+  {
+    "file": "csi-perf.raw",
+    "bytes": 816327,
+    "sha256": "a1acae5cf53e55e7e97aa3d90648c15bccd3716bd2fae4bca949cb641e32714e"
+  },
+  {
+    "file": "legu-full-000015.SH.raw",
+    "bytes": 96668,
+    "sha256": "ad3b10d39e53ca1de403e0ec335a076585b35f68edec76004e6fd496dcfcc8cc"
+  },
+  {
+    "file": "legu-full-000300.SH.raw",
+    "bytes": 97926,
+    "sha256": "7db96b8204e56fdc979c3ef8bf964434414e13a1eb9630019bda5a562a9896d1"
+  },
+  {
+    "file": "legu-full-000905.SH.raw",
+    "bytes": 97902,
+    "sha256": "b87e5debc898e7d08370f7fbdd40b548851f91590b2d03e581a6a1a0dc9c2ed2"
+  },
+  {
+    "file": "legu-ndx-history.raw",
+    "bytes": 242462,
+    "sha256": "c12124a863fd40bdc5328772225ccfac0662bbc8b23de2d16faa7c0fbcee0351"
+  },
+  {
+    "file": "legu-sp500-history.raw",
+    "bytes": 212568,
+    "sha256": "48ee7976fce1691cc1b89119205335577470d03bebad7b8430d2341f750c6198"
+  },
+  {
+    "file": "price-QQQ.raw",
+    "bytes": 136411,
+    "sha256": "ab7d6f8a187a957657127e4b3ba42efb2022f7c36e8d50cf3b259290e26c4cc4"
+  },
+  {
+    "file": "price-SPY.raw",
+    "bytes": 136210,
+    "sha256": "31dd2e94309500389d4783681e01aba7115cc1621d28efca71da70c067a7ba69"
+  },
+  {
+    "file": "price-sh510300.raw",
+    "bytes": 41020,
+    "sha256": "1eb2f4e3ed5a371f76471cbef35a9c875ccf06f45d7f481a73efcdb3c564a9c0"
+  },
+  {
+    "file": "price-sh510500.raw",
+    "bytes": 40739,
+    "sha256": "3cc3deb21618b552e3a4f7f90cfbc7f9a35d474c71990a0bc1891393cf24947d"
+  },
+  {
+    "file": "price-sh510880.raw",
+    "bytes": 40571,
+    "sha256": "54e31820f2387c5c4f48241f56aa2905fce3ab45da0eee19622b7ce322d2f2bf"
+  },
+  {
+    "file": "shiller-xls.raw",
+    "bytes": 1675264,
+    "sha256": "98a54927942e842ec07ffe73000998e793953708c345b6b27bb363e9ada8366a"
+  },
+  {
+    "file": "siblis-HSI-dividend-yield.raw",
+    "bytes": 1086,
+    "sha256": "93696b8fb56b9b54e1923e945a17445a6235a022bba121872ba2a4ff70ce32ed"
+  },
+  {
+    "file": "siblis-HSI-pb.raw",
+    "bytes": 1074,
+    "sha256": "14eeaa1f39b8413196cce7efb8e347641921a9646251b21273b75c1fd4b0f2a4"
+  },
+  {
+    "file": "siblis-HSI-pe-trailing.raw",
+    "bytes": 1090,
+    "sha256": "90036bac3bab657edf20b014c9c5e8c8c0c516ab0bbe899d8ece8b9604a752ce"
+  },
+  {
+    "file": "siblis-NDX-dividend-yield.raw",
+    "bytes": 1085,
+    "sha256": "a7fa7c8cdd4236eaff9a02623bfd8d7f453b41407ab8cd955df345652a2dcffe"
+  },
+  {
+    "file": "siblis-NDX-pb.raw",
+    "bytes": 1073,
+    "sha256": "b6e3fd3e93ee4c6739cd4ef0c861cc05767f815a8b400a5fd8d6c3ad67b87e35"
+  },
+  {
+    "file": "siblis-NDX-pe-trailing.raw",
+    "bytes": 1090,
+    "sha256": "397b18812d9f99e4ae99c230db7a72d6a0d7720da2c0dd963c5829cf9bbdc0de"
+  },
+  {
+    "file": "siblis-USA-dividend-yield.raw",
+    "bytes": 1089,
+    "sha256": "b275df7701d6ed7ea82b03dd344080e88e4766a89562f91bf6c3b4b90dad0611"
+  },
+  {
+    "file": "siblis-USA-pb.raw",
+    "bytes": 1077,
+    "sha256": "f4476952e5ebe61f4bba3fadca12a7b7b7ecc6de84c70fc7db0a5a1f6349e317"
+  },
+  {
+    "file": "siblis-USA-pe-trailing.raw",
+    "bytes": 1094,
+    "sha256": "c307e46c3b5dd0c3000680ce4646889f479a8e7f7ecd1d5fec8ec8dfc08364c0"
+  },
+  {
+    "file": "siblis-dates.raw",
+    "bytes": 509,
+    "sha256": "05a0ae8900a8664f93fffcfdfbf908fb504eea7b1763ba8bc9d72825bc528370"
+  },
+  {
+    "file": "siblis-indices.raw",
+    "bytes": 4727,
+    "sha256": "98b6dfb339aa178b903903588a34f95a5fa006921c9c9739d58b66084d0779d4"
+  }
+]
