@@ -74,6 +74,7 @@ restore_or_remove_environment() {
 }
 
 rollback_app() {
+  disable_price_alerts || return 1
   project_directory=$1
   environment_file=$2
   old_environment=${3:-}
@@ -142,6 +143,7 @@ deploy_release() {
   old_environment=${3:-}
   app_port=$4
 
+  disable_price_alerts || { fitgrid_error "预警任务未能停止；拒绝迁移数据库"; return 1; }
   set -a
   # shellcheck disable=SC1090
   if ! . "$environment_file"; then
@@ -271,6 +273,7 @@ fitgrid_install_main() {
 
   disable_legacy_backup_timer || return 1
   saved_unit_states=$(capture_fitgrid_unit_states)
+  disable_price_alerts || return 1
   install_dependencies /etc/apt /etc/os-release
   assert_app_port_available "$app_port"
 
@@ -361,6 +364,13 @@ fitgrid_install_main() {
     return 1
   fi
   if ! verify_health "$public_health"; then
+    rollback_host_activation "$project_directory" "$environment_file" "$old_environment" \
+      "$app_port" "$public_health" "$saved_unit_states" "$app_unit_destination" \
+      "$app_unit_backup" "$app_unit_had_previous"
+    return 1
+  fi
+  if ! systemctl enable --now fitgridweb-price-alerts.timer; then
+    disable_price_alerts || true
     rollback_host_activation "$project_directory" "$environment_file" "$old_environment" \
       "$app_port" "$public_health" "$saved_unit_states" "$app_unit_destination" \
       "$app_unit_backup" "$app_unit_had_previous"

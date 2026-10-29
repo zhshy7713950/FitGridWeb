@@ -865,7 +865,11 @@ export function DataVault({
             <div><dt>产品</dt><dd>{preview.gridTrades} 个网格产品</dd></div>
             <div><dt>邀请</dt><dd>{preview.invitations} 个邀请</dd></div>
             <div><dt>导入预检</dt><dd>{preview.importPreviews} 条</dd></div>
+            {preview.marketInstruments !== undefined ? <div><dt>行情产品</dt><dd>{preview.marketInstruments} 个</dd></div> : null}
+            {preview.priceAlerts !== undefined ? <div><dt>股价预警</dt><dd>{preview.priceAlerts} 条预警</dd></div> : null}
+            {preview.priceAlertEvents !== undefined ? <div><dt>提醒历史</dt><dd>{preview.priceAlertEvents} 条触发记录</dd></div> : null}
           </dl>
+          {preview.priceAlerts !== undefined ? <p>恢复后预警保持暂停；请重新配置 Bark，测试成功后再启用。</p> : null}
           <button
             type="button"
             className={styles.destructiveOutline}

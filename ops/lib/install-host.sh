@@ -491,6 +491,7 @@ install_maintenance_components() {
     fitgrid_error "维护组件安装失败：logrotate"
     return 1
   fi
+  install_price_alerts_components "$maintenance_project_directory" "$maintenance_environment_file" "$maintenance_systemd_directory" || return 1
   systemctl daemon-reload || { fitgrid_error "维护组件安装失败：systemd daemon-reload"; return 1; }
 }
 
@@ -505,4 +506,37 @@ enable_maintenance_components() {
     || { fitgrid_error "维护组件安装失败：fitgridweb-maintenance-sweep.timer 启用"; return 1; }
 
   printf '自动定时备份已禁用；请使用管理页面或 ops/backup.sh 手动备份\n'
+}
+
+disable_price_alerts() {
+  stop_price_alerts || return 1
+  alert_load_state=$(systemctl show --property=LoadState --value fitgridweb-price-alerts.timer) || return 1
+  case "$alert_load_state" in
+    not-found|'') return 0 ;;
+    loaded) systemctl disable fitgridweb-price-alerts.timer ;;
+    *) return 1 ;;
+  esac
+}
+
+install_price_alerts_components() {
+  alert_project=$1
+  alert_environment=$2
+  alert_systemd=$3
+  alert_tick_path=${FITGRID_ALERTS_TICK_PATH:-/usr/local/libexec/fitgridweb-price-alerts-tick}
+  install_atomic_host_file "$alert_project/ops/price-alerts-tick.sh" "$alert_tick_path" 700 || return 1
+  chown root:root "$alert_tick_path" || return 1
+  render_maintenance_host_file "$alert_project/ops/templates/fitgridweb-price-alerts.service" \
+    "$alert_systemd/fitgridweb-price-alerts.service" 644 \
+    /etc/fitgridweb/fitgridweb.env "$alert_environment" || return 1
+  alert_rendered=$(mktemp) || return 1
+  if ! sed "s|/usr/local/libexec/fitgridweb-price-alerts-tick|$alert_tick_path|g" \
+    "$alert_systemd/fitgridweb-price-alerts.service" >"$alert_rendered" \
+    || ! install_atomic_host_file "$alert_rendered" "$alert_systemd/fitgridweb-price-alerts.service" 644; then
+    rm -f "$alert_rendered"
+    return 1
+  fi
+  rm -f "$alert_rendered"
+  install_atomic_host_file "$alert_project/ops/templates/fitgridweb-price-alerts.timer" \
+    "$alert_systemd/fitgridweb-price-alerts.timer" 644 || return 1
+  chown root:root "$alert_systemd/fitgridweb-price-alerts.service" "$alert_systemd/fitgridweb-price-alerts.timer"
 }

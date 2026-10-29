@@ -228,6 +228,10 @@ export type UserWhereInput = {
   invitationsUsed?: Prisma.InvitationListRelationFilter
   gridTrades?: Prisma.GridTradeListRelationFilter
   importPreviews?: Prisma.ImportPreviewListRelationFilter
+  priceAlerts?: Prisma.PriceAlertListRelationFilter
+  alertEvents?: Prisma.PriceAlertEventListRelationFilter
+  alertOutbox?: Prisma.PriceAlertOutboxListRelationFilter
+  alertChannel?: Prisma.XOR<Prisma.PriceAlertChannelNullableScalarRelationFilter, Prisma.PriceAlertChannelWhereInput> | null
 }
 
 export type UserOrderByWithRelationInput = {
@@ -247,6 +251,10 @@ export type UserOrderByWithRelationInput = {
   invitationsUsed?: Prisma.InvitationOrderByRelationAggregateInput
   gridTrades?: Prisma.GridTradeOrderByRelationAggregateInput
   importPreviews?: Prisma.ImportPreviewOrderByRelationAggregateInput
+  priceAlerts?: Prisma.PriceAlertOrderByRelationAggregateInput
+  alertEvents?: Prisma.PriceAlertEventOrderByRelationAggregateInput
+  alertOutbox?: Prisma.PriceAlertOutboxOrderByRelationAggregateInput
+  alertChannel?: Prisma.PriceAlertChannelOrderByWithRelationInput
 }
 
 export type UserWhereUniqueInput = Prisma.AtLeast<{
@@ -269,6 +277,10 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   invitationsUsed?: Prisma.InvitationListRelationFilter
   gridTrades?: Prisma.GridTradeListRelationFilter
   importPreviews?: Prisma.ImportPreviewListRelationFilter
+  priceAlerts?: Prisma.PriceAlertListRelationFilter
+  alertEvents?: Prisma.PriceAlertEventListRelationFilter
+  alertOutbox?: Prisma.PriceAlertOutboxListRelationFilter
+  alertChannel?: Prisma.XOR<Prisma.PriceAlertChannelNullableScalarRelationFilter, Prisma.PriceAlertChannelWhereInput> | null
 }, "id" | "email" | "username">
 
 export type UserOrderByWithAggregationInput = {
@@ -320,6 +332,10 @@ export type UserCreateInput = {
   invitationsUsed?: Prisma.InvitationCreateNestedManyWithoutUsedByInput
   gridTrades?: Prisma.GridTradeCreateNestedManyWithoutOwnerInput
   importPreviews?: Prisma.ImportPreviewCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelCreateNestedOneWithoutOwnerInput
 }
 
 export type UserUncheckedCreateInput = {
@@ -339,6 +355,10 @@ export type UserUncheckedCreateInput = {
   invitationsUsed?: Prisma.InvitationUncheckedCreateNestedManyWithoutUsedByInput
   gridTrades?: Prisma.GridTradeUncheckedCreateNestedManyWithoutOwnerInput
   importPreviews?: Prisma.ImportPreviewUncheckedCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertUncheckedCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedCreateNestedOneWithoutOwnerInput
 }
 
 export type UserUpdateInput = {
@@ -358,6 +378,10 @@ export type UserUpdateInput = {
   invitationsUsed?: Prisma.InvitationUpdateManyWithoutUsedByNestedInput
   gridTrades?: Prisma.GridTradeUpdateManyWithoutOwnerNestedInput
   importPreviews?: Prisma.ImportPreviewUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUpdateOneWithoutOwnerNestedInput
 }
 
 export type UserUncheckedUpdateInput = {
@@ -377,6 +401,10 @@ export type UserUncheckedUpdateInput = {
   invitationsUsed?: Prisma.InvitationUncheckedUpdateManyWithoutUsedByNestedInput
   gridTrades?: Prisma.GridTradeUncheckedUpdateManyWithoutOwnerNestedInput
   importPreviews?: Prisma.ImportPreviewUncheckedUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUncheckedUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedUpdateOneWithoutOwnerNestedInput
 }
 
 export type UserCreateManyInput = {
@@ -577,6 +605,62 @@ export type UserUpdateOneRequiredWithoutImportPreviewsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutImportPreviewsInput, Prisma.UserUpdateWithoutImportPreviewsInput>, Prisma.UserUncheckedUpdateWithoutImportPreviewsInput>
 }
 
+export type UserCreateNestedOneWithoutPriceAlertsInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutPriceAlertsInput, Prisma.UserUncheckedCreateWithoutPriceAlertsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutPriceAlertsInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutPriceAlertsNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutPriceAlertsInput, Prisma.UserUncheckedCreateWithoutPriceAlertsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutPriceAlertsInput
+  upsert?: Prisma.UserUpsertWithoutPriceAlertsInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutPriceAlertsInput, Prisma.UserUpdateWithoutPriceAlertsInput>, Prisma.UserUncheckedUpdateWithoutPriceAlertsInput>
+}
+
+export type UserCreateNestedOneWithoutAlertChannelInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutAlertChannelInput, Prisma.UserUncheckedCreateWithoutAlertChannelInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutAlertChannelInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutAlertChannelNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutAlertChannelInput, Prisma.UserUncheckedCreateWithoutAlertChannelInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutAlertChannelInput
+  upsert?: Prisma.UserUpsertWithoutAlertChannelInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutAlertChannelInput, Prisma.UserUpdateWithoutAlertChannelInput>, Prisma.UserUncheckedUpdateWithoutAlertChannelInput>
+}
+
+export type UserCreateNestedOneWithoutAlertEventsInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutAlertEventsInput, Prisma.UserUncheckedCreateWithoutAlertEventsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutAlertEventsInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutAlertEventsNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutAlertEventsInput, Prisma.UserUncheckedCreateWithoutAlertEventsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutAlertEventsInput
+  upsert?: Prisma.UserUpsertWithoutAlertEventsInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutAlertEventsInput, Prisma.UserUpdateWithoutAlertEventsInput>, Prisma.UserUncheckedUpdateWithoutAlertEventsInput>
+}
+
+export type UserCreateNestedOneWithoutAlertOutboxInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutAlertOutboxInput, Prisma.UserUncheckedCreateWithoutAlertOutboxInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutAlertOutboxInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutAlertOutboxNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutAlertOutboxInput, Prisma.UserUncheckedCreateWithoutAlertOutboxInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutAlertOutboxInput
+  upsert?: Prisma.UserUpsertWithoutAlertOutboxInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutAlertOutboxInput, Prisma.UserUpdateWithoutAlertOutboxInput>, Prisma.UserUncheckedUpdateWithoutAlertOutboxInput>
+}
+
 export type UserCreateWithoutSessionsInput = {
   id?: string
   name: string
@@ -593,6 +677,10 @@ export type UserCreateWithoutSessionsInput = {
   invitationsUsed?: Prisma.InvitationCreateNestedManyWithoutUsedByInput
   gridTrades?: Prisma.GridTradeCreateNestedManyWithoutOwnerInput
   importPreviews?: Prisma.ImportPreviewCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelCreateNestedOneWithoutOwnerInput
 }
 
 export type UserUncheckedCreateWithoutSessionsInput = {
@@ -611,6 +699,10 @@ export type UserUncheckedCreateWithoutSessionsInput = {
   invitationsUsed?: Prisma.InvitationUncheckedCreateNestedManyWithoutUsedByInput
   gridTrades?: Prisma.GridTradeUncheckedCreateNestedManyWithoutOwnerInput
   importPreviews?: Prisma.ImportPreviewUncheckedCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertUncheckedCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedCreateNestedOneWithoutOwnerInput
 }
 
 export type UserCreateOrConnectWithoutSessionsInput = {
@@ -645,6 +737,10 @@ export type UserUpdateWithoutSessionsInput = {
   invitationsUsed?: Prisma.InvitationUpdateManyWithoutUsedByNestedInput
   gridTrades?: Prisma.GridTradeUpdateManyWithoutOwnerNestedInput
   importPreviews?: Prisma.ImportPreviewUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUpdateOneWithoutOwnerNestedInput
 }
 
 export type UserUncheckedUpdateWithoutSessionsInput = {
@@ -663,6 +759,10 @@ export type UserUncheckedUpdateWithoutSessionsInput = {
   invitationsUsed?: Prisma.InvitationUncheckedUpdateManyWithoutUsedByNestedInput
   gridTrades?: Prisma.GridTradeUncheckedUpdateManyWithoutOwnerNestedInput
   importPreviews?: Prisma.ImportPreviewUncheckedUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUncheckedUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedUpdateOneWithoutOwnerNestedInput
 }
 
 export type UserCreateWithoutAccountsInput = {
@@ -681,6 +781,10 @@ export type UserCreateWithoutAccountsInput = {
   invitationsUsed?: Prisma.InvitationCreateNestedManyWithoutUsedByInput
   gridTrades?: Prisma.GridTradeCreateNestedManyWithoutOwnerInput
   importPreviews?: Prisma.ImportPreviewCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelCreateNestedOneWithoutOwnerInput
 }
 
 export type UserUncheckedCreateWithoutAccountsInput = {
@@ -699,6 +803,10 @@ export type UserUncheckedCreateWithoutAccountsInput = {
   invitationsUsed?: Prisma.InvitationUncheckedCreateNestedManyWithoutUsedByInput
   gridTrades?: Prisma.GridTradeUncheckedCreateNestedManyWithoutOwnerInput
   importPreviews?: Prisma.ImportPreviewUncheckedCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertUncheckedCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedCreateNestedOneWithoutOwnerInput
 }
 
 export type UserCreateOrConnectWithoutAccountsInput = {
@@ -733,6 +841,10 @@ export type UserUpdateWithoutAccountsInput = {
   invitationsUsed?: Prisma.InvitationUpdateManyWithoutUsedByNestedInput
   gridTrades?: Prisma.GridTradeUpdateManyWithoutOwnerNestedInput
   importPreviews?: Prisma.ImportPreviewUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUpdateOneWithoutOwnerNestedInput
 }
 
 export type UserUncheckedUpdateWithoutAccountsInput = {
@@ -751,6 +863,10 @@ export type UserUncheckedUpdateWithoutAccountsInput = {
   invitationsUsed?: Prisma.InvitationUncheckedUpdateManyWithoutUsedByNestedInput
   gridTrades?: Prisma.GridTradeUncheckedUpdateManyWithoutOwnerNestedInput
   importPreviews?: Prisma.ImportPreviewUncheckedUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUncheckedUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedUpdateOneWithoutOwnerNestedInput
 }
 
 export type UserCreateWithoutInvitationsMadeInput = {
@@ -769,6 +885,10 @@ export type UserCreateWithoutInvitationsMadeInput = {
   invitationsUsed?: Prisma.InvitationCreateNestedManyWithoutUsedByInput
   gridTrades?: Prisma.GridTradeCreateNestedManyWithoutOwnerInput
   importPreviews?: Prisma.ImportPreviewCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelCreateNestedOneWithoutOwnerInput
 }
 
 export type UserUncheckedCreateWithoutInvitationsMadeInput = {
@@ -787,6 +907,10 @@ export type UserUncheckedCreateWithoutInvitationsMadeInput = {
   invitationsUsed?: Prisma.InvitationUncheckedCreateNestedManyWithoutUsedByInput
   gridTrades?: Prisma.GridTradeUncheckedCreateNestedManyWithoutOwnerInput
   importPreviews?: Prisma.ImportPreviewUncheckedCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertUncheckedCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedCreateNestedOneWithoutOwnerInput
 }
 
 export type UserCreateOrConnectWithoutInvitationsMadeInput = {
@@ -810,6 +934,10 @@ export type UserCreateWithoutInvitationsUsedInput = {
   invitationsMade?: Prisma.InvitationCreateNestedManyWithoutCreatedByInput
   gridTrades?: Prisma.GridTradeCreateNestedManyWithoutOwnerInput
   importPreviews?: Prisma.ImportPreviewCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelCreateNestedOneWithoutOwnerInput
 }
 
 export type UserUncheckedCreateWithoutInvitationsUsedInput = {
@@ -828,6 +956,10 @@ export type UserUncheckedCreateWithoutInvitationsUsedInput = {
   invitationsMade?: Prisma.InvitationUncheckedCreateNestedManyWithoutCreatedByInput
   gridTrades?: Prisma.GridTradeUncheckedCreateNestedManyWithoutOwnerInput
   importPreviews?: Prisma.ImportPreviewUncheckedCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertUncheckedCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedCreateNestedOneWithoutOwnerInput
 }
 
 export type UserCreateOrConnectWithoutInvitationsUsedInput = {
@@ -862,6 +994,10 @@ export type UserUpdateWithoutInvitationsMadeInput = {
   invitationsUsed?: Prisma.InvitationUpdateManyWithoutUsedByNestedInput
   gridTrades?: Prisma.GridTradeUpdateManyWithoutOwnerNestedInput
   importPreviews?: Prisma.ImportPreviewUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUpdateOneWithoutOwnerNestedInput
 }
 
 export type UserUncheckedUpdateWithoutInvitationsMadeInput = {
@@ -880,6 +1016,10 @@ export type UserUncheckedUpdateWithoutInvitationsMadeInput = {
   invitationsUsed?: Prisma.InvitationUncheckedUpdateManyWithoutUsedByNestedInput
   gridTrades?: Prisma.GridTradeUncheckedUpdateManyWithoutOwnerNestedInput
   importPreviews?: Prisma.ImportPreviewUncheckedUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUncheckedUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedUpdateOneWithoutOwnerNestedInput
 }
 
 export type UserUpsertWithoutInvitationsUsedInput = {
@@ -909,6 +1049,10 @@ export type UserUpdateWithoutInvitationsUsedInput = {
   invitationsMade?: Prisma.InvitationUpdateManyWithoutCreatedByNestedInput
   gridTrades?: Prisma.GridTradeUpdateManyWithoutOwnerNestedInput
   importPreviews?: Prisma.ImportPreviewUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUpdateOneWithoutOwnerNestedInput
 }
 
 export type UserUncheckedUpdateWithoutInvitationsUsedInput = {
@@ -927,6 +1071,10 @@ export type UserUncheckedUpdateWithoutInvitationsUsedInput = {
   invitationsMade?: Prisma.InvitationUncheckedUpdateManyWithoutCreatedByNestedInput
   gridTrades?: Prisma.GridTradeUncheckedUpdateManyWithoutOwnerNestedInput
   importPreviews?: Prisma.ImportPreviewUncheckedUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUncheckedUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedUpdateOneWithoutOwnerNestedInput
 }
 
 export type UserCreateWithoutGridTradesInput = {
@@ -945,6 +1093,10 @@ export type UserCreateWithoutGridTradesInput = {
   invitationsMade?: Prisma.InvitationCreateNestedManyWithoutCreatedByInput
   invitationsUsed?: Prisma.InvitationCreateNestedManyWithoutUsedByInput
   importPreviews?: Prisma.ImportPreviewCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelCreateNestedOneWithoutOwnerInput
 }
 
 export type UserUncheckedCreateWithoutGridTradesInput = {
@@ -963,6 +1115,10 @@ export type UserUncheckedCreateWithoutGridTradesInput = {
   invitationsMade?: Prisma.InvitationUncheckedCreateNestedManyWithoutCreatedByInput
   invitationsUsed?: Prisma.InvitationUncheckedCreateNestedManyWithoutUsedByInput
   importPreviews?: Prisma.ImportPreviewUncheckedCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertUncheckedCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedCreateNestedOneWithoutOwnerInput
 }
 
 export type UserCreateOrConnectWithoutGridTradesInput = {
@@ -997,6 +1153,10 @@ export type UserUpdateWithoutGridTradesInput = {
   invitationsMade?: Prisma.InvitationUpdateManyWithoutCreatedByNestedInput
   invitationsUsed?: Prisma.InvitationUpdateManyWithoutUsedByNestedInput
   importPreviews?: Prisma.ImportPreviewUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUpdateOneWithoutOwnerNestedInput
 }
 
 export type UserUncheckedUpdateWithoutGridTradesInput = {
@@ -1015,6 +1175,10 @@ export type UserUncheckedUpdateWithoutGridTradesInput = {
   invitationsMade?: Prisma.InvitationUncheckedUpdateManyWithoutCreatedByNestedInput
   invitationsUsed?: Prisma.InvitationUncheckedUpdateManyWithoutUsedByNestedInput
   importPreviews?: Prisma.ImportPreviewUncheckedUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUncheckedUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedUpdateOneWithoutOwnerNestedInput
 }
 
 export type UserCreateWithoutImportPreviewsInput = {
@@ -1033,6 +1197,10 @@ export type UserCreateWithoutImportPreviewsInput = {
   invitationsMade?: Prisma.InvitationCreateNestedManyWithoutCreatedByInput
   invitationsUsed?: Prisma.InvitationCreateNestedManyWithoutUsedByInput
   gridTrades?: Prisma.GridTradeCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelCreateNestedOneWithoutOwnerInput
 }
 
 export type UserUncheckedCreateWithoutImportPreviewsInput = {
@@ -1051,6 +1219,10 @@ export type UserUncheckedCreateWithoutImportPreviewsInput = {
   invitationsMade?: Prisma.InvitationUncheckedCreateNestedManyWithoutCreatedByInput
   invitationsUsed?: Prisma.InvitationUncheckedCreateNestedManyWithoutUsedByInput
   gridTrades?: Prisma.GridTradeUncheckedCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertUncheckedCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedCreateNestedOneWithoutOwnerInput
 }
 
 export type UserCreateOrConnectWithoutImportPreviewsInput = {
@@ -1085,6 +1257,10 @@ export type UserUpdateWithoutImportPreviewsInput = {
   invitationsMade?: Prisma.InvitationUpdateManyWithoutCreatedByNestedInput
   invitationsUsed?: Prisma.InvitationUpdateManyWithoutUsedByNestedInput
   gridTrades?: Prisma.GridTradeUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUpdateOneWithoutOwnerNestedInput
 }
 
 export type UserUncheckedUpdateWithoutImportPreviewsInput = {
@@ -1103,6 +1279,426 @@ export type UserUncheckedUpdateWithoutImportPreviewsInput = {
   invitationsMade?: Prisma.InvitationUncheckedUpdateManyWithoutCreatedByNestedInput
   invitationsUsed?: Prisma.InvitationUncheckedUpdateManyWithoutUsedByNestedInput
   gridTrades?: Prisma.GridTradeUncheckedUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUncheckedUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedUpdateOneWithoutOwnerNestedInput
+}
+
+export type UserCreateWithoutPriceAlertsInput = {
+  id?: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  username?: string | null
+  role?: $Enums.UserRole
+  status?: $Enums.UserStatus
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
+  invitationsMade?: Prisma.InvitationCreateNestedManyWithoutCreatedByInput
+  invitationsUsed?: Prisma.InvitationCreateNestedManyWithoutUsedByInput
+  gridTrades?: Prisma.GridTradeCreateNestedManyWithoutOwnerInput
+  importPreviews?: Prisma.ImportPreviewCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelCreateNestedOneWithoutOwnerInput
+}
+
+export type UserUncheckedCreateWithoutPriceAlertsInput = {
+  id?: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  username?: string | null
+  role?: $Enums.UserRole
+  status?: $Enums.UserStatus
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
+  invitationsMade?: Prisma.InvitationUncheckedCreateNestedManyWithoutCreatedByInput
+  invitationsUsed?: Prisma.InvitationUncheckedCreateNestedManyWithoutUsedByInput
+  gridTrades?: Prisma.GridTradeUncheckedCreateNestedManyWithoutOwnerInput
+  importPreviews?: Prisma.ImportPreviewUncheckedCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedCreateNestedOneWithoutOwnerInput
+}
+
+export type UserCreateOrConnectWithoutPriceAlertsInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutPriceAlertsInput, Prisma.UserUncheckedCreateWithoutPriceAlertsInput>
+}
+
+export type UserUpsertWithoutPriceAlertsInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutPriceAlertsInput, Prisma.UserUncheckedUpdateWithoutPriceAlertsInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutPriceAlertsInput, Prisma.UserUncheckedCreateWithoutPriceAlertsInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutPriceAlertsInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutPriceAlertsInput, Prisma.UserUncheckedUpdateWithoutPriceAlertsInput>
+}
+
+export type UserUpdateWithoutPriceAlertsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  username?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  role?: Prisma.EnumUserRoleFieldUpdateOperationsInput | $Enums.UserRole
+  status?: Prisma.EnumUserStatusFieldUpdateOperationsInput | $Enums.UserStatus
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
+  invitationsMade?: Prisma.InvitationUpdateManyWithoutCreatedByNestedInput
+  invitationsUsed?: Prisma.InvitationUpdateManyWithoutUsedByNestedInput
+  gridTrades?: Prisma.GridTradeUpdateManyWithoutOwnerNestedInput
+  importPreviews?: Prisma.ImportPreviewUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUpdateOneWithoutOwnerNestedInput
+}
+
+export type UserUncheckedUpdateWithoutPriceAlertsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  username?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  role?: Prisma.EnumUserRoleFieldUpdateOperationsInput | $Enums.UserRole
+  status?: Prisma.EnumUserStatusFieldUpdateOperationsInput | $Enums.UserStatus
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
+  invitationsMade?: Prisma.InvitationUncheckedUpdateManyWithoutCreatedByNestedInput
+  invitationsUsed?: Prisma.InvitationUncheckedUpdateManyWithoutUsedByNestedInput
+  gridTrades?: Prisma.GridTradeUncheckedUpdateManyWithoutOwnerNestedInput
+  importPreviews?: Prisma.ImportPreviewUncheckedUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedUpdateOneWithoutOwnerNestedInput
+}
+
+export type UserCreateWithoutAlertChannelInput = {
+  id?: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  username?: string | null
+  role?: $Enums.UserRole
+  status?: $Enums.UserStatus
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
+  invitationsMade?: Prisma.InvitationCreateNestedManyWithoutCreatedByInput
+  invitationsUsed?: Prisma.InvitationCreateNestedManyWithoutUsedByInput
+  gridTrades?: Prisma.GridTradeCreateNestedManyWithoutOwnerInput
+  importPreviews?: Prisma.ImportPreviewCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxCreateNestedManyWithoutOwnerInput
+}
+
+export type UserUncheckedCreateWithoutAlertChannelInput = {
+  id?: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  username?: string | null
+  role?: $Enums.UserRole
+  status?: $Enums.UserStatus
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
+  invitationsMade?: Prisma.InvitationUncheckedCreateNestedManyWithoutCreatedByInput
+  invitationsUsed?: Prisma.InvitationUncheckedCreateNestedManyWithoutUsedByInput
+  gridTrades?: Prisma.GridTradeUncheckedCreateNestedManyWithoutOwnerInput
+  importPreviews?: Prisma.ImportPreviewUncheckedCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertUncheckedCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedCreateNestedManyWithoutOwnerInput
+}
+
+export type UserCreateOrConnectWithoutAlertChannelInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutAlertChannelInput, Prisma.UserUncheckedCreateWithoutAlertChannelInput>
+}
+
+export type UserUpsertWithoutAlertChannelInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutAlertChannelInput, Prisma.UserUncheckedUpdateWithoutAlertChannelInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutAlertChannelInput, Prisma.UserUncheckedCreateWithoutAlertChannelInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutAlertChannelInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutAlertChannelInput, Prisma.UserUncheckedUpdateWithoutAlertChannelInput>
+}
+
+export type UserUpdateWithoutAlertChannelInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  username?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  role?: Prisma.EnumUserRoleFieldUpdateOperationsInput | $Enums.UserRole
+  status?: Prisma.EnumUserStatusFieldUpdateOperationsInput | $Enums.UserStatus
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
+  invitationsMade?: Prisma.InvitationUpdateManyWithoutCreatedByNestedInput
+  invitationsUsed?: Prisma.InvitationUpdateManyWithoutUsedByNestedInput
+  gridTrades?: Prisma.GridTradeUpdateManyWithoutOwnerNestedInput
+  importPreviews?: Prisma.ImportPreviewUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUpdateManyWithoutOwnerNestedInput
+}
+
+export type UserUncheckedUpdateWithoutAlertChannelInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  username?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  role?: Prisma.EnumUserRoleFieldUpdateOperationsInput | $Enums.UserRole
+  status?: Prisma.EnumUserStatusFieldUpdateOperationsInput | $Enums.UserStatus
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
+  invitationsMade?: Prisma.InvitationUncheckedUpdateManyWithoutCreatedByNestedInput
+  invitationsUsed?: Prisma.InvitationUncheckedUpdateManyWithoutUsedByNestedInput
+  gridTrades?: Prisma.GridTradeUncheckedUpdateManyWithoutOwnerNestedInput
+  importPreviews?: Prisma.ImportPreviewUncheckedUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUncheckedUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedUpdateManyWithoutOwnerNestedInput
+}
+
+export type UserCreateWithoutAlertEventsInput = {
+  id?: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  username?: string | null
+  role?: $Enums.UserRole
+  status?: $Enums.UserStatus
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
+  invitationsMade?: Prisma.InvitationCreateNestedManyWithoutCreatedByInput
+  invitationsUsed?: Prisma.InvitationCreateNestedManyWithoutUsedByInput
+  gridTrades?: Prisma.GridTradeCreateNestedManyWithoutOwnerInput
+  importPreviews?: Prisma.ImportPreviewCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelCreateNestedOneWithoutOwnerInput
+}
+
+export type UserUncheckedCreateWithoutAlertEventsInput = {
+  id?: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  username?: string | null
+  role?: $Enums.UserRole
+  status?: $Enums.UserStatus
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
+  invitationsMade?: Prisma.InvitationUncheckedCreateNestedManyWithoutCreatedByInput
+  invitationsUsed?: Prisma.InvitationUncheckedCreateNestedManyWithoutUsedByInput
+  gridTrades?: Prisma.GridTradeUncheckedCreateNestedManyWithoutOwnerInput
+  importPreviews?: Prisma.ImportPreviewUncheckedCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertUncheckedCreateNestedManyWithoutOwnerInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedCreateNestedOneWithoutOwnerInput
+}
+
+export type UserCreateOrConnectWithoutAlertEventsInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutAlertEventsInput, Prisma.UserUncheckedCreateWithoutAlertEventsInput>
+}
+
+export type UserUpsertWithoutAlertEventsInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutAlertEventsInput, Prisma.UserUncheckedUpdateWithoutAlertEventsInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutAlertEventsInput, Prisma.UserUncheckedCreateWithoutAlertEventsInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutAlertEventsInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutAlertEventsInput, Prisma.UserUncheckedUpdateWithoutAlertEventsInput>
+}
+
+export type UserUpdateWithoutAlertEventsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  username?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  role?: Prisma.EnumUserRoleFieldUpdateOperationsInput | $Enums.UserRole
+  status?: Prisma.EnumUserStatusFieldUpdateOperationsInput | $Enums.UserStatus
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
+  invitationsMade?: Prisma.InvitationUpdateManyWithoutCreatedByNestedInput
+  invitationsUsed?: Prisma.InvitationUpdateManyWithoutUsedByNestedInput
+  gridTrades?: Prisma.GridTradeUpdateManyWithoutOwnerNestedInput
+  importPreviews?: Prisma.ImportPreviewUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUpdateOneWithoutOwnerNestedInput
+}
+
+export type UserUncheckedUpdateWithoutAlertEventsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  username?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  role?: Prisma.EnumUserRoleFieldUpdateOperationsInput | $Enums.UserRole
+  status?: Prisma.EnumUserStatusFieldUpdateOperationsInput | $Enums.UserStatus
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
+  invitationsMade?: Prisma.InvitationUncheckedUpdateManyWithoutCreatedByNestedInput
+  invitationsUsed?: Prisma.InvitationUncheckedUpdateManyWithoutUsedByNestedInput
+  gridTrades?: Prisma.GridTradeUncheckedUpdateManyWithoutOwnerNestedInput
+  importPreviews?: Prisma.ImportPreviewUncheckedUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUncheckedUpdateManyWithoutOwnerNestedInput
+  alertOutbox?: Prisma.PriceAlertOutboxUncheckedUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedUpdateOneWithoutOwnerNestedInput
+}
+
+export type UserCreateWithoutAlertOutboxInput = {
+  id?: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  username?: string | null
+  role?: $Enums.UserRole
+  status?: $Enums.UserStatus
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountCreateNestedManyWithoutUserInput
+  invitationsMade?: Prisma.InvitationCreateNestedManyWithoutCreatedByInput
+  invitationsUsed?: Prisma.InvitationCreateNestedManyWithoutUsedByInput
+  gridTrades?: Prisma.GridTradeCreateNestedManyWithoutOwnerInput
+  importPreviews?: Prisma.ImportPreviewCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelCreateNestedOneWithoutOwnerInput
+}
+
+export type UserUncheckedCreateWithoutAlertOutboxInput = {
+  id?: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  username?: string | null
+  role?: $Enums.UserRole
+  status?: $Enums.UserStatus
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutUserInput
+  invitationsMade?: Prisma.InvitationUncheckedCreateNestedManyWithoutCreatedByInput
+  invitationsUsed?: Prisma.InvitationUncheckedCreateNestedManyWithoutUsedByInput
+  gridTrades?: Prisma.GridTradeUncheckedCreateNestedManyWithoutOwnerInput
+  importPreviews?: Prisma.ImportPreviewUncheckedCreateNestedManyWithoutOwnerInput
+  priceAlerts?: Prisma.PriceAlertUncheckedCreateNestedManyWithoutOwnerInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedCreateNestedManyWithoutOwnerInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedCreateNestedOneWithoutOwnerInput
+}
+
+export type UserCreateOrConnectWithoutAlertOutboxInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutAlertOutboxInput, Prisma.UserUncheckedCreateWithoutAlertOutboxInput>
+}
+
+export type UserUpsertWithoutAlertOutboxInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutAlertOutboxInput, Prisma.UserUncheckedUpdateWithoutAlertOutboxInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutAlertOutboxInput, Prisma.UserUncheckedCreateWithoutAlertOutboxInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutAlertOutboxInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutAlertOutboxInput, Prisma.UserUncheckedUpdateWithoutAlertOutboxInput>
+}
+
+export type UserUpdateWithoutAlertOutboxInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  username?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  role?: Prisma.EnumUserRoleFieldUpdateOperationsInput | $Enums.UserRole
+  status?: Prisma.EnumUserStatusFieldUpdateOperationsInput | $Enums.UserStatus
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUpdateManyWithoutUserNestedInput
+  invitationsMade?: Prisma.InvitationUpdateManyWithoutCreatedByNestedInput
+  invitationsUsed?: Prisma.InvitationUpdateManyWithoutUsedByNestedInput
+  gridTrades?: Prisma.GridTradeUpdateManyWithoutOwnerNestedInput
+  importPreviews?: Prisma.ImportPreviewUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUpdateOneWithoutOwnerNestedInput
+}
+
+export type UserUncheckedUpdateWithoutAlertOutboxInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  username?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  role?: Prisma.EnumUserRoleFieldUpdateOperationsInput | $Enums.UserRole
+  status?: Prisma.EnumUserStatusFieldUpdateOperationsInput | $Enums.UserStatus
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutUserNestedInput
+  invitationsMade?: Prisma.InvitationUncheckedUpdateManyWithoutCreatedByNestedInput
+  invitationsUsed?: Prisma.InvitationUncheckedUpdateManyWithoutUsedByNestedInput
+  gridTrades?: Prisma.GridTradeUncheckedUpdateManyWithoutOwnerNestedInput
+  importPreviews?: Prisma.ImportPreviewUncheckedUpdateManyWithoutOwnerNestedInput
+  priceAlerts?: Prisma.PriceAlertUncheckedUpdateManyWithoutOwnerNestedInput
+  alertEvents?: Prisma.PriceAlertEventUncheckedUpdateManyWithoutOwnerNestedInput
+  alertChannel?: Prisma.PriceAlertChannelUncheckedUpdateOneWithoutOwnerNestedInput
 }
 
 
@@ -1117,6 +1713,9 @@ export type UserCountOutputType = {
   invitationsUsed: number
   gridTrades: number
   importPreviews: number
+  priceAlerts: number
+  alertEvents: number
+  alertOutbox: number
 }
 
 export type UserCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1126,6 +1725,9 @@ export type UserCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.I
   invitationsUsed?: boolean | UserCountOutputTypeCountInvitationsUsedArgs
   gridTrades?: boolean | UserCountOutputTypeCountGridTradesArgs
   importPreviews?: boolean | UserCountOutputTypeCountImportPreviewsArgs
+  priceAlerts?: boolean | UserCountOutputTypeCountPriceAlertsArgs
+  alertEvents?: boolean | UserCountOutputTypeCountAlertEventsArgs
+  alertOutbox?: boolean | UserCountOutputTypeCountAlertOutboxArgs
 }
 
 /**
@@ -1180,6 +1782,27 @@ export type UserCountOutputTypeCountImportPreviewsArgs<ExtArgs extends runtime.T
   where?: Prisma.ImportPreviewWhereInput
 }
 
+/**
+ * UserCountOutputType without action
+ */
+export type UserCountOutputTypeCountPriceAlertsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.PriceAlertWhereInput
+}
+
+/**
+ * UserCountOutputType without action
+ */
+export type UserCountOutputTypeCountAlertEventsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.PriceAlertEventWhereInput
+}
+
+/**
+ * UserCountOutputType without action
+ */
+export type UserCountOutputTypeCountAlertOutboxArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.PriceAlertOutboxWhereInput
+}
+
 
 export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -1198,6 +1821,10 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   invitationsUsed?: boolean | Prisma.User$invitationsUsedArgs<ExtArgs>
   gridTrades?: boolean | Prisma.User$gridTradesArgs<ExtArgs>
   importPreviews?: boolean | Prisma.User$importPreviewsArgs<ExtArgs>
+  priceAlerts?: boolean | Prisma.User$priceAlertsArgs<ExtArgs>
+  alertEvents?: boolean | Prisma.User$alertEventsArgs<ExtArgs>
+  alertOutbox?: boolean | Prisma.User$alertOutboxArgs<ExtArgs>
+  alertChannel?: boolean | Prisma.User$alertChannelArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["user"]>
 
@@ -1248,6 +1875,10 @@ export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   invitationsUsed?: boolean | Prisma.User$invitationsUsedArgs<ExtArgs>
   gridTrades?: boolean | Prisma.User$gridTradesArgs<ExtArgs>
   importPreviews?: boolean | Prisma.User$importPreviewsArgs<ExtArgs>
+  priceAlerts?: boolean | Prisma.User$priceAlertsArgs<ExtArgs>
+  alertEvents?: boolean | Prisma.User$alertEventsArgs<ExtArgs>
+  alertOutbox?: boolean | Prisma.User$alertOutboxArgs<ExtArgs>
+  alertChannel?: boolean | Prisma.User$alertChannelArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type UserIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -1262,6 +1893,10 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     invitationsUsed: Prisma.$InvitationPayload<ExtArgs>[]
     gridTrades: Prisma.$GridTradePayload<ExtArgs>[]
     importPreviews: Prisma.$ImportPreviewPayload<ExtArgs>[]
+    priceAlerts: Prisma.$PriceAlertPayload<ExtArgs>[]
+    alertEvents: Prisma.$PriceAlertEventPayload<ExtArgs>[]
+    alertOutbox: Prisma.$PriceAlertOutboxPayload<ExtArgs>[]
+    alertChannel: Prisma.$PriceAlertChannelPayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1674,6 +2309,10 @@ export interface Prisma__UserClient<T, Null = never, ExtArgs extends runtime.Typ
   invitationsUsed<T extends Prisma.User$invitationsUsedArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$invitationsUsedArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$InvitationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   gridTrades<T extends Prisma.User$gridTradesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$gridTradesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$GridTradePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   importPreviews<T extends Prisma.User$importPreviewsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$importPreviewsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ImportPreviewPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  priceAlerts<T extends Prisma.User$priceAlertsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$priceAlertsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PriceAlertPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  alertEvents<T extends Prisma.User$alertEventsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$alertEventsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PriceAlertEventPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  alertOutbox<T extends Prisma.User$alertOutboxArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$alertOutboxArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PriceAlertOutboxPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  alertChannel<T extends Prisma.User$alertChannelArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$alertChannelArgs<ExtArgs>>): Prisma.Prisma__PriceAlertChannelClient<runtime.Types.Result.GetResult<Prisma.$PriceAlertChannelPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2247,6 +2886,97 @@ export type User$importPreviewsArgs<ExtArgs extends runtime.Types.Extensions.Int
   take?: number
   skip?: number
   distinct?: Prisma.ImportPreviewScalarFieldEnum | Prisma.ImportPreviewScalarFieldEnum[]
+}
+
+/**
+ * User.priceAlerts
+ */
+export type User$priceAlertsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the PriceAlert
+   */
+  select?: Prisma.PriceAlertSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the PriceAlert
+   */
+  omit?: Prisma.PriceAlertOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.PriceAlertInclude<ExtArgs> | null
+  where?: Prisma.PriceAlertWhereInput
+  orderBy?: Prisma.PriceAlertOrderByWithRelationInput | Prisma.PriceAlertOrderByWithRelationInput[]
+  cursor?: Prisma.PriceAlertWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.PriceAlertScalarFieldEnum | Prisma.PriceAlertScalarFieldEnum[]
+}
+
+/**
+ * User.alertEvents
+ */
+export type User$alertEventsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the PriceAlertEvent
+   */
+  select?: Prisma.PriceAlertEventSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the PriceAlertEvent
+   */
+  omit?: Prisma.PriceAlertEventOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.PriceAlertEventInclude<ExtArgs> | null
+  where?: Prisma.PriceAlertEventWhereInput
+  orderBy?: Prisma.PriceAlertEventOrderByWithRelationInput | Prisma.PriceAlertEventOrderByWithRelationInput[]
+  cursor?: Prisma.PriceAlertEventWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.PriceAlertEventScalarFieldEnum | Prisma.PriceAlertEventScalarFieldEnum[]
+}
+
+/**
+ * User.alertOutbox
+ */
+export type User$alertOutboxArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the PriceAlertOutbox
+   */
+  select?: Prisma.PriceAlertOutboxSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the PriceAlertOutbox
+   */
+  omit?: Prisma.PriceAlertOutboxOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.PriceAlertOutboxInclude<ExtArgs> | null
+  where?: Prisma.PriceAlertOutboxWhereInput
+  orderBy?: Prisma.PriceAlertOutboxOrderByWithRelationInput | Prisma.PriceAlertOutboxOrderByWithRelationInput[]
+  cursor?: Prisma.PriceAlertOutboxWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.PriceAlertOutboxScalarFieldEnum | Prisma.PriceAlertOutboxScalarFieldEnum[]
+}
+
+/**
+ * User.alertChannel
+ */
+export type User$alertChannelArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the PriceAlertChannel
+   */
+  select?: Prisma.PriceAlertChannelSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the PriceAlertChannel
+   */
+  omit?: Prisma.PriceAlertChannelOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.PriceAlertChannelInclude<ExtArgs> | null
+  where?: Prisma.PriceAlertChannelWhereInput
 }
 
 /**

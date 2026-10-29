@@ -4,7 +4,7 @@ import { PrismaClient } from "@/generated/prisma/client";
 
 export function createPrismaClient(databaseUrl: string): PrismaClient {
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString: databaseUrl }),
+    adapter: new PrismaPg({ connectionString: databaseUrl, max: 5, connectionTimeoutMillis: 5000, statement_timeout: 10000 }),
   });
 }
 

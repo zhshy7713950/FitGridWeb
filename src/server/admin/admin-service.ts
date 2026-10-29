@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { UserStatus } from "@/generated/prisma/client";
 import { ApiError } from "@/server/http/api-error";
+import { cancelOutbox } from "@/server/price-alerts/repository";
 import { signScopedToken, verifyScopedToken } from "@/server/security/signed-token";
 
 export interface ManagedUser {
@@ -54,6 +55,11 @@ function response(user: ManagedUser) {
 function isSerializableConflict(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   if ("code" in error && error.code === "P2034") return true;
+  if ("code" in error && error.code === "P2010"
+    && "meta" in error && typeof error.meta === "object" && error.meta !== null
+    && "driverAdapterError" in error.meta) {
+    return isSerializableConflict(error.meta.driverAdapterError);
+  }
   if (!("cause" in error) || typeof error.cause !== "object" || error.cause === null) {
     return false;
   }
@@ -153,6 +159,9 @@ export class PrismaAdminRepository implements AdminRepository {
             });
             if (status === "disabled") {
               await transaction.session.deleteMany({ where: { userId: id } });
+              await transaction.$queryRaw`SELECT set_config('app.current_user_id', ${id}, true)`;
+              await transaction.priceAlert.updateMany({ where: { enabled: true }, data: { enabled: false, version: { increment: 1 } } });
+              await cancelOutbox(transaction);
             }
             return { kind: "updated", user: managedUser(updated) } as const;
           },

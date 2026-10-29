@@ -34,6 +34,8 @@ const deploymentSchema = z.strictObject({
   MIGRATION_DATABASE_URL: z.url({ protocol: /^postgres(?:ql)?$/ }),
   BETTER_AUTH_SECRET: secret,
   OWNER_REF_SECRET: secret,
+  PRICE_ALERTS_TASK_SECRET: secret.regex(/^[A-Za-z0-9_+\/=.-]+$/).optional(),
+  NOTIFICATION_ENCRYPTION_KEY: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
   ADMIN_OPS_WEB_DIR: privateHostPath,
   ADMIN_OPS_ROOT_DIR: privateHostPath,
   PORTABLE_BACKUP_DIR: privateHostPath,
@@ -50,6 +52,12 @@ export function validateDeploymentEnvironment(
   const parsed = deploymentSchema.parse(value);
   if (parsed.BETTER_AUTH_SECRET === parsed.OWNER_REF_SECRET) {
     throw new Error("BETTER_AUTH_SECRET 与 OWNER_REF_SECRET 必须相互独立");
+  }
+  const alertSecrets = [parsed.PRICE_ALERTS_TASK_SECRET, parsed.NOTIFICATION_ENCRYPTION_KEY];
+  if (alertSecrets.some(Boolean)) {
+    if (!alertSecrets.every(Boolean)) throw new Error("预警任务秘密与通知加密密钥必须同时配置");
+    const secrets = [parsed.BETTER_AUTH_SECRET, parsed.OWNER_REF_SECRET, ...alertSecrets];
+    if (new Set(secrets).size !== secrets.length) throw new Error("预警秘密必须相互独立且独立于认证秘密");
   }
   const publicPort = parsed.PUBLIC_HTTPS_PORT === 443 ? "" : `:${parsed.PUBLIC_HTTPS_PORT}`;
   const expectedAuthUrl = `https://${parsed.DOMAIN}${publicPort}${parsed.APP_BASE_PATH}`;

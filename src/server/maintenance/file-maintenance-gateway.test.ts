@@ -702,4 +702,12 @@ describe("FileMaintenanceGateway", () => {
       code: "MAINTENANCE_STATE_INVALID",
     });
   });
+  it("accepts v4 restore previews containing referenced products, alerts and trigger history", async () => {
+    const files = await fixture();
+    await writeFile(path.join(files.adminOpsDirectory, "status", `${JOB_A}.json`), JSON.stringify({
+      schemaVersion: 1, id: JOB_A, type: "inspect-restore", actorId: ADMIN_ID, requestId: "v4-preview", state: "awaiting-confirmation", updatedAt: "2026-10-27T08:00:00Z", expiresAt: 2_000_000_000, backupCreatedAt: "2026-10-27T07:00:00Z", postgresMajor: 17, database: "fitgridweb",
+      preview: { users: 2, gridTrades: 24, invitations: 1, importPreviews: 0, marketInstruments: 5, priceAlerts: 7, priceAlertEvents: 12 },
+    }));
+    await expect(files.gateway.getJob(JOB_A)).resolves.toMatchObject({ preview: { marketInstruments: 5, priceAlerts: 7, priceAlertEvents: 12 } });
+  });
 });

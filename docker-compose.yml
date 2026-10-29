@@ -1,6 +1,11 @@
 services:
   db:
     image: postgres:17.6-alpine
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
@@ -26,6 +31,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
     read_only: true
     tmpfs:
@@ -38,6 +48,8 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required}
       OWNER_REF_SECRET: ${OWNER_REF_SECRET:?OWNER_REF_SECRET is required}
       CURSOR_SIGNING_SECRET: ${CURSOR_SIGNING_SECRET:-${BETTER_AUTH_SECRET}}
+      PRICE_ALERTS_TASK_SECRET: ${PRICE_ALERTS_TASK_SECRET:-}
+      NOTIFICATION_ENCRYPTION_KEY: ${NOTIFICATION_ENCRYPTION_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       ADMIN_OPS_DIR: /var/lib/fitgridweb/admin-ops
       PORTABLE_BACKUP_DIR: /var/lib/fitgridweb/portable-backups

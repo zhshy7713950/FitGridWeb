@@ -4,7 +4,7 @@ info:
   title: FitGridWeb API
   version: 1.0.0
   description: >-
-    FitGridWeb 网格交易 API。所有产品接口自动限定为当前登录账号；API 不接受或返回 ownerId。
+    FitGridWeb 网格交易与股价预警 API。所有产品接口自动限定为当前登录账号；API 不接受或返回 ownerId。
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -25,6 +25,12 @@ tags:
     description: 当前登录账号的网格产品与权威计算
   - name: ImportExport
     description: 当前登录账号的数据导入、兼容导出与完整备份
+  - name: PriceAlerts
+    description: 当前账号的股价与动态日均线预警、缓存状态和历史
+  - name: Market
+    description: 股票与 ETF 标的核对
+  - name: Notifications
+    description: 当前账号的 Bark 通道与测试
 
 paths:
   /health:
@@ -688,6 +694,311 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /price-alerts:
+    get:
+      tags: [PriceAlerts]
+      operationId: listPriceAlerts
+      summary: 列出当前账号的预警与采集状态
+      description: 最多返回 250 条未删除规则；只读取缓存与持久状态，不因刷新请求行情。
+      responses:
+        '200':
+          description: 规则及交易日历、下一次任务、最近采集状态
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/PriceAlertPage'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      tags: [PriceAlerts]
+      operationId: createPriceAlert
+      summary: 创建当前账号的预警
+      description: >-
+        需同源 Origin 和会话 Cookie。JSON 请求体最多 16 KiB。instrumentId 须先核对解析；
+        enabled 必填，客户端新建规则应显式传 false。启用规则前必须成功测试 Bark 通道。
+        均线规则保存前验证 N−1 个有效复权日线；确认不足返回 HISTORY_INSUFFICIENT 并提示可用数量/最大周期，无法验证返回 HISTORY_UNAVAILABLE。
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PriceAlertCreateRequest'}}}
+      responses:
+        '201':
+          description: 规则已创建
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/PriceAlert'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          $ref: '#/components/responses/Forbidden'
+          description: CROSS_SITE_REQUEST，同源 Origin 缺失或不匹配
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: CHANNEL_NOT_READY 或 ALERT_CAPACITY（当前账号最多 250 条未删除预警）
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '422':
+          $ref: '#/components/responses/ValidationError'
+          description: VALIDATION_FAILED、OWNER_FIELD_FORBIDDEN、INSTRUMENT_INVALID 或 HISTORY_INSUFFICIENT
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /price-alerts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PriceAlertId'
+    get:
+      tags: [PriceAlerts]
+      operationId: getPriceAlert
+      summary: 获取当前账号的预警详情
+      description: 跨账号或不存在的规则返回 ALERT_NOT_FOUND，不触发行情请求。
+      responses:
+        '200':
+          description: 规则及已保存的标的信息、最近判定
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/PriceAlert'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    patch:
+      tags: [PriceAlerts]
+      operationId: updatePriceAlert
+      summary: 按版本编辑、暂停或启用预警
+      description: >-
+        需同源 Origin；JSON 最多 16 KiB。expectedVersion 必须匹配当前 version，且至少提供 condition 或 enabled。
+        更新递增版本、清空判定游标并重设激活起点，取消旧版本待发送任务；不可修改 instrumentId。
+        修改均线条件或重新启用时先验证历史日线；确认不足返回422 HISTORY_INSUFFICIENT，来源无法验证返回503 HISTORY_UNAVAILABLE。纯暂停不请求日线。
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PriceAlertUpdateRequest'}}}
+      responses:
+        '200':
+          description: 更新后的规则
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/PriceAlert'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          $ref: '#/components/responses/Forbidden'
+          description: CROSS_SITE_REQUEST，同源 Origin 缺失或不匹配
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: EDIT_CONFLICT（请重新读取版本）或 CHANNEL_NOT_READY
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    delete:
+      tags: [PriceAlerts]
+      operationId: deletePriceAlert
+      summary: 按版本软删除预警并取消待发送任务
+      description: 需同源 Origin；JSON 最多 16 KiB，必须在请求体提供 expectedVersion，不能放入查询参数。
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PriceAlertDeleteRequest'}}}
+      responses:
+        '204': {description: 已停用并软删除，旧版本通知不会继续发送}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          $ref: '#/components/responses/Forbidden'
+          description: CROSS_SITE_REQUEST，同源 Origin 缺失或不匹配
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: EDIT_CONFLICT，需先重新读取当前版本
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /price-alerts/{id}/events:
+    parameters:
+      - $ref: '#/components/parameters/PriceAlertId'
+    get:
+      tags: [PriceAlerts]
+      operationId: listPriceAlertEvents
+      summary: 分页读取当前账号的预警历史
+      description: 按 minuteStart、id 均降序，每页最多 50 条。只读取持久历史，不请求行情或重发通知。
+      parameters:
+        - name: before
+          in: query
+          description: >-
+            原样使用上一页 nextCursor；这是最多 512 字符的不透明 base64url 编码复合游标，
+            内部为 minuteStart（UTC 时间）及 id，不是裸 ISO 时间。不要自行构造或修改；空值等同未提供。
+          schema: {$ref: '#/components/schemas/AlertEventCursor'}
+      responses:
+        '200':
+          description: 历史事件和下一页游标；nextCursor 为 null 时已到末页
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/PriceAlertEventPage'}}}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+          description: CURSOR_INVALID，非有效复合分页游标
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422':
+          $ref: '#/components/responses/ValidationError'
+          description: before 超过 512 字符、id 无效或包含未知查询参数
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /market/instruments/search:
+    post:
+      tags: [Market]
+      operationId: searchMarketInstruments
+      summary: 按代码或名称检索真实股票和 ETF 候选
+      description: >-
+        需同源 Origin 和会话 Cookie。沪深使用腾讯真实候选，美股使用 Yahoo 真实候选，筛除指数及不支持的市场。
+        返回最多10项；不保存标的。用户确认候选后再调用 resolve 核对身份并取得 instrumentId。
+        与 resolve 共用每账号10次/分钟限流；读取已有预警仍不触发此接口。
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MarketInstrumentSearchRequest'}}}
+      responses:
+        '200':
+          description: 检索候选；有效空结果为 items 空数组
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/MarketInstrumentSearchResponse'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+          description: INSTRUMENT_SEARCH_UNAVAILABLE，来源超时、错误或响应无法验证
+
+  /market/instruments/resolve:
+    post:
+      tags: [Market]
+      operationId: resolveMarketInstrument
+      summary: 核对沪深或美股股票、场内 ETF 标的
+      description: >-
+        需同源 Origin；JSON 最多 16 KiB。核对远程提供方后保存规范代码，返回的 id 用于创建规则。
+        沪深代码例如 510300.SH，美股例如 SPY 或 SPY.US；仅支持 CN/CNY 与 US/USD 股票和 ETF。
+        每账号核对限流 10 次/分钟，同时受账号通用写入限流约束。
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MarketInstrumentResolveRequest'}}}
+      responses:
+        '200':
+          description: 已核对并保存的标的
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/MarketInstrument'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          $ref: '#/components/responses/Forbidden'
+          description: CROSS_SITE_REQUEST，同源 Origin 缺失或不匹配
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '422':
+          $ref: '#/components/responses/ValidationError'
+          description: VALIDATION_FAILED 或 INSTRUMENT_UNAVAILABLE，代码不支持或无法核对
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /settings/notifications:
+    get:
+      tags: [Notifications]
+      operationId: getNotificationChannel
+      summary: 获取当前账号的 Bark 配置状态
+      description: 仅返回是否配置、是否通过测试及错误状态，永不返回设备 Key 或加密密文。
+      responses:
+        '200':
+          description: 当前账号通道状态
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/NotificationChannelStatus'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    put:
+      tags: [Notifications]
+      operationId: saveNotificationChannel
+      summary: 保存或更换当前账号的 Bark 设备 Key
+      description: >-
+        需同源 Origin；JSON 最多 16 KiB。设备 Key 加密保存，响应仅含状态。
+        保存或更换会暂停本账号已启用规则、取消待发送任务并清除测试状态，必须重新测试并主动启用规则。
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/NotificationChannelRequest'}}}
+      responses:
+        '200':
+          description: 保存后的通道状态
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/NotificationChannelStatus'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          $ref: '#/components/responses/Forbidden'
+          description: CROSS_SITE_REQUEST，同源 Origin 缺失或不匹配
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+          description: 维护中或 NOTIFICATION_NOT_CONFIGURED，服务器加密密钥未就绪
+    delete:
+      tags: [Notifications]
+      operationId: deleteNotificationChannel
+      summary: 删除当前账号的 Bark 通道
+      description: 需同源 Origin；暂停本账号已启用规则并取消待发送任务，无请求体。
+      responses:
+        '204': {description: 通道已删除，相关规则保持暂停}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          $ref: '#/components/responses/Forbidden'
+          description: CROSS_SITE_REQUEST，同源 Origin 缺失或不匹配
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
+  /settings/notifications/test:
+    post:
+      tags: [Notifications]
+      operationId: testNotificationChannel
+      summary: 向已保存的 Bark 通道发送测试通知
+      description: >-
+        需同源 Origin，无请求体，每账号最多 3 次/分钟并受通用写入限流约束。
+        accepted 仅表示 Bark 服务已接受，不代表 iPhone 已展示；请在设备确认收到。
+        成功更新通道测试时间，之后仍需主动启用规则。
+      responses:
+        '200':
+          description: 测试通知已被 Bark 接受
+          headers:
+            Cache-Control: {$ref: '#/components/headers/PrivateNoStore'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/NotificationTestResponse'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          $ref: '#/components/responses/Forbidden'
+          description: CROSS_SITE_REQUEST，同源 Origin 缺失或不匹配
+        '409':
+          $ref: '#/components/responses/Conflict'
+          description: CHANNEL_NOT_READY，请先保存设备 Key
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+          description: 维护中，或 NOTIFICATION_NOT_CONFIGURED、CHANNEL_UNREADABLE、BARK_REJECTED
+
 components:
   securitySchemes:
     cookieAuth:
@@ -705,6 +1016,11 @@ components:
       name: limit
       in: query
       schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    PriceAlertId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
     GridTradeId:
       name: id
       in: path
@@ -792,6 +1108,297 @@ components:
       allOf:
         - $ref: '#/components/schemas/DecimalString'
       description: 解析后的十进制值必须大于 0
+    AlertUtcTimestamp:
+      type: string
+      format: date-time
+      pattern: 'Z$'
+      description: ISO 8601 UTC 时间，统一以 Z 结尾
+    AlertProvider:
+      type: string
+      enum: [tencent, eastmoney, yahoo]
+    AlertPriceInput:
+      type: string
+      pattern: '^(?:0|[1-9][0-9]{0,19})(?:\.[0-9]{1,10})?$'
+      not: {pattern: '^0(?:\.0+)?$'}
+      description: 大于 0 的普通十进制字符串，整数最多 20 位、小数最多 10 位，不接受指数形式
+      examples: ['100', '0.0000000001']
+    AlertPercentInput:
+      type: string
+      pattern: '^[0-9]{1,2}(?:\.[0-9]{1,2})?$'
+      not: {pattern: '^0{1,2}(?:\.0{1,2})?$'}
+      description: 0.01–99.99 的十进制百分比字符串，最多两位小数
+      examples: ['0.01', '5', '99.99']
+    AlertCondition:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind, direction, targetPrice]
+          properties:
+            kind: {const: price}
+            direction: {type: string, enum: [up, down]}
+            targetPrice: {$ref: '#/components/schemas/AlertPriceInput'}
+        - type: object
+          additionalProperties: false
+          required: [kind, direction, days]
+          properties:
+            kind: {const: ma_touch}
+            direction: {type: string, enum: [up, down]}
+            days: {type: integer, minimum: 2, maximum: 500}
+        - type: object
+          additionalProperties: false
+          required: [kind, direction, days, percent]
+          properties:
+            kind: {const: ma_deviation}
+            direction: {type: string, enum: [up, down]}
+            days: {type: integer, minimum: 2, maximum: 500}
+            percent: {$ref: '#/components/schemas/AlertPercentInput'}
+      description: >-
+        up 向上、down 向下，等于阈值也触发。均线使用前 N−1 个已完成交易日的同源复权收盘价加候选价动态计算，
+        ma_touch 是触及动态日均线，ma_deviation 是达到动态均线上方或下方 percent 百分比。
+    MarketInstrumentSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [market, query]
+      properties:
+        market: {type: string, enum: [cn, us]}
+        query: {type: string, minLength: 1, maxLength: 64, pattern: '\S'}
+      examples:
+        - {market: cn, query: '510880'}
+        - {market: cn, query: 红利}
+        - {market: us, query: Apple}
+    MarketInstrumentCandidate:
+      type: object
+      additionalProperties: false
+      required: [code, name, market, currency, kind, exchange]
+      properties:
+        code: {type: string, minLength: 1, maxLength: 32}
+        name: {type: string, minLength: 1, maxLength: 160}
+        market: {type: string, enum: [cn, us]}
+        currency: {type: string, enum: [CNY, USD]}
+        kind: {type: string, enum: [stock, etf]}
+        exchange: {type: string, minLength: 1, maxLength: 64}
+    MarketInstrumentSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 10
+          items: {$ref: '#/components/schemas/MarketInstrumentCandidate'}
+    MarketInstrumentResolveRequest:
+      type: object
+      additionalProperties: false
+      required: [market, code]
+      properties:
+        market: {type: string, enum: [cn, us]}
+        code: {type: string, minLength: 1, maxLength: 32}
+      examples:
+        - {market: cn, code: 510300.SH}
+        - {market: us, code: SPY}
+    MarketInstrument:
+      type: object
+      additionalProperties: false
+      required: [id, code, name, market, currency, kind, tencent, yahoo, eastmoney, quote, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        code: {type: string, maxLength: 32}
+        name: {type: string, maxLength: 160}
+        market: {type: string, enum: [cn, us]}
+        currency: {type: string, enum: [CNY, USD]}
+        kind: {type: string, enum: [stock, etf]}
+        tencent: {type: [string, 'null'], maxLength: 32}
+        yahoo: {type: [string, 'null'], maxLength: 32}
+        eastmoney: {type: [string, 'null'], maxLength: 40}
+        quote: {description: 已保存的 JSON 行情快照或 null，不在读取时请求行情}
+        createdAt: {$ref: '#/components/schemas/AlertUtcTimestamp'}
+    PriceAlertCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [instrumentId, condition, enabled]
+      properties:
+        instrumentId: {type: string, format: uuid}
+        condition: {$ref: '#/components/schemas/AlertCondition'}
+        enabled: {type: boolean, description: 新建规则应显式传 false；true 要求通道已测试}
+    PriceAlertUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      minProperties: 2
+      properties:
+        expectedVersion: {type: integer, minimum: 1}
+        condition: {$ref: '#/components/schemas/AlertCondition'}
+        enabled: {type: boolean}
+    PriceAlertDeleteRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: {type: integer, minimum: 1}
+    AlertEvaluation:
+      type: object
+      additionalProperties: false
+      required: [price, provider, minuteEnd, fetchedAt, ma, threshold, adjustment]
+      properties:
+        price: {$ref: '#/components/schemas/DecimalString'}
+        provider: {$ref: '#/components/schemas/AlertProvider'}
+        minuteEnd: {$ref: '#/components/schemas/AlertUtcTimestamp'}
+        fetchedAt: {$ref: '#/components/schemas/AlertUtcTimestamp'}
+        ma:
+          anyOf:
+            - $ref: '#/components/schemas/DecimalString'
+            - {type: 'null'}
+        threshold: {$ref: '#/components/schemas/DecimalString'}
+        adjustment: {type: [string, 'null']}
+    PriceAlert:
+      type: object
+      additionalProperties: false
+      required: [id, instrumentId, condition, enabled, version, armed, cursor, activeFrom, continuityDegraded, lastError, lastSuccess, lastEvaluation, deletedAt, createdAt, updatedAt, instrument]
+      properties:
+        id: {type: string, format: uuid}
+        instrumentId: {type: string, format: uuid}
+        condition: {$ref: '#/components/schemas/AlertCondition'}
+        enabled: {type: boolean}
+        version: {type: integer, minimum: 1}
+        armed: {type: boolean}
+        cursor:
+          anyOf:
+            - $ref: '#/components/schemas/AlertUtcTimestamp'
+            - {type: 'null'}
+          description: 最近处理的分钟结束时间；这是规则内部状态，不是历史分页游标
+        activeFrom: {$ref: '#/components/schemas/AlertUtcTimestamp'}
+        continuityDegraded: {type: boolean}
+        lastError: {type: [string, 'null'], maxLength: 240}
+        lastSuccess:
+          anyOf:
+            - $ref: '#/components/schemas/AlertUtcTimestamp'
+            - {type: 'null'}
+        lastEvaluation:
+          anyOf:
+            - $ref: '#/components/schemas/AlertEvaluation'
+            - {type: 'null'}
+        deletedAt:
+          anyOf:
+            - $ref: '#/components/schemas/AlertUtcTimestamp'
+            - {type: 'null'}
+        createdAt: {$ref: '#/components/schemas/AlertUtcTimestamp'}
+        updatedAt: {$ref: '#/components/schemas/AlertUtcTimestamp'}
+        instrument: {$ref: '#/components/schemas/MarketInstrument'}
+    PriceAlertPage:
+      type: object
+      additionalProperties: false
+      required: [items, status]
+      properties:
+        items:
+          type: array
+          maxItems: 250
+          items: {$ref: '#/components/schemas/PriceAlert'}
+        status:
+          type: object
+          additionalProperties: false
+          required: [calendarWarnings, nextRunAt, lastScan]
+          properties:
+            calendarWarnings: {type: array, items: {type: string}}
+            nextRunAt:
+              anyOf:
+                - $ref: '#/components/schemas/AlertUtcTimestamp'
+                - {type: 'null'}
+            lastScan:
+              anyOf:
+                - type: object
+                  additionalProperties: false
+                  required: [market, status, windowEnd, finishedAt]
+                  properties:
+                    market: {type: string, enum: [cn, us]}
+                    status: {type: string, maxLength: 16}
+                    windowEnd: {$ref: '#/components/schemas/AlertUtcTimestamp'}
+                    finishedAt:
+                      anyOf:
+                        - $ref: '#/components/schemas/AlertUtcTimestamp'
+                        - {type: 'null'}
+                - {type: 'null'}
+    AlertEventCursor:
+      type: string
+      maxLength: 512
+      pattern: '^[A-Za-z0-9_-]*$'
+      description: 服务端生成的不透明 base64url 复合游标（minuteStart 与 id）；须原样回传，不是 ISO 时间
+    AlertDelivery:
+      type: object
+      additionalProperties: false
+      required: [status, lastError, acceptedAt, attempts]
+      properties:
+        status: {type: string, enum: [pending, sending, accepted, failed, expired, cancelled, history]}
+        lastError: {type: [string, 'null']}
+        acceptedAt:
+          anyOf:
+            - $ref: '#/components/schemas/AlertUtcTimestamp'
+            - {type: 'null'}
+        attempts: {type: integer, minimum: 0}
+      description: accepted 为 Bark 已接受；history 为无发送队列的历史记录。均不证明设备已展示通知
+    PriceAlertEvent:
+      type: object
+      additionalProperties: false
+      required: [id, ruleId, version, minuteStart, minuteEnd, price, threshold, ma, provider, evidence, createdAt, delivery]
+      properties:
+        id: {type: string, format: uuid}
+        ruleId: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        minuteStart: {$ref: '#/components/schemas/AlertUtcTimestamp'}
+        minuteEnd: {$ref: '#/components/schemas/AlertUtcTimestamp'}
+        price: {$ref: '#/components/schemas/DecimalString'}
+        threshold: {$ref: '#/components/schemas/DecimalString'}
+        ma:
+          anyOf:
+            - $ref: '#/components/schemas/DecimalString'
+            - {type: 'null'}
+        provider: {$ref: '#/components/schemas/AlertProvider'}
+        evidence:
+          description: 保存的 JSON 判定证据，包括条件、复权和提供方、补采及连续性信息；可包含送达状态快照
+        createdAt: {$ref: '#/components/schemas/AlertUtcTimestamp'}
+        delivery: {$ref: '#/components/schemas/AlertDelivery'}
+    PriceAlertEventPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: {$ref: '#/components/schemas/PriceAlertEvent'}
+        nextCursor:
+          anyOf:
+            - $ref: '#/components/schemas/AlertEventCursor'
+            - {type: 'null'}
+    NotificationChannelRequest:
+      type: object
+      additionalProperties: false
+      required: [deviceKey]
+      properties:
+        deviceKey:
+          type: string
+          pattern: '^\s*[A-Za-z0-9_-]{8,256}\s*$'
+          writeOnly: true
+          description: 设备 Key，不接受 URL；服务端去除两侧空白后要求 8–256 个字母、数字、下划线或连字符
+    NotificationChannelStatus:
+      type: object
+      additionalProperties: false
+      required: [configured, tested, testedAt, lastError, encryptionReady]
+      properties:
+        configured: {type: boolean}
+        tested: {type: boolean}
+        testedAt:
+          anyOf:
+            - $ref: '#/components/schemas/AlertUtcTimestamp'
+            - {type: 'null'}
+        lastError: {type: [string, 'null']}
+        encryptionReady: {type: boolean}
+    NotificationTestResponse:
+      type: object
+      additionalProperties: false
+      required: [accepted]
+      properties:
+        accepted: {type: boolean, const: true}
+
     UserRole:
       type: string
       enum: [member, admin]
@@ -900,6 +1507,9 @@ components:
         gridTrades: {type: integer, minimum: 0}
         invitations: {type: integer, minimum: 0}
         importPreviews: {type: integer, minimum: 0}
+        marketInstruments: {type: integer, minimum: 0, description: v4 标的数量；v3 可省略}
+        priceAlerts: {type: integer, minimum: 0, description: v4 规则数量；恢复后全部暂停}
+        priceAlertEvents: {type: integer, minimum: 0, description: v4 历史数量；不恢复发送队列}
     MaintenanceJobStatus:
       type: object
       additionalProperties: false

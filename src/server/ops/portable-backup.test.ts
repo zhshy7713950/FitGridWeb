@@ -76,15 +76,16 @@ async function createCanonicalTar(
   root: string,
   name: string,
   manifest: string,
-  overrides: Partial<Record<(typeof canonicalCsvFiles)[number], string>> = {},
+  overrides: Partial<Record<string, string>> = {},
 ) {
+  const csvFiles = JSON.parse(manifest).formatVersion === "4.0.0" ? [...canonicalCsvFiles, "market_instruments.csv", "price_alerts.csv", "price_alert_events.csv"] : canonicalCsvFiles;
   const payload = path.join(root, `${name}-payload`);
   await mkdir(payload);
   await writeFile(path.join(payload, "manifest.json"), manifest);
-  for (const file of canonicalCsvFiles) {
+  for (const file of csvFiles) {
     await writeFile(path.join(payload, file), overrides[file] ?? "");
   }
-  const checksums = canonicalCsvFiles.map((file) => {
+  const checksums = csvFiles.map((file) => {
     const contents = overrides[file] ?? "";
     return `${createHash("sha256").update(contents).digest("hex")}  ${file}`;
   }).join("\n") + "\n";
@@ -92,7 +93,7 @@ async function createCanonicalTar(
   const archive = path.join(root, name);
   const tar = spawnSync(
     "tar",
-    ["-cf", archive, ...canonicalCsvFiles, "manifest.json", "payload.sha256"],
+    ["-cf", archive, ...csvFiles, "manifest.json", "payload.sha256"],
     { cwd: payload, encoding: "utf8" },
   );
   if (tar.status !== 0) throw new Error(tar.stderr);
@@ -157,6 +158,9 @@ case "$*" in
     printf '%s\n' "\${EXPORT_USER_ROW:-\"e30=\"}"
     printf '%s\n' \
       '__FITGRID_PORTABLE_V3_VERIFICATIONS__' '"e30="' \
+      '__FITGRID_PORTABLE_V3_MARKET_INSTRUMENTS__' '"e30="' \
+      '__FITGRID_PORTABLE_V3_PRICE_ALERTS__' '"e30="' \
+      '__FITGRID_PORTABLE_V3_PRICE_ALERT_EVENTS__' '"e30="' \
       '__FITGRID_PORTABLE_V3_END__'
     [ "\${PSQL_EXIT:-0}" = 0 ] || exit "$PSQL_EXIT" ;;
   *"pg_dump"*) printf 'valid custom dump' ;;
@@ -393,7 +397,7 @@ describe("portable backups", () => {
     await expect(readFile(files.commandLog, "utf8")).rejects.toThrow();
   });
 
-  it("creates a v3 canonical per-table payload without pg_dump or pg_restore", async () => {
+  it("creates a v4 canonical per-table payload without pg_dump or pg_restore", async () => {
     const files = await portableFixture();
     const result = runPortableCreate(files);
     expect(result.status, result.stderr).toBe(0);
@@ -408,9 +412,10 @@ describe("portable backups", () => {
     const manifest = spawnSync("tar", ["-xOf", archive, "manifest.json"], { encoding: "utf8" });
     expect(manifest.status, manifest.stderr).toBe(0);
     expect(JSON.parse(manifest.stdout)).toMatchObject({
-      formatVersion: "3.0.0",
+      formatVersion: "4.0.0",
       dumpMode: "canonical-csv",
       dataEncoding: "base64-json-row-v1",
+      counts: { marketInstruments: 1, priceAlerts: 1, priceAlertEvents: 1 },
     });
   });
 
@@ -758,6 +763,15 @@ rm() {
     const users = spawnSync("tar", ["-xOf", preparedTar, "users.csv"], { encoding: "utf8" });
     expect(users.status, users.stderr).toBe(0);
     expect(users.stdout).toBe(canonicalCsvRow(tricky));
+  });
+
+  it.each([false, true])("validates v4 alert rows and rejects mismatched counts (%s)", async (mismatch) => {
+    const files = await portableFixture();
+    const manifest = JSON.stringify({ format: "fitgridweb-portable-backup", formatVersion: "4.0.0", dumpMode: "canonical-csv", dataEncoding: "base64-json-row-v1", createdAt: "2026-09-03T07:00:00Z", appImage: "test", postgresMajor: 17, database: "fitgridweb", counts: { users: 0, gridTrades: 0, invitations: 0, importPreviews: 0, marketInstruments: 1, priceAlerts: mismatch ? 2 : 1, priceAlertEvents: 1 } });
+    const archive = await createCanonicalTar(files.root, "alerts.fitgridbackup", manifest, { "market_instruments.csv": canonicalCsvRow({ id: "instrument" }), "price_alerts.csv": canonicalCsvRow({ id: "rule" }), "price_alert_events.csv": canonicalCsvRow({ id: "event" }) });
+    const result = runPortableInspect(files, archive);
+    if (mismatch) expect(result.status).not.toBe(0);
+    else expect(result.status, result.stderr).toBe(0);
   });
 
   it("rejects the previous v2 custom-dump portable format", async () => {

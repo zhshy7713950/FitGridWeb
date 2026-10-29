@@ -48,6 +48,9 @@ export type RestorePreview = {
   gridTrades: number;
   invitations: number;
   importPreviews: number;
+  marketInstruments?: number;
+  priceAlerts?: number;
+  priceAlertEvents?: number;
 };
 
 export type MaintenanceJobStatus = {

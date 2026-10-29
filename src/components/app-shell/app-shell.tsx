@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode, SVGProps } from "react";
+import { useEffect, useRef, type ReactNode, type SVGProps } from "react";
 import { GridIcon } from "@/components/icons";
 import type { SessionUser } from "@/features/auth/types";
 import { browserBasePath } from "@/lib/app-paths";
 import { LogoutButton } from "./logout-button";
 import styles from "./app-shell.module.css";
+
+function AlertIcon(props: SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" /></svg>;
+}
 
 function SecurityIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -46,6 +50,10 @@ function hierarchicalBackLink(pathname: string): { href: string; label: string }
   const normalized = pathname.length > 1 ? pathname.replace(/\/$/, "") : pathname;
   const segments = normalized.split("/").filter(Boolean);
 
+  if (segments[0] === "price-alerts") {
+    if (segments.length === 3 && segments[2] === "edit") return { href: `/price-alerts/${segments[1]}`, label: "返回提醒详情" };
+    if (segments.length === 2) return { href: "/price-alerts", label: "返回股价提醒" };
+  }
   if (segments[0] !== "grids") return null;
   if (segments.length === 3 && segments[2] === "edit") {
     return { href: `/grids/${segments[1]}`, label: "返回产品详情" };
@@ -60,6 +68,10 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
   const pathname = appPathname(usePathname());
   const gridsCurrent = pathname === "/grids" || pathname.startsWith("/grids/");
   const backLink = hierarchicalBackLink(pathname);
+  const navigationRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    navigationRef.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [pathname]);
 
   return (
     <div className={styles.shell}>
@@ -79,13 +91,16 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
         <span className={styles.role}>{user.role === "admin" ? "管理员" : "普通用户"}</span>
         <LogoutButton />
       </header>
-      <nav aria-label="主导航" className={styles.rail}>
+      <nav ref={navigationRef} aria-label="主导航" className={styles.rail}>
         <div className={styles.logo} aria-label="FitGrid">
           FG
         </div>
         <Link href="/grids" aria-current={gridsCurrent ? "page" : undefined}>
           <GridIcon />
           <span>网格产品</span>
+        </Link>
+        <Link href="/price-alerts" aria-current={pathname === "/price-alerts" || pathname.startsWith("/price-alerts/") ? "page" : undefined}>
+          <AlertIcon /><span>股价提醒</span>
         </Link>
         {user.role === "admin" ? (
           <>
@@ -99,6 +114,9 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
             </Link>
           </>
         ) : null}
+        <Link href="/settings/notifications" aria-current={pathname === "/settings/notifications" ? "page" : undefined}>
+          <AlertIcon /><span>通知设置</span>
+        </Link>
         <Link href="/settings/security" aria-current={pathname === "/settings/security" ? "page" : undefined}>
           <SecurityIcon />
           <span>安全设置</span>

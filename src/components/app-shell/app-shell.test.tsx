@@ -90,17 +90,19 @@ describe("AppShell", () => {
     );
     expect(
       screen.getByRole("navigation", { name: "主导航" }).querySelectorAll("a"),
-    ).toHaveLength(4);
+    ).toHaveLength(6);
     expect(
       Array.from(screen.getByRole("navigation", { name: "主导航" }).querySelectorAll("a"))
         .map((link) => link.textContent),
-    ).toEqual(["网格产品", "账号管理", "数据管理", "安全设置"]);
+    ).toEqual(["网格产品", "股价提醒", "账号管理", "数据管理", "通知设置", "安全设置"]);
   });
 
   it.each([
     ["/grids", "网格产品"],
     ["/grids/grid-1/edit", "网格产品"],
     ["/settings/security", "安全设置"],
+    ["/price-alerts/demo/edit", "股价提醒"],
+    ["/settings/notifications", "通知设置"],
     ["/admin", "账号管理"],
     ["/admin/data", "数据管理"],
   ])("marks only the matching navigation link current at %s", (pathname, currentLabel) => {
@@ -154,6 +156,8 @@ describe("AppShell", () => {
   });
 
   it.each([
+    ["/price-alerts/rule-1", "返回股价提醒", "/price-alerts"],
+    ["/price-alerts/rule-1/edit", "返回提醒详情", "/price-alerts/rule-1"],
     ["/grids/grid-1", "返回网格产品", "/grids"],
     ["/grids/new", "返回网格产品", "/grids"],
     ["/grids/import", "返回网格产品", "/grids"],
@@ -184,4 +188,15 @@ describe("AppShell", () => {
       expect(screen.queryByRole("link", { name: /^返回/ })).not.toBeInTheDocument();
     },
   );
+});
+it("keeps the active destination visible in the mobile navigation strip", () => {
+  const scrollIntoView = vi.fn();
+  const original = HTMLElement.prototype.scrollIntoView;
+  HTMLElement.prototype.scrollIntoView = scrollIntoView;
+  try {
+    usePathname.mockReturnValue("/settings/notifications");
+    render(<AppShell user={{ id: "u1", username: "member", role: "member", status: "active" }}><h1>通知设置</h1></AppShell>);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+    expect(scrollIntoView.mock.instances[0]).toBe(screen.getByRole("link", { current: "page" }));
+  } finally { HTMLElement.prototype.scrollIntoView = original; }
 });

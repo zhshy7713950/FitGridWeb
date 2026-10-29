@@ -100,9 +100,9 @@ case "$checksum_line" in cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb03
 }
 
 function run(command: string, files: Awaited<ReturnType<typeof fixture>>, env: Record<string, string> = {}) {
-  return spawnSync("sh", ["-c", `. "${library}"; ${command}`], {
+  return spawnSync("sh", ["-c", `. "${path.join(process.cwd(), "ops/lib/price-alerts-timer.sh")}"; . "${library}"; ${command}`], {
     encoding: "utf8",
-    env: { ...process.env, PATH: `${files.bin}:${process.env.PATH}`, COMMAND_LOG: files.log, ...env },
+    env: { ...process.env, PATH: `${files.bin}:${process.env.PATH}`, COMMAND_LOG: files.log, FITGRID_ALERTS_TICK_PATH: path.join(files.root, "alert-tick"), ...env },
   });
 }
 
@@ -296,6 +296,15 @@ describe("maintenance installation", () => {
       .toContain(`PathExistsGlob=${files.web}/inbox/*.json`);
     expect(await readFile(path.join(files.systemd, "fitgridweb-maintenance.path"), "utf8"))
       .toContain(`PathExistsGlob=${files.web}/inbox/*.audit`);
+    const alertTimer = await readFile(path.join(files.systemd, "fitgridweb-price-alerts.timer"), "utf8");
+    expect(alertTimer).toContain("OnCalendar=*-*-* *:*:00,15,30,45");
+    expect(alertTimer).toContain("AccuracySec=1s");
+    expect(alertTimer).toContain("RandomizedDelaySec=0");
+    expect(alertTimer).toContain("Persistent=false");
+    const alertService = await readFile(path.join(files.systemd, "fitgridweb-price-alerts.service"), "utf8");
+    expect(alertService).toContain(`EnvironmentFile=${files.environment}`);
+    expect(alertService).toContain(`ExecStart=${path.join(files.root, "alert-tick")}`);
+    expect(await readFile(path.join(files.root, "alert-tick"), "utf8")).toContain("curl --disable --config -");
     const service = await readFile(maintenanceServiceTemplate, "utf8");
     expect(service).toContain("Requires=docker.service");
     expect(service).toContain("User=root\nGroup=root");

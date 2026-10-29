@@ -1027,6 +1027,81 @@ maintenance_enter_intervention() {
   return 1
 }
 
+# Resume intent belongs only to root state, never the informational web mirror.
+# A separate record leaves the strict v1 maintenance/job marker formats intact.
+maintenance_load_alert_timer_state() {
+  maintenance_alert_timer_file="$ADMIN_OPS_ROOT_DIR/alert-timer-state.json"
+  maintenance_require_root_file "$maintenance_alert_timer_file" 600 || return 1
+  jq -e --arg jobId "$maintenance_job_id" '
+    type == "object" and (keys | sort) == ["active", "jobId", "schemaVersion"] and
+    .schemaVersion == 1 and .jobId == $jobId and (.active | type == "boolean")
+  ' "$maintenance_alert_timer_file" >/dev/null || return 1
+  maintenance_alert_timer_active=$(jq -r '.active' "$maintenance_alert_timer_file")
+}
+
+maintenance_remember_alert_timer() {
+  maintenance_alert_timer_file="$ADMIN_OPS_ROOT_DIR/alert-timer-state.json"
+  if [ -e "$maintenance_alert_timer_file" ] || [ -L "$maintenance_alert_timer_file" ]; then
+    maintenance_load_alert_timer_state
+    return $?
+  fi
+  maintenance_timer_query_status=0
+  price_alerts_timer_active || maintenance_timer_query_status=$?
+  case "$maintenance_timer_query_status" in
+    0) maintenance_alert_timer_active=true ;;
+    1) maintenance_alert_timer_active=false ;;
+    *) return 1 ;;
+  esac
+  maintenance_alert_timer_tmp=$(mktemp "$ADMIN_OPS_ROOT_DIR/.alert-timer-state.XXXXXX") || return 1
+  if ! jq -n --arg jobId "$maintenance_job_id" --argjson active "$maintenance_alert_timer_active" \
+    '{schemaVersion:1,jobId:$jobId,active:$active}' >"$maintenance_alert_timer_tmp" \
+    || ! maintenance_normalize_root_file "$maintenance_alert_timer_tmp" 600 \
+    || ! portable_durable_replace "$maintenance_alert_timer_tmp" "$maintenance_alert_timer_file"; then
+    rm -f "$maintenance_alert_timer_tmp"
+    return 1
+  fi
+  maintenance_load_alert_timer_state
+}
+
+maintenance_complete_alert_timer() {
+  maintenance_alert_timer_file="$ADMIN_OPS_ROOT_DIR/alert-timer-state.json"
+  [ -e "$maintenance_alert_timer_file" ] || [ -L "$maintenance_alert_timer_file" ] || return 0
+  maintenance_alert_timer_code=ALERT_TIMER_STATE_FAILED
+  if maintenance_load_alert_timer_state; then
+    maintenance_timer_resumed=false
+    if [ "$maintenance_alert_timer_active" = false ]; then
+      maintenance_timer_resumed=true
+    else
+      maintenance_alert_timer_code=ALERT_TIMER_START_FAILED
+      if systemctl start fitgridweb-price-alerts.timer && price_alerts_timer_active; then
+        maintenance_timer_resumed=true
+      fi
+    fi
+    if [ "$maintenance_timer_resumed" = true ]; then
+      maintenance_alert_timer_code=ALERT_TIMER_STATE_FAILED
+      if rm -f "$maintenance_alert_timer_file" && portable_sync_filesystem "$ADMIN_OPS_ROOT_DIR"; then
+        return 0
+      fi
+    fi
+  fi
+  # A partially successful systemctl start must not leave an apparently healthy
+  # app with an unknown scheduler state. Fence first, then drain it again.
+  maintenance_write_fence || :
+  stop_price_alerts || :
+  maintenance_enter_intervention "$maintenance_alert_timer_code" || :
+  return 1
+}
+
+maintenance_prepare_alert_timer_recovery() {
+  maintenance_alert_timer_file="$ADMIN_OPS_ROOT_DIR/alert-timer-state.json"
+  [ -e "$maintenance_alert_timer_file" ] || [ -L "$maintenance_alert_timer_file" ] || return 0
+  stop_price_alerts || return 1
+  maintenance_load_alert_timer_state || return 1
+  if [ "$maintenance_alert_timer_active" = true ]; then
+    fitgrid_compose up --no-build -d --wait app && maintenance_verify_health timer-recovery
+  fi
+}
+
 maintenance_finalize_restored_success() {
   if ! maintenance_write_status succeeded; then
     maintenance_enter_intervention STATUS_PUBLISH_FAILED
@@ -1048,6 +1123,7 @@ maintenance_finalize_restored_success() {
     maintenance_enter_intervention FENCE_CLEAR_FAILED
     return 1
   fi
+  maintenance_complete_alert_timer || return 1
 }
 
 maintenance_finalize_successful_rollback() {
@@ -1072,6 +1148,7 @@ maintenance_finalize_successful_rollback() {
     maintenance_enter_intervention FENCE_CLEAR_FAILED
     return 1
   fi
+  maintenance_complete_alert_timer || return 1
 }
 
 maintenance_finalize_snapshot_failure() {
@@ -1095,6 +1172,7 @@ maintenance_finalize_snapshot_failure() {
     maintenance_enter_intervention FENCE_CLEAR_FAILED
     return 1
   fi
+  maintenance_complete_alert_timer || return 1
   return 1
 }
 
@@ -1154,6 +1232,19 @@ maintenance_handle_restore() {
   fi
   MAINTENANCE_RESTORE_SOURCE=upload
   export MAINTENANCE_RESTORE_SOURCE
+  # Legacy installs have no alert units or keys. Current installs must wait for
+  # the in-flight oneshot before taking a snapshot or replacing the database.
+  if [ -n "${PRICE_ALERTS_TASK_SECRET:-}" ]; then
+    if ! maintenance_remember_alert_timer; then
+      stop_price_alerts || :
+      maintenance_enter_intervention ALERT_TIMER_STATE_FAILED || :
+      return 1
+    fi
+    if ! stop_price_alerts; then
+      maintenance_enter_intervention SNAPSHOT_QUIESCE_FAILED || :
+      return 1
+    fi
+  fi
   if ! fitgrid_compose stop app || ! maintenance_terminate_runtime_connections; then
     maintenance_enter_intervention SNAPSHOT_QUIESCE_FAILED || :
     return 1
@@ -1303,6 +1394,12 @@ maintenance_recover_claimed_jobs() {
           && { [ "$maintenance_job_type" != restore ] || [ "$maintenance_recovery_marker_state" -ne 0 ]; }; then
           maintenance_recovery_terminalized=false
         fi
+        if [ "$maintenance_recovery_terminalized" = true ] && [ "$maintenance_job_type" = restore ]; then
+          if ! maintenance_prepare_alert_timer_recovery; then
+            maintenance_enter_intervention ALERT_TIMER_RECOVERY_FAILED || :
+            maintenance_recovery_terminalized=false
+          fi
+        fi
         if [ "$maintenance_recovery_terminalized" = true ]; then
           maintenance_consume_restore_inspection_status || maintenance_recovery_terminalized=false
         fi
@@ -1314,6 +1411,9 @@ maintenance_recover_claimed_jobs() {
         fi
         if [ "$maintenance_recovery_terminalized" = true ] && [ "$maintenance_job_type" = restore ]; then
           maintenance_clear_fence || maintenance_recovery_terminalized=false
+        fi
+        if [ "$maintenance_recovery_terminalized" = true ] && [ "$maintenance_job_type" = restore ]; then
+          maintenance_complete_alert_timer || maintenance_recovery_terminalized=false
         fi
         if [ "$maintenance_recovery_terminalized" != true ]; then
           maintenance_preserve_recovery=true
