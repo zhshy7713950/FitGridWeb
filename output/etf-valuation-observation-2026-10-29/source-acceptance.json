@@ -1,0 +1,419 @@
+[
+  {
+    "key": "399971:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=399971&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:26.197Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "512980.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh512980,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:26.175Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "159920.SZ:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sz159920,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:26.422Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "HSI:pe:legu:monthly:v1:raw",
+    "checkedAt": "2026-10-29T07:40:26.423Z",
+    "status": "failed",
+    "error": "数据源返回HTTP 403"
+  },
+  {
+    "key": "000991:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000991&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:26.566Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "159938.SZ:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sz159938,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:26.565Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "399975:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=399975&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:26.679Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "512880.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh512880,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:26.679Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "513180.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh513180,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:26.807Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "159928.SZ:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sz159928,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:26.808Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "000990:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000990&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:26.967Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "510880.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh510880,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:26.967Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "000015:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000015&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:27.053Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "000015:pb:legu:monthly:v1:raw",
+    "checkedAt": "2026-10-29T07:40:27.053Z",
+    "status": "failed",
+    "error": "数据源返回HTTP 403"
+  },
+  {
+    "key": "930902:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=930902&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:27.098Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "515400.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh515400,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:27.098Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "H30269:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=H30269&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:27.182Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "512890.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh512890,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:27.182Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "931152:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=931152&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:27.333Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "515120.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh515120,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:27.333Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "159399.SZ:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sz159399,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:27.420Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "161130.SZ:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sz161130,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:27.421Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "NDX:pe:legu:monthly:v1:raw",
+    "checkedAt": "2026-10-29T07:40:27.538Z",
+    "status": "failed",
+    "error": "数据源返回HTTP 403"
+  },
+  {
+    "key": "159766.SZ:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sz159766,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:27.538Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "930633:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=930633&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:27.644Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "513650.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh513650,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:27.644Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "SP500:pe:legu:monthly:v1:raw",
+    "checkedAt": "2026-10-29T07:40:27.753Z",
+    "status": "failed",
+    "error": "数据源返回HTTP 403"
+  },
+  {
+    "key": "508000.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508000,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:27.753Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "508056.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508056,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:27.858Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "159209.SZ:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sz159209,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:27.858Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "932315:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=932315&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:27.967Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "VOO.US:price:yahoo:daily:v1:raw",
+    "checkedAt": "2026-10-29T07:40:27.968Z",
+    "status": "failed",
+    "error": "The operation was aborted due to timeout"
+  },
+  {
+    "key": "931052:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=931052&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:32.972Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "512040.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh512040,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:32.969Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "930782:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=930782&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:33.108Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "512260.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh512260,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:33.107Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "931521:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=931521&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:33.215Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "159638.SZ:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sz159638,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:33.215Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "000698:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000698&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:33.306Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "588680.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh588680,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:33.305Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "000510:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000510&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:33.396Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "159338.SZ:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sz159338,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:33.395Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "510300.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh510300,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:33.500Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "SCHD.US:price:yahoo:daily:v1:raw",
+    "checkedAt": "2026-10-29T07:40:33.499Z",
+    "status": "failed",
+    "error": "The operation was aborted due to timeout"
+  },
+  {
+    "key": "000300:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000300&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:38.500Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "000300:pb:legu:monthly:v1:raw",
+    "checkedAt": "2026-10-29T07:40:38.501Z",
+    "status": "failed",
+    "error": "数据源返回HTTP 403"
+  },
+  {
+    "key": "000905:pe:csi:daily:v1:raw",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000905&startDate=20260901&endDate=20261028",
+    "checkedAt": "2026-10-29T07:40:38.635Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "510500.SH:price:tencent:daily:v1:raw",
+    "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh510500,day,2026-09-01,2026-10-28,640,",
+    "checkedAt": "2026-10-29T07:40:38.634Z",
+    "status": "success",
+    "count": 36,
+    "first": "2026-09-01",
+    "last": "2026-10-28"
+  },
+  {
+    "key": "000905:pb:legu:monthly:v1:raw",
+    "checkedAt": "2026-10-29T07:40:38.746Z",
+    "status": "failed",
+    "error": "数据源返回HTTP 403"
+  }
+]

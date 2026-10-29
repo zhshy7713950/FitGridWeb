@@ -411,7 +411,9 @@ export const ModelName = {
   PriceAlert: 'PriceAlert',
   PriceAlertChannel: 'PriceAlertChannel',
   PriceAlertEvent: 'PriceAlertEvent',
-  PriceAlertOutbox: 'PriceAlertOutbox'
+  PriceAlertOutbox: 'PriceAlertOutbox',
+  ResearchSeries: 'ResearchSeries',
+  ResearchObservation: 'ResearchObservation'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -427,7 +429,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "session" | "account" | "verification" | "invitation" | "gridTrade" | "importPreview" | "marketInstrument" | "marketMinute" | "marketDailyBasis" | "marketScan" | "priceAlert" | "priceAlertChannel" | "priceAlertEvent" | "priceAlertOutbox"
+    modelProps: "user" | "session" | "account" | "verification" | "invitation" | "gridTrade" | "importPreview" | "marketInstrument" | "marketMinute" | "marketDailyBasis" | "marketScan" | "priceAlert" | "priceAlertChannel" | "priceAlertEvent" | "priceAlertOutbox" | "researchSeries" | "researchObservation"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1541,6 +1543,154 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    ResearchSeries: {
+      payload: Prisma.$ResearchSeriesPayload<ExtArgs>
+      fields: Prisma.ResearchSeriesFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.ResearchSeriesFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchSeriesPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.ResearchSeriesFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchSeriesPayload>
+        }
+        findFirst: {
+          args: Prisma.ResearchSeriesFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchSeriesPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.ResearchSeriesFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchSeriesPayload>
+        }
+        findMany: {
+          args: Prisma.ResearchSeriesFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchSeriesPayload>[]
+        }
+        create: {
+          args: Prisma.ResearchSeriesCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchSeriesPayload>
+        }
+        createMany: {
+          args: Prisma.ResearchSeriesCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.ResearchSeriesCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchSeriesPayload>[]
+        }
+        delete: {
+          args: Prisma.ResearchSeriesDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchSeriesPayload>
+        }
+        update: {
+          args: Prisma.ResearchSeriesUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchSeriesPayload>
+        }
+        deleteMany: {
+          args: Prisma.ResearchSeriesDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.ResearchSeriesUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.ResearchSeriesUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchSeriesPayload>[]
+        }
+        upsert: {
+          args: Prisma.ResearchSeriesUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchSeriesPayload>
+        }
+        aggregate: {
+          args: Prisma.ResearchSeriesAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateResearchSeries>
+        }
+        groupBy: {
+          args: Prisma.ResearchSeriesGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ResearchSeriesGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.ResearchSeriesCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ResearchSeriesCountAggregateOutputType> | number
+        }
+      }
+    }
+    ResearchObservation: {
+      payload: Prisma.$ResearchObservationPayload<ExtArgs>
+      fields: Prisma.ResearchObservationFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.ResearchObservationFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchObservationPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.ResearchObservationFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchObservationPayload>
+        }
+        findFirst: {
+          args: Prisma.ResearchObservationFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchObservationPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.ResearchObservationFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchObservationPayload>
+        }
+        findMany: {
+          args: Prisma.ResearchObservationFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchObservationPayload>[]
+        }
+        create: {
+          args: Prisma.ResearchObservationCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchObservationPayload>
+        }
+        createMany: {
+          args: Prisma.ResearchObservationCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.ResearchObservationCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchObservationPayload>[]
+        }
+        delete: {
+          args: Prisma.ResearchObservationDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchObservationPayload>
+        }
+        update: {
+          args: Prisma.ResearchObservationUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchObservationPayload>
+        }
+        deleteMany: {
+          args: Prisma.ResearchObservationDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.ResearchObservationUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.ResearchObservationUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchObservationPayload>[]
+        }
+        upsert: {
+          args: Prisma.ResearchObservationUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ResearchObservationPayload>
+        }
+        aggregate: {
+          args: Prisma.ResearchObservationAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateResearchObservation>
+        }
+        groupBy: {
+          args: Prisma.ResearchObservationGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ResearchObservationGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.ResearchObservationCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ResearchObservationCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -1821,6 +1971,39 @@ export const PriceAlertOutboxScalarFieldEnum = {
 } as const
 
 export type PriceAlertOutboxScalarFieldEnum = (typeof PriceAlertOutboxScalarFieldEnum)[keyof typeof PriceAlertOutboxScalarFieldEnum]
+
+
+export const ResearchSeriesScalarFieldEnum = {
+  key: 'key',
+  definition: 'definition',
+  cursor: 'cursor',
+  complete: 'complete',
+  checkedAt: 'checkedAt',
+  lastAttemptAt: 'lastAttemptAt',
+  retryAt: 'retryAt',
+  leaseToken: 'leaseToken',
+  leaseUntil: 'leaseUntil',
+  failures: 'failures',
+  error: 'error',
+  createdAt: 'createdAt'
+} as const
+
+export type ResearchSeriesScalarFieldEnum = (typeof ResearchSeriesScalarFieldEnum)[keyof typeof ResearchSeriesScalarFieldEnum]
+
+
+export const ResearchObservationScalarFieldEnum = {
+  seriesKey: 'seriesKey',
+  date: 'date',
+  revision: 'revision',
+  value: 'value',
+  quality: 'quality',
+  contentHash: 'contentHash',
+  raw: 'raw',
+  firstSeenAt: 'firstSeenAt',
+  sourcePublishedAt: 'sourcePublishedAt'
+} as const
+
+export type ResearchObservationScalarFieldEnum = (typeof ResearchObservationScalarFieldEnum)[keyof typeof ResearchObservationScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -2175,6 +2358,8 @@ export type GlobalOmitConfig = {
   priceAlertChannel?: Prisma.PriceAlertChannelOmit
   priceAlertEvent?: Prisma.PriceAlertEventOmit
   priceAlertOutbox?: Prisma.PriceAlertOutboxOmit
+  researchSeries?: Prisma.ResearchSeriesOmit
+  researchObservation?: Prisma.ResearchObservationOmit
 }
 
 /* Types for Logging */

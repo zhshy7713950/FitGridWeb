@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createPrismaClient } from "@/server/db/client";
+import { createIsolatedTestDatabase } from "@/test/isolated-database";
 import { AlertRepository } from "./repository";
 import { AlertScheduler } from "./scheduler";
 import { encryptKey } from "./bark";
@@ -8,7 +8,7 @@ import type { BarkPayload } from "./bark";
 import type { SourceResult } from "./types";
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)("durable collection and outbox", () => {
-  const prisma = createPrismaClient(process.env.TEST_DATABASE_URL!);
+  const { db: prisma, setup, cleanup } = createIsolatedTestDatabase();
   const owner = randomUUID();
   let now = Date.parse("2026-10-27T01:29:00Z");
   const repo = new AlertRepository(prisma, () => now);
@@ -25,6 +25,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("durable collection and outbox",
     send: async (_key, payload) => { notifications.push(payload); return permanentFailure ? { accepted: false, permanent: true, error: "Bark 拒绝请求" } : { accepted: true, permanent: false, error: null }; },
   });
   beforeAll(async () => {
+    await setup();
     await prisma.user.create({ data: { id: owner, name: "Scheduler", username: owner, email: `${owner}@test.invalid` } });
     instrumentId = (await repo.saveInstrument({ code: `T${owner.slice(0, 8)}.SH`, name: "Fixture", market: "cn", currency: "CNY", kind: "stock", tencent: "sh600519", eastmoney: "1.600519", yahoo: null })).id;
     await repo.saveChannel(owner, encryptKey("test-device-key", secret));
@@ -35,7 +36,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("durable collection and outbox",
     if (instrumentId) await prisma.marketInstrument.delete({ where: { id: instrumentId } });
     await prisma.user.delete({ where: { id: owner } });
     await prisma.marketScan.deleteMany({ where: { id: { startsWith: "cn:2026-10-27" } } });
-    await prisma.$disconnect();
+    await cleanup();
   });
   it("deduplicates product requests, records each trigger and sends only one message per rule", async () => {
     await repo.create(owner, { instrumentId, condition: { kind: "price", direction: "up", targetPrice: "100" }, enabled: true });

@@ -1,3 +1,5 @@
+import {ValuationService} from "@/server/valuation/service";
+import {ValuationRepository} from "@/server/valuation/repository";
 import { AdminService, PrismaAdminRepository } from "@/server/admin/admin-service";
 import { getAuth } from "@/server/auth/auth";
 import { getPrismaClient } from "@/server/db/client";
@@ -72,10 +74,12 @@ export function getRuntimeServices() {
     throw new Error("OWNER_REF_SECRET must contain at least 32 characters");
   }
   const maintenance = new FileMaintenanceGateway(maintenanceConfiguration);
+  const grid = new GridService(scope);
   return {
     prisma,
     auth: getAuth(),
-    grid: new GridService(scope),
+    grid,
+    valuation: new ValuationService({grid,store:new ValuationRepository(prisma),beforeRequest:async()=>assertMaintenanceAvailable(await maintenance.getMaintenanceMode())}),
     invitations: new InvitationService(new PrismaInvitationRepository(prisma)),
     admin: new AdminService(new PrismaAdminRepository(prisma), cursorSecret),
     imports: new ImportService(new PrismaImportRepository(prisma)),

@@ -1,0 +1,74 @@
+[
+  {
+    "seriesKey": "000015:pe:csi:daily:v1:raw",
+    "sourceFile": "csi-perf-000015.json.gz",
+    "sha256": "9c0f73c43d62bd371ba47eb62664f1c86808579e0252cf030989ec5a7ec62971",
+    "capturedAt": "2026-10-28",
+    "cutoff": "2026-10-27",
+    "count": 2427
+  },
+  {
+    "seriesKey": "000300:pe:csi:daily:v1:raw",
+    "sourceFile": "csi-perf-000300.json.gz",
+    "sha256": "5206e9ba236e3e8df8e9f1479f8935466ae799a7bb51855c1e7b0cf1217f7baf",
+    "capturedAt": "2026-10-28",
+    "cutoff": "2026-10-27",
+    "count": 2427
+  },
+  {
+    "seriesKey": "000905:pe:csi:daily:v1:raw",
+    "sourceFile": "csi-perf-000905.json.gz",
+    "sha256": "ad256a03774d536adc70dee55f05cb04dbd4ed05c2b4e53d70eb532c9e689f2b",
+    "capturedAt": "2026-10-28",
+    "cutoff": "2026-10-27",
+    "count": 2427
+  },
+  {
+    "seriesKey": "000015:pb:legu:monthly:v1:raw",
+    "sourceFile": "legu-month-000015-pb.json.gz",
+    "sha256": "d46c4b175dbac72f29e70afae2761417b92edd35b136aeea9186602b9908d51f",
+    "capturedAt": "2026-10-28",
+    "cutoff": "2026-10-27",
+    "count": 261
+  },
+  {
+    "seriesKey": "000300:pb:legu:monthly:v1:raw",
+    "sourceFile": "legu-month-000300-pb.json.gz",
+    "sha256": "303d0a66c3a5ca3022a22ab07611c24ba6ff75aecd152621c32aea30a35c5c3b",
+    "capturedAt": "2026-10-28",
+    "cutoff": "2026-10-27",
+    "count": 258
+  },
+  {
+    "seriesKey": "000905:pb:legu:monthly:v1:raw",
+    "sourceFile": "legu-month-000905-pb.json.gz",
+    "sha256": "5ceb55c0d3c777429419ec6b945944c546aae2acf56542919e7afa34fbbd6bd5",
+    "capturedAt": "2026-10-28",
+    "cutoff": "2026-10-27",
+    "count": 237
+  },
+  {
+    "seriesKey": "HSI:pe:legu:monthly:v1:raw",
+    "sourceFile": "legu-hsi.json.gz",
+    "sha256": "73c05c30453e14e3882fb8a66b2436b62e0ec77fce9184082ad1098d7ea6bd6f",
+    "capturedAt": "2026-10-28",
+    "cutoff": "2026-10-27",
+    "count": 641
+  },
+  {
+    "seriesKey": "SP500:pe:legu:monthly:v1:raw",
+    "sourceFile": "legu-sp500-history.raw",
+    "sha256": "48ee7976fce1691cc1b89119205335577470d03bebad7b8430d2341f750c6198",
+    "capturedAt": "2026-10-28",
+    "cutoff": "2026-10-27",
+    "count": 382
+  },
+  {
+    "seriesKey": "NDX:pe:legu:monthly:v1:raw",
+    "sourceFile": "legu-ndx-history.raw",
+    "sha256": "c12124a863fd40bdc5328772225ccfac0662bbc8b23de2d16faa7c0fbcee0351",
+    "capturedAt": "2026-10-28",
+    "cutoff": "2026-10-27",
+    "count": 438
+  }
+]

@@ -999,6 +999,70 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
           description: 维护中，或 NOTIFICATION_NOT_CONFIGURED、CHANNEL_UNREADABLE、BARK_REJECTED
 
+  /grid-trades/{id}/valuation:
+    get:
+      tags:
+        - GridTrades
+      operationId: getGridValuation
+      summary: 读取当前账号产品的本地估值历史，不请求上游
+      parameters: &a1
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200": &a2
+          description: 已保存的数据；卡片可独立为空、过期或更新失败。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValuationPageData"
+        "401": &a3
+          $ref: "#/components/responses/Unauthorized"
+        "404": &a4
+          $ref: "#/components/responses/NotFound"
+        "422": &a5
+          $ref: "#/components/responses/ValidationError"
+        "500": &a6
+          $ref: "#/components/responses/InternalError"
+  /grid-trades/{id}/valuation/refresh:
+    post:
+      tags:
+        - GridTrades
+      operationId: refreshGridValuation
+      summary: 按需或手动执行一个有界历史采集批次
+      parameters: *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - mode
+              properties:
+                mode:
+                  enum:
+                    - due
+                    - manual
+      responses:
+        "200": *a2
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401": *a3
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a4
+        "422": *a5
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500": *a6
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -1948,3 +2012,186 @@ components:
         algorithmVersion: {$ref: '#/components/schemas/AlgorithmVersion'}
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}
+    ResearchObservation:
+      type: object
+      additionalProperties: false
+      required:
+        - date
+        - value
+        - quality
+      properties:
+        date:
+          type: string
+          format: date
+        value: &a1
+          type:
+            - string
+            - "null"
+        quality:
+          enum:
+            - valid
+            - non_positive
+            - missing
+            - gap
+    ValuationSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - min
+        - max
+        - p30
+        - p70
+        - currentValue
+        - currentPercentile
+        - latestDate
+        - latestValidDate
+        - validCount
+        - referenceCount
+        - start
+        - end
+      properties:
+        min: *a1
+        max: *a1
+        p30: *a1
+        p70: *a1
+        currentValue: *a1
+        currentPercentile: *a1
+        latestDate: *a1
+        latestValidDate: *a1
+        start: *a1
+        end: *a1
+        validCount: &a2
+          type: integer
+          minimum: 0
+        referenceCount: *a2
+    ValuationMetricCard:
+      type: object
+      additionalProperties: false
+      required:
+        - availability
+        - stale
+        - refreshing
+        - due
+        - source
+        - method
+        - frequency
+        - asOf
+        - checkedAt
+        - coverage
+        - message
+        - points
+        - stats
+      properties:
+        availability:
+          enum:
+            - ready
+            - empty
+            - unsupported
+            - not_applicable
+            - error
+        stale:
+          type: boolean
+        refreshing:
+          type: boolean
+        due:
+          type: boolean
+        source: *a1
+        method: *a1
+        frequency:
+          enum:
+            - daily
+            - monthly
+            - null
+        asOf: *a1
+        checkedAt: *a1
+        coverage:
+          enum:
+            - none
+            - partial
+            - source_history
+        message: *a1
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResearchObservation"
+        stats:
+          $ref: "#/components/schemas/ValuationSummary"
+        prices:
+          type: array
+          items:
+            type: object
+            required:
+              - date
+              - close
+              - ma250
+              - ma500
+            properties:
+              date:
+                type: string
+                format: date
+              close: *a1
+              ma250: *a1
+              ma500: *a1
+    ValuationPageData:
+      type: object
+      additionalProperties: false
+      required:
+        - product
+        - benchmark
+        - note
+        - price
+        - pe
+        - pb
+        - refresh
+      properties:
+        product:
+          type: object
+          required:
+            - id
+            - code
+            - name
+            - currency
+          properties:
+            id:
+              type: string
+              format: uuid
+            code:
+              type: string
+            name:
+              type: string
+            currency: *a1
+        benchmark:
+          type:
+            - object
+            - "null"
+          required:
+            - id
+            - name
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+        note: *a1
+        price:
+          $ref: "#/components/schemas/ValuationMetricCard"
+        pe:
+          $ref: "#/components/schemas/ValuationMetricCard"
+        pb:
+          $ref: "#/components/schemas/ValuationMetricCard"
+        refresh:
+          type: object
+          required:
+            - busy
+            - hasMore
+            - retryAfter
+          properties:
+            busy:
+              type: boolean
+            hasMore:
+              type: boolean
+            retryAfter:
+              type:
+                - integer
+                - "null"
+              minimum: 0

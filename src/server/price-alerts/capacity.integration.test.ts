@@ -3,20 +3,21 @@ import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createPrismaClient } from "@/server/db/client";
+import { createIsolatedTestDatabase } from "@/test/isolated-database";
 import { encryptKey } from "./bark";
 import { AlertRepository } from "./repository";
 import { AlertScheduler } from "./scheduler";
 import type { SourceResult } from "./types";
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)("native capacity acceptance (synthetic feeds, real PostgreSQL)", () => {
-  const prisma = createPrismaClient(process.env.TEST_DATABASE_URL!);
+  const { db: prisma, setup, cleanup } = createIsolatedTestDatabase();
   const owner = randomUUID(); const secret = "ab".repeat(32);
   let now = Date.parse("2026-10-28T01:29:00Z");
   const repo = new AlertRepository(prisma, () => now);
   const instrumentIds: string[] = [];
   let requests = 0; let active = 0; let peak = 0; const notifications = new Set<string>();
   beforeAll(async () => {
+    await setup();
     await prisma.user.create({ data: { id: owner, name: "Load fixture", username: owner, email: `${owner}@test.invalid` } });
     await repo.saveChannel(owner, encryptKey("load-device-fixture", secret)); await repo.markChannelTested(owner, 1);
     for (let n = 0; n < 50; n++) instrumentIds.push((await repo.saveInstrument({ code: `L${owner.slice(0, 8)}-${n}.SH`, name: `Fixture ${n}`, market: "cn", currency: "CNY", kind: "stock", tencent: "sh600519", yahoo: null, eastmoney: "1.600519" })).id);
@@ -27,7 +28,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("native capacity acceptance (syn
     await prisma.marketInstrument.deleteMany({ where: { id: { in: instrumentIds } } });
     await prisma.user.delete({ where: { id: owner } });
     await prisma.marketScan.deleteMany({ where: { id: { startsWith: "cn:2026-10-28" } } });
-    await prisma.$disconnect();
+    await cleanup();
   });
   it("shares fifty source requests across 250 rules and drains bounded delivery batches without duplicates", async () => {
     const scheduler = new AlertScheduler(repo, { baseUrl: "https://test.invalid/fitgrid", encryptionKey: secret, beforeRequest: async () => {},

@@ -8,6 +8,16 @@ Android 源仓库仅作为只读行为参考，不属于本仓库，也不得把
 
 股价预警支持沪深及美股股票、场内 ETF，提供指定价格、动态日均线和均线百分比条件，使用 Bark 通知。操作与升级见[股价预警部署与恢复](docs/price-alerts.md)，主备行情检查见[行情诊断](docs/price-alerts-diagnostics.md)，本地证据与待完成的 VPS 验收见[验证记录](docs/price-alerts-verification.md)。
 
+## ETF 估值观察
+
+产品详情的“查看估值”进入 `/grids/{id}/valuation`，分别展示基金不复权收盘价（含250/500日简单均线）、对应指数PE/PB历史及最低/最高、P30/P70和当前分位。分位基于全部已保存的有效历史，当前分位只与此前样本比较；无效最新估值不会用旧正值代替。分红、拆分会使不复权价格跳变，本页均线与股价预警的复权口径不同。
+
+价格使用腾讯或Yahoo，指数PE使用中证或乐咕乐股，已核验的部分指数PB使用乐咕乐股月频数据。目录覆盖24个研究产品及沪深300/中证500两项对照；未匹配代码、未支持指标及REIT估值均明确留空。不同来源日期与频率不一致，免费来源可能限流或拒绝访问；首次刷新可载入经过摘要校验的研究归档，并展示真实数据日期和未在线更新状态，不能据此认定来源当前可用。
+
+页面先读本地PostgreSQL，GET不访问上游；价格在新的完整交易日后按需检查，估值在成功检查满七天后按需检查，也可手动刷新。回补按批次续传，同指数的估值缓存共用；失败时保留旧数据并退避重试。历史保存在独立的 `research_series` / `research_observations` 表中，不参与预警三日清理，修订值按版本追加。升级前执行现有Prisma迁移；标准整库备份包含这些表，产品JSON导出和便携迁移不包含估值研究历史。
+
+[估值功能验收记录](output/etf-valuation-observation-2026-10-29/acceptance.md)区分真实源验证与演示截图。页面演示可通过 `pnpm dev:ui` 查看 `/grids/demo-grid-05/valuation`。浏览器专项测试使用 `FITGRID_VALUATION_E2E_URL=http://127.0.0.1:3000 pnpm exec vitest run src/e2e/valuation.smoke.test.ts`；数据库测试需配置隔离的 `TEST_DATABASE_URL`。
+
 ## 本地前端调试
 
 只检查登录页、应用框架、响应式布局、搜索和分页时，不需要 PostgreSQL、Docker 或生产镜像：

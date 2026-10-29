@@ -592,9 +592,11 @@ describe.sequential("database-free UI demo", () => {
     expect(await detailMenu.locator("button, a").allTextContents()).toEqual([
       "重新计算",
       "编辑产品",
+      "查看估值",
       "创建股价提醒",
       "删除产品",
     ]);
+    expect(await detailMenu.getByRole("link", { name: "查看估值" }).getAttribute("href")).toBe(`${appBasePath}/grids/demo-grid-01/valuation`);
     const alertHref = await detailMenu.getByRole("link", { name: "创建股价提醒" }).getAttribute("href");
     const alertUrl = new URL(alertHref!, baseUrl);
     expect(alertUrl.pathname).toBe(`${appBasePath}/price-alerts/new`);

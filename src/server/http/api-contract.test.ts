@@ -1,3 +1,5 @@
+import * as valuation from "@/app/api/v1/grid-trades/[id]/valuation/route";
+import * as valuationRefresh from "@/app/api/v1/grid-trades/[id]/valuation/refresh/route";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -46,6 +48,8 @@ import * as notificationTest from "@/app/api/v1/settings/notifications/test/rout
 type RouteModule = Record<string, unknown>;
 
 const routes: Record<string, RouteModule> = {
+  "/grid-trades/{id}/valuation": valuation,
+  "/grid-trades/{id}/valuation/refresh": valuationRefresh,
   "/health": health,
   "/price-alerts": priceAlerts,
   "/price-alerts/{id}": priceAlert,

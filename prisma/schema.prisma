@@ -294,3 +294,35 @@ model PriceAlertOutbox {
   @@index([ownerId, status, nextAttemptAt])
   @@map("price_alert_outbox")
 }
+
+model ResearchSeries {
+  key String @id @db.VarChar(160)
+  definition Json
+  cursor String? @db.VarChar(10)
+  complete Boolean @default(false)
+  checkedAt DateTime? @map("checked_at")
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  retryAt DateTime? @map("retry_at")
+  leaseToken String? @map("lease_token") @db.Uuid
+  leaseUntil DateTime? @map("lease_until")
+  failures Int @default(0)
+  error String? @db.VarChar(240)
+  createdAt DateTime @default(now()) @map("created_at")
+  observations ResearchObservation[]
+  @@map("research_series")
+}
+
+model ResearchObservation {
+  seriesKey String @map("series_key") @db.VarChar(160)
+  date String @db.VarChar(10)
+  revision Int
+  value Decimal? @db.Decimal(30,10)
+  quality String @db.VarChar(16)
+  contentHash String @map("content_hash") @db.Char(64)
+  raw Json
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  sourcePublishedAt DateTime? @map("source_published_at")
+  series ResearchSeries @relation(fields:[seriesKey], references:[key], onDelete:Restrict)
+  @@id([seriesKey,date,revision])
+  @@map("research_observations")
+}
