@@ -65,7 +65,9 @@ export const ModelName = {
   PriceAlert: 'PriceAlert',
   PriceAlertChannel: 'PriceAlertChannel',
   PriceAlertEvent: 'PriceAlertEvent',
-  PriceAlertOutbox: 'PriceAlertOutbox'
+  PriceAlertOutbox: 'PriceAlertOutbox',
+  ResearchSeries: 'ResearchSeries',
+  ResearchObservation: 'ResearchObservation'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -325,6 +327,39 @@ export const PriceAlertOutboxScalarFieldEnum = {
 } as const
 
 export type PriceAlertOutboxScalarFieldEnum = (typeof PriceAlertOutboxScalarFieldEnum)[keyof typeof PriceAlertOutboxScalarFieldEnum]
+
+
+export const ResearchSeriesScalarFieldEnum = {
+  key: 'key',
+  definition: 'definition',
+  cursor: 'cursor',
+  complete: 'complete',
+  checkedAt: 'checkedAt',
+  lastAttemptAt: 'lastAttemptAt',
+  retryAt: 'retryAt',
+  leaseToken: 'leaseToken',
+  leaseUntil: 'leaseUntil',
+  failures: 'failures',
+  error: 'error',
+  createdAt: 'createdAt'
+} as const
+
+export type ResearchSeriesScalarFieldEnum = (typeof ResearchSeriesScalarFieldEnum)[keyof typeof ResearchSeriesScalarFieldEnum]
+
+
+export const ResearchObservationScalarFieldEnum = {
+  seriesKey: 'seriesKey',
+  date: 'date',
+  revision: 'revision',
+  value: 'value',
+  quality: 'quality',
+  contentHash: 'contentHash',
+  raw: 'raw',
+  firstSeenAt: 'firstSeenAt',
+  sourcePublishedAt: 'sourcePublishedAt'
+} as const
+
+export type ResearchObservationScalarFieldEnum = (typeof ResearchObservationScalarFieldEnum)[keyof typeof ResearchObservationScalarFieldEnum]
 
 
 export const SortOrder = {
