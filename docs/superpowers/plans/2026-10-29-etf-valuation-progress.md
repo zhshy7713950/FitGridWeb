@@ -16,7 +16,7 @@ Branch: codex/etf-valuation; isolated managed worktree.
 - Task 3: complete — 3 real PostgreSQL integration tests; migration + generated client verified.
 - Task 4: complete — 8 cache/cadence/resume/failure tests, archived dates preserved.
 - Task 5: complete — authenticated routes, private headers, strict inputs, basePath client, OpenAPI route coverage.
-- Task 6: pending
+- Task 6: complete — three charts, desktop/mobile entry, 120-second busy bound, sequential backfill, touch/keyboard inspection, direct route and login return tests; four fixture screenshots visually checked.
 - Task 7: pending
 
 Ruling: bootstrap verified archived values once on first refresh of an empty series, never in GET or at every startup — preserves usable free histories when upstream is currently 403 — captures remain explicitly dated, never claimed live.
@@ -25,3 +25,12 @@ Ruling: invoke installed JS CLIs directly because pnpm11 attempts to purge symli
 
 Ruling: process at most four source batches per refresh because a global monthly source can use two HTTP requests; remains below the plan eight-request ceiling.
 Ruling: pnpm_config_verify_deps_before_run=false permits standard pnpm checks with the shared dependency tree, without modifying project config.
+
+## Resumed implementation (2026-10-29)
+- Resumed the existing branch/worktree after the previous conversation failed; tasks 1–5 were retained.
+- UI regressions observed RED→GREEN: busy state disables refresh and expires at 120 seconds; touch press selects a dated point. Additional sequential manual/due backfill and no automatic retry-on-error tests passed.
+- PostgreSQL: repository + retention integration suites 5/5 passed on an isolated local PostgreSQL instance, including actual AlertScheduler cleanup and shared S&P500 cache with offline preservation.
+- Live service: 510880 price/PE and 513650 price fully backfilled; VOO price unavailable, global PE and 510880 PB fell back to dated archives. Warm reads/due refresh issued zero upstream calls; offline refresh preserved every point.
+- Whole-database pg_dump/pg_restore passed: 2000-12-29 observations, two revisions, latest value 12 and cursor 1999-12-31 survived restoration into a fresh temporary database.
+- Ruling: replace the previous shared node_modules symlink with a frozen-lockfile offline installation inside this worktree — Turbopack rejects links outside its filesystem root; package versions and configuration are unchanged.
+- Scope review is local; no reviewer subagent was dispatched because the user did not authorize delegation.

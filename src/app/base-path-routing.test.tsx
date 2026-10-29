@@ -31,6 +31,7 @@ import AdminDataPage from "./(protected)/admin/data/page";
 import InvitePage from "./invite/[token]/page";
 import LoginPage from "./login/page";
 import HomePage from "./page";
+import GridValuationPage from "./(protected)/grids/[id]/valuation/page";
 
 const user = {
   id: "user-1",
@@ -47,6 +48,11 @@ describe("server redirects with a configured Next.js base path", () => {
     getOptionalSession.mockReset();
     process.env.NEXT_PUBLIC_APP_BASE_PATH = "/fitgrid";
     delete process.env.NEXT_PUBLIC_UI_DEMO_MODE;
+  });
+
+  it("awaits the valuation route params without adding a duplicate base path", async () => {
+    const result = await GridValuationPage({ params: Promise.resolve({ id: "grid-valuation" }) });
+    expect(result.props.id).toBe("grid-valuation");
   });
 
   it("lets Next.js prefix the anonymous home redirect exactly once", async () => {

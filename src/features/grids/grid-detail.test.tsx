@@ -147,6 +147,7 @@ describe("GridDetailView", () => {
     expect(Array.from(menu.querySelectorAll("button, a")).map((item) => item.textContent)).toEqual([
       "重新计算",
       "编辑产品",
+      "查看估值",
       "创建股价提醒",
       "删除产品",
     ]);
@@ -154,6 +155,7 @@ describe("GridDetailView", () => {
       "href",
       `/grids/${detail.id}/edit`,
     );
+    expect(within(menu).getByRole("link", { name: "查看估值" })).toHaveAttribute("href", `/grids/${detail.id}/valuation`);
     expect(within(menu).getByRole("button", { name: "删除产品" })).toHaveAttribute(
       "data-danger",
       "true",

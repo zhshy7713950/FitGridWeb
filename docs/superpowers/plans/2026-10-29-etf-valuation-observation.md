@@ -55,13 +55,13 @@
 - `SeriesBatch`: observations、下一cursor、是否到源历史边界、实际频率/方法、warnings。每条含date、value/null、quality、必要原字段、sourcePublishedAt/null；不接受任意URL。
 - `ValuationProduct`: 完整基金交易身份、benchmark/null、映射适用日期与price/pe/pb的固定系列定义或unsupported/not_applicable原因。系列身份包含source/method/frequency/adjustment。
 
-- [ ] **Step 1: 写失败测试。** 510880→000015、512890→H30269、VOO与513650共享指数key但价格key不同；161130保留LOF身份；24项映射与原证据一致；现行指数变更生效日保留。未知代码、伪造URL或歧义代码返回null。
-- [ ] **Step 2: 运行红测。** `pnpm exec vitest run src/server/valuation/catalog.test.ts src/server/valuation/sources.test.ts`；预期新模块缺失/断言失败。
-- [ ] **Step 3: 实现目录与适配器。** 使用现有标的规范化约定；固定腾讯原始日线、Yahoo quote.close、中证滚动PE、乐咕固定月频序列。复用已有fetch超时设计但加响应体上限，不修改旧预警解析器。
-- [ ] **Step 4: 写并通过解析测试。** 真实fixture必须覆盖腾讯只给qfq而无原始day时拒收、Yahoo原始/调整价格不同、跨美国夏令时的日期、当天未收盘排除、中证休市零成交占位、恒生同月重复标签、周末月末月频标签保留、频率变化拒绝追加、403/HTML/字段变更/超大响应/超时。按设计规则处理，不默认过滤一切零成交。
-- [ ] **Step 5: 做小量真实只读验收。** 至少覆盖510880、VOO/513650及目录中另外一个国内指数；记录URL参数、取数时间、实际范围、有效条数、字段/频率/口径和成功/失败。对其余目录系列逐项小样本确认；失败保持未支持或旧归档状态。不得为了全绿换成相似指数。
-- [ ] **Step 6: 复用并校验归档。** 将必要归档转换成源解析fixture并校验摘要；程序运行不依赖 `/private/tmp` 或 `output/` 的偶然文件。归档导入若需要单次脚本，放 `src/server/valuation/import-research.ts`，仅支持固定manifest和哈希，不自动在每次启动导入。
-- [ ] **Step 7: 运行任务测试并提交限定文件。** 真实源受限可继续实现空态/缓存路径；验收清单中保留“未连通”，fixture通过不能替代连通声明。
+- [x] **Step 1: 写失败测试。** 510880→000015、512890→H30269、VOO与513650共享指数key但价格key不同；161130保留LOF身份；24项映射与原证据一致；现行指数变更生效日保留。未知代码、伪造URL或歧义代码返回null。
+- [x] **Step 2: 运行红测。** `pnpm exec vitest run src/server/valuation/catalog.test.ts src/server/valuation/sources.test.ts`；预期新模块缺失/断言失败。
+- [x] **Step 3: 实现目录与适配器。** 使用现有标的规范化约定；固定腾讯原始日线、Yahoo quote.close、中证滚动PE、乐咕固定月频序列。复用已有fetch超时设计但加响应体上限，不修改旧预警解析器。
+- [x] **Step 4: 写并通过解析测试。** 真实fixture必须覆盖腾讯只给qfq而无原始day时拒收、Yahoo原始/调整价格不同、跨美国夏令时的日期、当天未收盘排除、中证休市零成交占位、恒生同月重复标签、周末月末月频标签保留、频率变化拒绝追加、403/HTML/字段变更/超大响应/超时。按设计规则处理，不默认过滤一切零成交。
+- [x] **Step 5: 做小量真实只读验收。** 至少覆盖510880、VOO/513650及目录中另外一个国内指数；记录URL参数、取数时间、实际范围、有效条数、字段/频率/口径和成功/失败。对其余目录系列逐项小样本确认；失败保持未支持或旧归档状态。不得为了全绿换成相似指数。
+- [x] **Step 6: 复用并校验归档。** 将必要归档转换成源解析fixture并校验摘要；程序运行不依赖 `/private/tmp` 或 `output/` 的偶然文件。归档导入若需要单次脚本，放 `src/server/valuation/import-research.ts`，仅支持固定manifest和哈希，不自动在每次启动导入。
+- [x] **Step 7: 运行任务测试并提交限定文件。** 真实源受限可继续实现空态/缓存路径；验收清单中保留“未连通”，fixture通过不能替代连通声明。
 
 ### Task 2: 全历史统计与收盘MA
 
@@ -73,11 +73,11 @@
 - `MetricSummary`: min/max/p30/p70/currentValue/currentPercentile、latestDate/latestValidDate、validCount/referenceCount、start/end、warnings；缺失数值为null。
 - `PriceHistory`: 每点date/close/ma250/ma500、最新收盘摘要、数据质量；Decimal计算后输出字符串。
 
-- [ ] **Step 1: 写失败测试。** 既往[10,20,30]当前20→rank50；全部[10,20,20,30]→P30=19/P70=21；全相等rank50；单点只有min/max；两点rank为空；null/0/负值不参与传统统计，最新一期负PE使currentValue/currentPercentile为空。
-- [ ] **Step 2: 运行红测。** `pnpm exec vitest run src/server/valuation/statistics.test.ts`；确认测试在实现前失败。
-- [ ] **Step 3: 实现设计§6的线性分位/中秩排名。** 一个系列只用当前验收版本；排序、唯一日期、排除未完成与未来值，不裁剪合法极值。
-- [ ] **Step 4: 加MA精确样本。** 收盘1至500：MA250=375.5、MA500=250.5，最新500；249/499条对应MA为空；含当天的计数正确；已知缺口/重复冲突不能当成足量完整交易日；周末不填值；不能硬编码当前年份日历筛掉历史。
-- [ ] **Step 5: 实现线性时间滚动求和并运行绿测。** 统计用全样本，图表降采样不会传入本模块；提交这组文件。
+- [x] **Step 1: 写失败测试。** 既往[10,20,30]当前20→rank50；全部[10,20,20,30]→P30=19/P70=21；全相等rank50；单点只有min/max；两点rank为空；null/0/负值不参与传统统计，最新一期负PE使currentValue/currentPercentile为空。
+- [x] **Step 2: 运行红测。** `pnpm exec vitest run src/server/valuation/statistics.test.ts`；确认测试在实现前失败。
+- [x] **Step 3: 实现设计§6的线性分位/中秩排名。** 一个系列只用当前验收版本；排序、唯一日期、排除未完成与未来值，不裁剪合法极值。
+- [x] **Step 4: 加MA精确样本。** 收盘1至500：MA250=375.5、MA500=250.5，最新500；249/499条对应MA为空；含当天的计数正确；已知缺口/重复冲突不能当成足量完整交易日；周末不填值；不能硬编码当前年份日历筛掉历史。
+- [x] **Step 5: 实现线性时间滚动求和并运行绿测。** 统计用全样本，图表降采样不会传入本模块；提交这组文件。
 
 ### Task 3: 长期表、修订与数据库租约
 
@@ -91,11 +91,11 @@
 - Produces `ValuationRepository`：`readSeries(key)`、`claimSeries(key, now)`、`commitBatch(claim, batch, now)`、`failBatch(claim, error, now)`。
 - `claimSeries` 返回 `{token, expiresAt, cursor}` 或busy；token由服务端生成。读操作返回最新验收revision，保留全部旧revision。
 
-- [ ] **Step 1: 写数据库失败测试。** 原始导入重复两次不增加行；值变化追加revision；旧值仍可查；两个独立连接只一个claim成功；旧claim过期后提交被拒；服务重启后cursor仍在；删网格产品不删公开系列。
-- [ ] **Step 2: 在独立测试库运行红测。** `TEST_DATABASE_URL=<测试库> pnpm exec vitest run src/server/valuation/repository.integration.test.ts`；禁止指向生产库。缺少变量时明确未执行。
-- [ ] **Step 3: 增加设计§7的两表及索引。** observation按series/date/revision唯一，索引支持范围读取；series key唯一。租约与批次提交均短事务，外部HTTP不持锁；不增加公开历史到用户产品导出结构。
-- [ ] **Step 4: 应用迁移/生成客户端并运行绿测。** 在隔离数据库使用 `pnpm exec prisma migrate deploy`、`pnpm exec prisma generate`；按项目现有生成文件追踪规则处理结果。校验现有RLS的产品权限仍有效；公开表不给未登录HTTP访问能力。
-- [ ] **Step 5: 提交schema、migration、repository及必要生成变更。** 不提交数据库文件或环境凭证。
+- [x] **Step 1: 写数据库失败测试。** 原始导入重复两次不增加行；值变化追加revision；旧值仍可查；两个独立连接只一个claim成功；旧claim过期后提交被拒；服务重启后cursor仍在；删网格产品不删公开系列。
+- [x] **Step 2: 在独立测试库运行红测。** `TEST_DATABASE_URL=<测试库> pnpm exec vitest run src/server/valuation/repository.integration.test.ts`；禁止指向生产库。缺少变量时明确未执行。
+- [x] **Step 3: 增加设计§7的两表及索引。** observation按series/date/revision唯一，索引支持范围读取；series key唯一。租约与批次提交均短事务，外部HTTP不持锁；不增加公开历史到用户产品导出结构。
+- [x] **Step 4: 应用迁移/生成客户端并运行绿测。** 在隔离数据库使用 `pnpm exec prisma migrate deploy`、`pnpm exec prisma generate`；按项目现有生成文件追踪规则处理结果。校验现有RLS的产品权限仍有效；公开表不给未登录HTTP访问能力。
+- [x] **Step 5: 提交schema、migration、repository及必要生成变更。** 不提交数据库文件或环境凭证。
 
 ### Task 4: 缓存优先、到期和续传编排
 
@@ -106,12 +106,12 @@
 - Produces: `ValuationService.read(ownerId: string, gridId: string): Promise<ValuationPageData>`；`refresh(ownerId: string, gridId: string, mode: "due" | "manual"): Promise<ValuationPageData>`。
 - 构造函数注入grid.get、repository、fetchSeriesBatch、clock和maintenance guard；统一返回设计§8的DTO。逐卡DTO含availability/freshness、source/method/frequency、asOf/checkedAt、coverage与stats/points；refresh含busy/hasMore/retryAfter。
 
-- [ ] **Step 1: 写失败测试。** read在有缓存/无缓存时上游次数都是0；refresh(due)暖缓存0请求；成功检查七天前1毫秒不刷、整七天刷；价格按本市场新完整交易日；请求成功但没有新增点仍推进checkedAt。
-- [ ] **Step 2: 运行红测。** `pnpm exec vitest run src/server/valuation/service.test.ts`。
-- [ ] **Step 3: 实现读取与单批刷新。** 获取owner产品后才resolve；同指数重复访问复用数据。按设计预算顺序执行；新增数据落库后返回新DTO，未完成历史保留hasMore/cursor；下一次due续传不受上批成功时间的七天期限限制。
-- [ ] **Step 4: 加并通过失败/并发测试。** 三卡中一个403仍保留旧数据与原asOf；同一系列忙不重复采集；成功但仍hasMore时可续传，且不把非预期空表当历史完成；冷却/15分钟至6小时退避；游标恢复；每批最多8请求且不超过总预算；维护模式不启动采集；unsupported不无限重试。手动刷新不重下已验收全量历史。
-- [ ] **Step 5: 验证输入与范围。** 增量从latestDate前30天起；首次历史从源已验收边界按游标取；全量专用接口仅到期/手动取一次并去重，不把网络全量标成增量；同源历史修订追加版本。
-- [ ] **Step 6: 任务测试通过后提交。** 不启动定时服务或常驻worker。
+- [x] **Step 1: 写失败测试。** read在有缓存/无缓存时上游次数都是0；refresh(due)暖缓存0请求；成功检查七天前1毫秒不刷、整七天刷；价格按本市场新完整交易日；请求成功但没有新增点仍推进checkedAt。
+- [x] **Step 2: 运行红测。** `pnpm exec vitest run src/server/valuation/service.test.ts`。
+- [x] **Step 3: 实现读取与单批刷新。** 获取owner产品后才resolve；同指数重复访问复用数据。按设计预算顺序执行；新增数据落库后返回新DTO，未完成历史保留hasMore/cursor；下一次due续传不受上批成功时间的七天期限限制。
+- [x] **Step 4: 加并通过失败/并发测试。** 三卡中一个403仍保留旧数据与原asOf；同一系列忙不重复采集；成功但仍hasMore时可续传，且不把非预期空表当历史完成；冷却/15分钟至6小时退避；游标恢复；每批最多8请求且不超过总预算；维护模式不启动采集；unsupported不无限重试。手动刷新不重下已验收全量历史。
+- [x] **Step 5: 验证输入与范围。** 增量从latestDate前30天起；首次历史从源已验收边界按游标取；全量专用接口仅到期/手动取一次并去重，不把网络全量标成增量；同源历史修订追加版本。
+- [x] **Step 6: 任务测试通过后提交。** 不启动定时服务或常驻worker。
 
 ### Task 5: 登录保护路由与接口合同
 
@@ -124,10 +124,10 @@
 
 **Interfaces:** Consumes任务4 DTO和服务；produces `getValuation(id)` 与 `refreshValuation(id, mode)`，使用既有requestJson/apiPath，不硬编码 `/api` 或 `/fitgrid`。
 
-- [ ] **Step 1: 补OpenAPI的GET/POST及DTO空值约定。** 严格mode枚举与现有错误响应，source/URL/ownerId不接受；不新增第二套API文档或外部Postman工作区。
-- [ ] **Step 2: 写失败测试并运行。** 登录401；其他owner/不存在统一404；无效id/额外body422；跨源POST403；GET缓存即使上游不可用仍200；部分卡失败200带状态；冷却429；维护POST503；`/fitgrid`正确拼接与request ID可见。
-- [ ] **Step 3: 实现最小route与runtime装配。** `requireSession`后调用服务；用户写请求限额在POST消费；外部请求从不出现在GET。
-- [ ] **Step 4: 执行客户端、HTTP与现有合同测试。** `pnpm exec vitest run src/server/valuation/http.test.ts src/features/valuation/valuation-api.test.ts src/server/http/api-contract.test.ts src/server/http/schema-contract.test.ts`；修正任何合同/代码不一致再提交。
+- [x] **Step 1: 补OpenAPI的GET/POST及DTO空值约定。** 严格mode枚举与现有错误响应，source/URL/ownerId不接受；不新增第二套API文档或外部Postman工作区。
+- [x] **Step 2: 写失败测试并运行。** 登录401；其他owner/不存在统一404；无效id/额外body422；跨源POST403；GET缓存即使上游不可用仍200；部分卡失败200带状态；冷却429；维护POST503；`/fitgrid`正确拼接与request ID可见。
+- [x] **Step 3: 实现最小route与runtime装配。** `requireSession`后调用服务；用户写请求限额在POST消费；外部请求从不出现在GET。
+- [x] **Step 4: 执行客户端、HTTP与现有合同测试。** `pnpm exec vitest run src/server/valuation/http.test.ts src/features/valuation/valuation-api.test.ts src/server/http/api-contract.test.ts src/server/http/schema-contract.test.ts`；修正任何合同/代码不一致再提交。
 
 ### Task 6: 三图页面与详情入口
 
@@ -140,12 +140,12 @@
 
 **Interfaces:** `ValuationPage({id}: {id:string})`；`HistoryChart({label, points, lines, references})`。points保留date、null断点；lines及references只描述设计要求，不发展通用图表框架。
 
-- [ ] **Step 1: 写入口与页面失败测试。** 桌面和移动菜单均“查看估值”且指向同产品；直接URL可加载；读缓存先呈现，然后才按服务端due状态POST；未到期不POST；用户一次点击只发一次manual刷新。
-- [ ] **Step 2: 写图表/空态断言。** 三卡独立、源日期与口径可读；MA不足为提示；PE/PB缺失不显示0；单点只有点；刷新失败旧图保持；无效最新PE不显示旧正值当前分位；不匹配与REIT文案不同。
-- [ ] **Step 3: 实现页面和SVG。** 使用现有主题/字体/动作样式，三卡纵向；P30/P70参考线；latest/MA数值；两类刷新时间独立。统计摘要在SVG外，触摸/键盘可查点；压缩绘图保留端点/桶极值与断点，统计始终来自全量。
-- [ ] **Step 4: 实现刷新生命周期。** 冷启动/回补按hasMore顺序续传；busy按retryAfter只GET观察且最多120秒，超时显示重试入口；页面卸载取消后续请求；401由现有重定向处理；手动按钮pending时禁用；错误状态不无限自动重试。
-- [ ] **Step 5: 补demo与主题/路由测试。** demo模式只返回fixture，不请求真实免费源；浅/深主题、390px布局、键盘聚焦/移动点、basePath返回登录后仍定位估值页。
-- [ ] **Step 6: 运行前端测试并提交。** `pnpm exec vitest run src/features/valuation src/features/grids/grid-detail.test.tsx src/app/base-path-routing.test.tsx`。
+- [x] **Step 1: 写入口与页面失败测试。** 桌面和移动菜单均“查看估值”且指向同产品；直接URL可加载；读缓存先呈现，然后才按服务端due状态POST；未到期不POST；用户一次点击只发一次manual刷新。
+- [x] **Step 2: 写图表/空态断言。** 三卡独立、源日期与口径可读；MA不足为提示；PE/PB缺失不显示0；单点只有点；刷新失败旧图保持；无效最新PE不显示旧正值当前分位；不匹配与REIT文案不同。
+- [x] **Step 3: 实现页面和SVG。** 使用现有主题/字体/动作样式，三卡纵向；P30/P70参考线；latest/MA数值；两类刷新时间独立。统计摘要在SVG外，触摸/键盘可查点；压缩绘图保留端点/桶极值与断点，统计始终来自全量。
+- [x] **Step 4: 实现刷新生命周期。** 冷启动/回补按hasMore顺序续传；busy按retryAfter只GET观察且最多120秒，超时显示重试入口；页面卸载取消后续请求；401由现有重定向处理；手动按钮pending时禁用；错误状态不无限自动重试。
+- [x] **Step 5: 补demo与主题/路由测试。** demo模式只返回fixture，不请求真实免费源；浅/深主题、390px布局、键盘聚焦/移动点、basePath返回登录后仍定位估值页。
+- [x] **Step 6: 运行前端测试并提交。** `pnpm exec vitest run src/features/valuation src/features/grids/grid-detail.test.tsx src/app/base-path-routing.test.tsx`。
 
 ### Task 7: 全链路验收、保留与交付
 
