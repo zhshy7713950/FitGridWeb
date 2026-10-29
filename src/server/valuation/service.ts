@@ -31,7 +31,7 @@ function card(s:SeriesDefinition|null,r:SeriesSnapshot|null,product:ValuationPro
  if(!s)return {availability:product?.kind==='reit'&&metric!=='price'?'not_applicable':'unsupported',stale:false,refreshing:false,due:false,
    source:null,method:null,frequency:null,asOf:null,checkedAt:null,coverage:'none',message:product?.kind==='reit'?'REIT的PE/PB不适用，价格数据可单独查看。':product?'暂无已核验的免费历史数据，指标留空。':'暂未匹配到该产品的数据。',points:[],stats};
  const old=!!stats.latestDate && stats.latestDate<shift(completedDate(s,now),s.frequency==='monthly'?-93:s.metric==='price'?0:-14);
- const message=r?.error?'更新失败，正在展示已保存数据。':!points.length?'尚无本地数据，正在等待首次获取。':!r?.checkedAt?'已保存的研究归档，数据日期见下方；尚未完成在线更新。':old?'来源暂未提供较新的观测，正在展示已保存数据。':!r.complete?'正在补充更早历史；统计基于当前已保存范围。':null;
+ const message=r?.error?(points.length?'更新失败，正在展示已保存数据。':'更新失败，暂无已保存数据，请稍后重试。'):!points.length?'尚无本地数据，正在等待首次获取。':!r?.checkedAt?'已保存的研究归档，数据日期见下方；尚未完成在线更新。':old?'来源暂未提供较新的观测，正在展示已保存数据。':!r.complete?'正在补充更早历史；统计基于当前已保存范围。':null;
  return {availability:points.length?'ready':r?.error?'error':'empty',stale:old||!r?.checkedAt||+now-Date.parse(r.checkedAt)>=WEEK,refreshing:!!r?.leaseUntil&&Date.parse(r.leaseUntil)>+now,
    due:due(s,r,now),source:s.sourceLabel,method:s.method,frequency:s.frequency,asOf:stats.latestDate,checkedAt:r?.checkedAt??null,
    coverage:points.length?(r?.complete?'source_history':'partial'):'none',message,points,stats,...(metric==='price'?{prices:buildPriceHistory(points)}:{})};

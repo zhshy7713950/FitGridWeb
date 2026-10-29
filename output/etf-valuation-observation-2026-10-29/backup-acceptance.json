@@ -1,0 +1,12 @@
+{
+  "checkedAt": "2026-10-29T08:49:21.910Z",
+  "method": "Whole database pg_dump --format=custom / pg_restore to a fresh isolated database",
+  "clientVersion": "PostgreSQL 18.6",
+  "revisionCount": 2,
+  "observationDate": "2000-12-29",
+  "latestValue": "12.0000000000",
+  "cursor": "1999-12-31",
+  "complete": false,
+  "restoreWarnings": null,
+  "status": "passed"
+}

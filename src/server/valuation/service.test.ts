@@ -29,6 +29,11 @@ describe('cached valuation observation service',()=>{
   expect(result.pb.checkedAt).toBeNull();expect(result.pb.message).toContain('已保存');expect(result.pb.asOf).toBe('2026-09-30');
   const count=fetcher.mock.calls.length;await service().refresh('owner','grid','due');expect(fetcher).toHaveBeenCalledTimes(count);
  });
+ it('distinguishes an empty failed series from a saved fallback',async()=>{
+  get.mockResolvedValue({id:'grid',productCode:'VOO'});fetcher.mockRejectedValue(new Error('HTTP 503'));
+  const data=await service().refresh('owner','grid','due');
+  expect(data.price.availability).toBe('error');expect(data.price.message).toContain('暂无已保存数据');
+ });
  it('resumes incomplete backfill without waiting seven days and bounds each refresh',async()=>{
   fetcher.mockImplementation(async (r)=>({observations:[{date:r.to,value:'1',quality:'valid'}],reachedStart:false}));
   await service().refresh('owner','grid','due');expect(fetcher.mock.calls.length).toBeLessThanOrEqual(4);

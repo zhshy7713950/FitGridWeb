@@ -1,0 +1,522 @@
+{
+  "508000": {
+    "price": {
+      "availability": "empty",
+      "source": "腾讯行情",
+      "frequency": "daily",
+      "asOf": null,
+      "checkedAt": null,
+      "count": 0,
+      "from": null,
+      "to": null,
+      "current": null,
+      "coverage": "none",
+      "message": "尚无本地数据，正在等待首次获取。"
+    },
+    "pe": {
+      "availability": "not_applicable",
+      "source": null,
+      "frequency": null,
+      "asOf": null,
+      "checkedAt": null,
+      "count": 0,
+      "from": null,
+      "to": null,
+      "current": null,
+      "coverage": "none",
+      "message": "REIT的PE/PB不适用，价格数据可单独查看。"
+    },
+    "pb": {
+      "availability": "not_applicable",
+      "source": null,
+      "frequency": null,
+      "asOf": null,
+      "checkedAt": null,
+      "count": 0,
+      "from": null,
+      "to": null,
+      "current": null,
+      "coverage": "none",
+      "message": "REIT的PE/PB不适用，价格数据可单独查看。"
+    }
+  },
+  "510880": {
+    "price": {
+      "availability": "ready",
+      "source": "腾讯行情",
+      "frequency": "daily",
+      "asOf": "2026-10-29",
+      "checkedAt": "2026-10-29T08:48:11.082Z",
+      "count": 4803,
+      "from": "2007-01-18",
+      "to": "2026-10-29",
+      "current": "3.42",
+      "coverage": "source_history",
+      "message": null
+    },
+    "pe": {
+      "availability": "ready",
+      "source": "中证指数",
+      "frequency": "daily",
+      "asOf": "2026-10-28",
+      "checkedAt": "2026-10-29T08:48:11.082Z",
+      "count": 5294,
+      "from": "2011-06-28",
+      "to": "2026-10-28",
+      "current": "9.38",
+      "coverage": "source_history",
+      "message": null
+    },
+    "pb": {
+      "availability": "ready",
+      "source": "乐咕乐股",
+      "frequency": "monthly",
+      "asOf": "2026-09-30",
+      "checkedAt": null,
+      "count": 261,
+      "from": "2005-01-31",
+      "to": "2026-09-30",
+      "current": "0.87",
+      "coverage": "partial",
+      "message": "更新失败，正在展示已保存数据。"
+    },
+    "batches": 12,
+    "initialReadRequests": 0,
+    "warmRequests": 0,
+    "upstreamRequests": 45
+  },
+  "513650": {
+    "price": {
+      "availability": "ready",
+      "source": "腾讯行情",
+      "frequency": "daily",
+      "asOf": "2026-10-29",
+      "checkedAt": "2026-10-29T08:48:11.082Z",
+      "count": 864,
+      "from": "2023-04-04",
+      "to": "2026-10-29",
+      "current": "2.011",
+      "coverage": "source_history",
+      "message": null
+    },
+    "pe": {
+      "availability": "ready",
+      "source": "乐咕乐股",
+      "frequency": "monthly",
+      "asOf": "2026-10-27",
+      "checkedAt": null,
+      "count": 382,
+      "from": "1995-01-31",
+      "to": "2026-10-27",
+      "current": "26.35",
+      "coverage": "partial",
+      "message": "更新失败，正在展示已保存数据。"
+    },
+    "pb": {
+      "availability": "unsupported",
+      "source": null,
+      "frequency": null,
+      "asOf": null,
+      "checkedAt": null,
+      "count": 0,
+      "from": null,
+      "to": null,
+      "current": null,
+      "coverage": "none",
+      "message": "暂无已核验的免费历史数据，指标留空。"
+    },
+    "batches": 2,
+    "initialReadRequests": 0,
+    "warmRequests": 0,
+    "upstreamRequests": 5
+  },
+  "checkedAt": "2026-10-29T08:48:11.082Z",
+  "note": "Live upstream requests plus explicitly dated archived fallback; isolated test database namespace.",
+  "VOO": {
+    "price": {
+      "availability": "error",
+      "source": "Yahoo Finance",
+      "frequency": "daily",
+      "asOf": null,
+      "checkedAt": null,
+      "count": 0,
+      "from": null,
+      "to": null,
+      "current": null,
+      "coverage": "none",
+      "message": "更新失败，正在展示已保存数据。"
+    },
+    "pe": {
+      "availability": "ready",
+      "source": "乐咕乐股",
+      "frequency": "monthly",
+      "asOf": "2026-10-27",
+      "checkedAt": null,
+      "count": 382,
+      "from": "1995-01-31",
+      "to": "2026-10-27",
+      "current": "26.35",
+      "coverage": "partial",
+      "message": "更新失败，正在展示已保存数据。"
+    },
+    "pb": {
+      "availability": "unsupported",
+      "source": null,
+      "frequency": null,
+      "asOf": null,
+      "checkedAt": null,
+      "count": 0,
+      "from": null,
+      "to": null,
+      "current": null,
+      "coverage": "none",
+      "message": "暂无已核验的免费历史数据，指标留空。"
+    },
+    "batches": 1,
+    "initialReadRequests": 0,
+    "warmRequests": 0,
+    "upstreamRequests": 1
+  },
+  "offline": {
+    "sameValues": true,
+    "cards": {
+      "price": {
+        "availability": "ready",
+        "source": "腾讯行情",
+        "frequency": "daily",
+        "asOf": "2026-10-29",
+        "checkedAt": "2026-10-29T08:48:11.082Z",
+        "count": 4803,
+        "from": "2007-01-18",
+        "to": "2026-10-29",
+        "current": "3.42",
+        "coverage": "source_history",
+        "message": "更新失败，正在展示已保存数据。"
+      },
+      "pe": {
+        "availability": "ready",
+        "source": "中证指数",
+        "frequency": "daily",
+        "asOf": "2026-10-28",
+        "checkedAt": "2026-10-29T08:48:11.082Z",
+        "count": 5294,
+        "from": "2011-06-28",
+        "to": "2026-10-28",
+        "current": "9.38",
+        "coverage": "source_history",
+        "message": "更新失败，正在展示已保存数据。"
+      },
+      "pb": {
+        "availability": "ready",
+        "source": "乐咕乐股",
+        "frequency": "monthly",
+        "asOf": "2026-09-30",
+        "checkedAt": null,
+        "count": 261,
+        "from": "2005-01-31",
+        "to": "2026-09-30",
+        "current": "0.87",
+        "coverage": "partial",
+        "message": "更新失败，正在展示已保存数据。"
+      }
+    }
+  },
+  "unknown": {
+    "price": {
+      "availability": "unsupported",
+      "source": null,
+      "frequency": null,
+      "asOf": null,
+      "checkedAt": null,
+      "count": 0,
+      "from": null,
+      "to": null,
+      "current": null,
+      "coverage": "none",
+      "message": "暂未匹配到该产品的数据。"
+    },
+    "pe": {
+      "availability": "unsupported",
+      "source": null,
+      "frequency": null,
+      "asOf": null,
+      "checkedAt": null,
+      "count": 0,
+      "from": null,
+      "to": null,
+      "current": null,
+      "coverage": "none",
+      "message": "暂未匹配到该产品的数据。"
+    },
+    "pb": {
+      "availability": "unsupported",
+      "source": null,
+      "frequency": null,
+      "asOf": null,
+      "checkedAt": null,
+      "count": 0,
+      "from": null,
+      "to": null,
+      "current": null,
+      "coverage": "none",
+      "message": "暂未匹配到该产品的数据。"
+    }
+  },
+  "requests": [
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "legu",
+      "status": 403,
+      "path": "https://legulegu.com/api/stockdata/index-basic-pb"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "csi",
+      "status": 200,
+      "path": "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    },
+    {
+      "source": "legu",
+      "status": 403,
+      "path": "https://legulegu.com/stockdata/market/sandp"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    },
+    {
+      "source": "tencent",
+      "status": 200,
+      "path": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    }
+  ]
+}

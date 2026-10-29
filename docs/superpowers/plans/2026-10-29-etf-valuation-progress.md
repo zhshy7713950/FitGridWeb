@@ -17,7 +17,7 @@ Branch: codex/etf-valuation; isolated managed worktree.
 - Task 4: complete — 8 cache/cadence/resume/failure tests, archived dates preserved.
 - Task 5: complete — authenticated routes, private headers, strict inputs, basePath client, OpenAPI route coverage.
 - Task 6: complete — three charts, desktop/mobile entry, 120-second busy bound, sequential backfill, touch/keyboard inspection, direct route and login return tests; four fixture screenshots visually checked.
-- Task 7: pending
+- Task 7: complete — persistence/cleanup/shared-cache tests, live-source and offline acceptance, whole-database restore, both browser mount paths, screenshots, README, full-suite/lint/typecheck/build verification.
 
 Ruling: bootstrap verified archived values once on first refresh of an empty series, never in GET or at every startup — preserves usable free histories when upstream is currently 403 — captures remain explicitly dated, never claimed live.
 Ruling: Prisma empty-update upsert raced on initial concurrent creation; replaced with native INSERT ON CONFLICT DO NOTHING, proven by a two-connection test.
@@ -34,3 +34,12 @@ Ruling: pnpm_config_verify_deps_before_run=false permits standard pnpm checks wi
 - Whole-database pg_dump/pg_restore passed: 2000-12-29 observations, two revisions, latest value 12 and cursor 1999-12-31 survived restoration into a fresh temporary database.
 - Ruling: replace the previous shared node_modules symlink with a frozen-lockfile offline installation inside this worktree — Turbopack rejects links outside its filesystem root; package versions and configuration are unchanged.
 - Scope review is local; no reviewer subagent was dispatched because the user did not authorize delegation.
+
+## Final verification
+- pnpm test --maxWorkers=2 --testTimeout=30000: 108 files passed / 10 skipped; 1183 tests passed / 25 skipped. Initial default concurrency exceeded the 5-second timeout in unrelated existing shell tests; no ops implementation changes were made.
+- Final PostgreSQL valuation integration: 5/5 passed (not skipped).
+- Valuation browser tests: 2/2 root mount and 2/2 /fitgrid mount, each covering desktop/mobile and both themes.
+- pnpm typecheck, pnpm lint, pnpm build and git diff --check: passed.
+- Regression: an empty failed source now says there is no saved data (service test observed RED→GREEN).
+- Final local branch review: no blocking findings; no deferred minor code findings. Existing free-source limitations are documented in acceptance.md.
+- Ruling: finish by preserving the existing feature branch and worktree — the approved plan requests development, not merge, push or deployment; no external publication was performed.

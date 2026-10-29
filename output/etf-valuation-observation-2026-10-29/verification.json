@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-29",
+  "branch": "codex/etf-valuation",
+  "fullSuite": {
+    "command": "pnpm test --maxWorkers=2 --testTimeout=30000",
+    "filesPassed": 108,
+    "filesSkipped": 10,
+    "testsPassed": 1183,
+    "testsSkipped": 25
+  },
+  "valuationDatabase": {
+    "passed": 5,
+    "skipped": 0
+  },
+  "valuationBrowser": {
+    "rootPassed": 2,
+    "basePathPassed": 2,
+    "viewports": [
+      1440,
+      390
+    ],
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "usesFixtures": true
+  },
+  "typecheck": "passed",
+  "lint": "passed",
+  "build": "passed",
+  "diffCheck": "passed",
+  "deployed": false
+}
