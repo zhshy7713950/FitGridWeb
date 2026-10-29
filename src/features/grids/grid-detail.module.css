@@ -1,16 +1,16 @@
 .detail {
-  --detail-ink: #080D12;
-  --detail-surface: #111722;
-  --detail-line: #2B3444;
-  --detail-text: #E6EAF2;
-  --detail-action: #2962FF;
-  --detail-medium-grid: #38BDF8;
-  --detail-large-grid: #F2C94C;
-  --detail-long: #22AB94;
-  --detail-short: #F23645;
-  --detail-buy: #F23645;
-  --detail-sell: #22AB94;
-  --detail-muted: color-mix(in srgb, var(--detail-text) 56%, transparent);
+  --detail-ink: var(--canvas);
+  --detail-surface: var(--surface);
+  --detail-line: var(--line);
+  --detail-text: var(--text);
+  --detail-action: var(--action);
+  --detail-medium-grid: var(--grid-medium);
+  --detail-large-grid: var(--grid-large);
+  --detail-long: var(--positive);
+  --detail-short: var(--negative);
+  --detail-buy: var(--negative);
+  --detail-sell: var(--positive);
+  --detail-muted: var(--text-muted);
 
   min-width: 0;
   color: var(--detail-text);
@@ -104,9 +104,9 @@
 }
 
 .actions button:first-child {
-  border-color: var(--detail-action);
+  border-color: var(--action-text);
   background: var(--detail-action);
-  color: var(--detail-text);
+  color: var(--on-action);
 }
 
 .actions .deleteAction {
@@ -131,6 +131,7 @@
   border: 1px solid var(--detail-line);
   border-left: 3px solid var(--detail-action);
   background: var(--detail-surface);
+  border-radius: var(--panel-radius);
 }
 
 .instrumentStrip div {
@@ -183,7 +184,7 @@
   z-index: 20;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--detail-ink) 38%, transparent);
+  background: var(--overlay);
 }
 
 .recalculateIndicator {
@@ -198,7 +199,7 @@
   border-radius: 4px;
   color: var(--detail-text);
   background: var(--detail-surface);
-  box-shadow: 0 14px 36px color-mix(in srgb, var(--detail-ink) 32%, transparent);
+  box-shadow: 0 14px 36px var(--shadow-color);
   font-size: 13px;
   font-weight: 650;
 }
@@ -207,7 +208,7 @@
   width: 17px;
   height: 17px;
   border: 2px solid color-mix(in srgb, var(--detail-action) 25%, transparent);
-  border-top-color: var(--detail-action);
+  border-top-color: var(--action-text);
   border-radius: 50%;
   animation: recalculate-spin 0.7s linear infinite;
 }
@@ -244,7 +245,7 @@
   max-width: 100%;
   overflow: auto;
   border: 1px solid var(--detail-line);
-  border-radius: 4px;
+  border-radius: var(--panel-radius);
   background: var(--detail-surface);
 }
 
@@ -365,7 +366,7 @@
   min-height: 30px;
   border: 1px solid transparent;
   border-radius: 3px;
-  color: var(--detail-action);
+  color: var(--action-text);
   background: transparent;
   font: inherit;
   cursor: pointer;
@@ -373,7 +374,7 @@
 
 .rowButton:hover,
 .rowButton[aria-pressed="true"] {
-  border-color: var(--detail-action);
+  border-color: var(--action-text);
   color: var(--detail-text);
   background: color-mix(in srgb, var(--detail-action) 24%, transparent);
 }
@@ -396,7 +397,7 @@
 }
 
 .gridType1 {
-  color: var(--detail-action);
+  color: var(--action-text);
 }
 
 .gridType2 {
@@ -441,7 +442,7 @@
   height: 100%;
   padding: 0;
   border: 0;
-  background: color-mix(in srgb, var(--detail-ink) 66%, transparent);
+  background: var(--overlay);
 }
 
 .inspector {
@@ -452,7 +453,7 @@
   flex-direction: column;
   border-left: 1px solid var(--detail-action);
   background: var(--detail-surface);
-  box-shadow: -18px 0 45px color-mix(in srgb, var(--detail-ink) 35%, transparent);
+  box-shadow: -18px 0 45px var(--shadow-color);
 }
 
 .inspectorHeader {
@@ -465,7 +466,7 @@
 }
 
 .eyebrow {
-  color: var(--detail-action);
+  color: var(--action-text);
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   font-size: 10px;
   letter-spacing: 0.1em;
@@ -529,9 +530,9 @@
 }
 
 .inspectorControls button:last-child:not(:disabled) {
-  border-color: var(--detail-action);
+  border-color: var(--action-text);
   background: var(--detail-action);
-  color: var(--detail-text);
+  color: var(--on-action);
 }
 
 .deleteLayer {
@@ -550,7 +551,7 @@
   height: 100%;
   padding: 0;
   border: 0;
-  background: color-mix(in srgb, var(--detail-ink) 78%, transparent);
+  background: var(--overlay);
 }
 
 .deleteDialog {
@@ -559,10 +560,10 @@
   overflow: hidden;
   border: 1px solid var(--detail-line);
   border-top: 2px solid var(--detail-short);
-  border-radius: 4px;
+  border-radius: var(--panel-radius);
   color: var(--detail-text);
   background: var(--detail-surface);
-  box-shadow: 0 22px 58px color-mix(in srgb, var(--detail-ink) 54%, transparent);
+  box-shadow: 0 22px 58px var(--shadow-color);
 }
 
 .deleteDialog:focus-visible {
@@ -720,6 +721,7 @@
 .deleteControls .confirmDelete:not(:disabled) {
   border-color: var(--detail-short);
   background: var(--detail-short);
+  color: var(--on-negative);
 }
 
 .srOnly {

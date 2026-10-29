@@ -33,14 +33,20 @@
   text-decoration: none;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
 .wordmark span {
   width: 30px;
   height: 30px;
   display: grid;
   place-items: center;
   border-radius: 6px;
-  color: var(--text);
   background: var(--action);
+  color: var(--on-action);
   font-size: 11px;
   font-weight: 800;
 }
@@ -103,7 +109,7 @@
 }
 
 .rail .activeStep > span {
-  border-color: var(--action);
+  border-color: var(--action-text);
   background: var(--action);
 }
 
@@ -179,7 +185,7 @@
 }
 
 .field input:focus {
-  border-color: var(--action);
+  border-color: var(--action-text);
 }
 
 .fieldError,
@@ -215,8 +221,8 @@
 
 .primaryAction {
   border: 0;
-  color: var(--text);
   background: var(--action);
+  color: var(--on-action);
 }
 
 .primaryAction:disabled {
@@ -269,7 +275,7 @@
 
 .spinner {
   border: 2px solid var(--line);
-  border-top-color: var(--action);
+  border-top-color: var(--action-text);
   animation: spin 800ms linear infinite;
 }
 
@@ -278,6 +284,10 @@
 }
 
 @media (max-width: 640px) {
+  .publicLabel {
+    display: none;
+  }
+
   .page {
     display: block;
     padding: 0;

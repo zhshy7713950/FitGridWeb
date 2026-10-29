@@ -1,0 +1,48 @@
+.toggle {
+  min-height: 32px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--action-text);
+  background: var(--surface);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toggle:hover {
+  border-color: var(--action-text);
+  background: var(--action-tint);
+}
+
+.toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.floating {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+}
+
+@media (max-width: 767px) {
+  .toggle {
+    width: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
+
+  .toggle span {
+    display: none;
+  }
+
+  .floating {
+    top: 12px;
+    right: 16px;
+  }
+}

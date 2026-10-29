@@ -1,12 +1,4 @@
 .workspace {
-  --canvas: #080d12;
-  --surface: #111722;
-  --surface-raised: #1e2633;
-  --line: #2b3444;
-  --action: #2962ff;
-  --positive: #22ab94;
-  --negative: #f23645;
-
   width: min(1180px, 100%);
   min-width: 0;
   margin: 0 auto;
@@ -145,8 +137,9 @@
 }
 
 .invitationControls button {
-  border-color: var(--action);
+  border-color: var(--action-text);
   background: var(--action);
+  color: var(--on-action);
 }
 
 .invitationControls button:disabled,
@@ -344,12 +337,12 @@
 }
 
 .executionRail .currentStage {
-  color: var(--action);
+  color: var(--action-text);
 }
 
 .executionRail .currentStage > span {
-  border-color: var(--action);
-  box-shadow: 0 0 0 3px rgb(41 98 255 / 14%);
+  border-color: var(--action-text);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--action) 14%, transparent);
 }
 
 .executionRail .completedStage {
@@ -359,7 +352,7 @@
 .executionRail .completedStage > span {
   border-color: var(--positive);
   background: var(--positive);
-  color: var(--canvas);
+  color: var(--on-positive);
 }
 
 .primaryAction,
@@ -380,8 +373,9 @@
 
 .vaultControl > .primaryAction {
   width: 100%;
-  border-color: var(--action);
+  border-color: var(--action-text);
   background: var(--action);
+  color: var(--on-action);
 }
 
 .primaryAction:disabled,
@@ -612,7 +606,7 @@
   width: 100%;
   height: 100%;
   border: 0;
-  background: rgb(8 13 18 / 82%);
+  background: var(--overlay);
 }
 
 .vaultDialog {
@@ -620,9 +614,9 @@
   width: min(500px, 100%);
   border: 1px solid var(--line);
   border-top: 3px solid var(--action);
-  border-radius: 5px;
+  border-radius: var(--panel-radius);
   background: var(--surface);
-  box-shadow: 0 24px 64px rgb(0 0 0 / 42%);
+  box-shadow: 0 24px 64px var(--shadow-color);
 }
 
 .vaultDialog form {
@@ -669,6 +663,7 @@
 .vaultDialogActions .destructiveAction {
   border-color: var(--negative);
   background: var(--negative);
+  color: var(--on-negative);
 }
 
 .maintenanceNotice {
@@ -790,7 +785,7 @@
 }
 
 .adminRole {
-  color: var(--action);
+  color: var(--action-text);
 }
 
 .memberRole,
@@ -901,7 +896,7 @@
   width: 100%;
   height: 100%;
   border: 0;
-  background: rgb(8 13 18 / 78%);
+  background: var(--overlay);
 }
 
 .dialog {
@@ -909,9 +904,9 @@
   width: min(460px, 100%);
   border: 1px solid var(--line);
   border-top: 3px solid var(--negative);
-  border-radius: 5px;
+  border-radius: var(--panel-radius);
   background: var(--surface);
-  box-shadow: 0 24px 64px rgb(0 0 0 / 42%);
+  box-shadow: 0 24px 64px var(--shadow-color);
 }
 
 .dialog form {
@@ -928,11 +923,13 @@
 .dialogActions .danger {
   border-color: var(--negative);
   background: var(--negative);
+  color: var(--on-negative);
 }
 
 .dialogActions .enable {
   border-color: var(--positive);
   background: var(--positive);
+  color: var(--on-positive);
 }
 
 @media (max-width: 767px) {

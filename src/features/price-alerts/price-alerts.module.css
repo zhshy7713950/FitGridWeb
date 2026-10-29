@@ -6,11 +6,11 @@
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .page button, .actions a, .back { color: var(--text); background: var(--surface-raised); border: 1px solid var(--line); border-radius: 5px; padding: 10px 14px; text-decoration: none; font-size: 13px; cursor: pointer; }
 .page button:disabled { opacity: .45; cursor: not-allowed; }
-.page .primary { background: var(--action); border-color: var(--action); color: #fff; }
+.page .primary { background: var(--action); border-color: var(--action-text); color: var(--on-action); }
 .page .danger { color: var(--negative); }
 .back { display: inline-block; margin-bottom: 20px; background: transparent; }
 .list { display: grid; gap: 12px; }
-.card, .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 24px; min-width: 0; }
+.card, .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--panel-radius); padding: 24px; min-width: 0; }
 .card { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(180px, 1.2fr) auto; gap: 20px; align-items: center; }
 .identity { color: var(--text); text-decoration: none; font-size: 16px; font-weight: 600; }
 .code { display: block; font-size: 12px; font-weight: 400; color: var(--text-muted); margin-top: 8px; font-family: ui-monospace, monospace; }
@@ -23,7 +23,7 @@
 .quoteValue { color: var(--text); font: 16px ui-monospace, monospace; font-variant-numeric: tabular-nums; }
 .error, .warning, .success { padding: 14px 16px; border: 1px solid var(--line); border-radius: 5px; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
 .error { color: var(--negative); }
-.warning { color: #e9b85e; }
+.warning { color: var(--warning); }
 .success { color: var(--positive); }
 .empty { padding: 52px 24px; text-align: center; color: var(--text-muted); }
 .columns { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(240px, 1fr); gap: 20px; }
@@ -31,7 +31,7 @@
 .form label { font-size: 13px; margin-top: 12px; }
 .form input:not([type=checkbox]), .form select { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--canvas); color: var(--text); font: inherit; font-size: 14px; }
 .form .checkbox { display: flex; align-items: center; gap: 8px; line-height: 1.6; }
-.checkbox input { accent-color: var(--action); }
+.checkbox input { accent-color: var(--action-text); }
 .metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin: 22px 0; }
 .metrics dt { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
 .metrics dd { margin: 0; font-family: ui-monospace, monospace; font-size: 14px; overflow-wrap: anywhere; }

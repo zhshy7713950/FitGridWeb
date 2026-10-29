@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, type ReactNode, type SVGProps } from "react";
 import { GridIcon } from "@/components/icons";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import type { SessionUser } from "@/features/auth/types";
 import { browserBasePath } from "@/lib/app-paths";
 import { LogoutButton } from "./logout-button";
@@ -89,6 +90,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
           {user.username}
         </span>
         <span className={styles.role}>{user.role === "admin" ? "管理员" : "普通用户"}</span>
+        <ThemeToggle />
         <LogoutButton />
       </header>
       <nav ref={navigationRef} aria-label="主导航" className={styles.rail}>

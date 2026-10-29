@@ -1,13 +1,4 @@
 .layer {
-  --canvas: #0b0f14;
-  --surface: #131722;
-  --surface-raised: #1e222d;
-  --line: #2a2e39;
-  --action: #2962ff;
-  --negative: #f23645;
-  --text: #d1d4dc;
-  --text-muted: #787b86;
-
   position: fixed;
   inset: 0;
   z-index: 40;
@@ -23,7 +14,7 @@
   height: 100%;
   padding: 0;
   border: 0;
-  background: color-mix(in srgb, var(--canvas) 78%, transparent);
+  background: var(--overlay);
   cursor: default;
 }
 
@@ -33,10 +24,10 @@
   max-height: calc(100dvh - 36px);
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--panel-radius);
   color: var(--text);
   background: var(--surface);
-  box-shadow: 0 20px 52px color-mix(in srgb, var(--canvas) 76%, transparent);
+  box-shadow: 0 20px 52px var(--shadow-color);
 }
 
 .header {
@@ -51,7 +42,7 @@
 }
 
 .eyebrow {
-  color: var(--action);
+  color: var(--action-text);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -127,8 +118,9 @@
 
 .formatRow button {
   min-width: 176px;
-  border-color: var(--action);
+  border-color: var(--action-text);
   background: var(--action);
+  color: var(--on-action);
 }
 
 .feedback {
@@ -148,7 +140,7 @@
   height: 15px;
   flex: 0 0 auto;
   border: 2px solid color-mix(in srgb, var(--action) 25%, var(--line));
-  border-top-color: var(--action);
+  border-top-color: var(--action-text);
   border-radius: 50%;
   animation: export-spin 0.7s linear infinite;
 }

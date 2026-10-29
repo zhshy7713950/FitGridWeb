@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 import { ClientApiError, type FieldErrors } from "@/lib/api-client";
 import { acceptInvitation, getInvitationStatus } from "./invitation-api";
@@ -443,7 +444,10 @@ function InvitationFrame({ step, children }: { step: "verify" | "account" | "sig
             <span aria-hidden="true">FG</span>
             <strong>FitGrid</strong>
           </Link>
-          <span className={styles.publicLabel}>PUBLIC ACCESS</span>
+          <div className={styles.headerActions}>
+            <span className={styles.publicLabel}>PUBLIC ACCESS</span>
+            <ThemeToggle />
+          </div>
         </header>
         <ol className={styles.rail} aria-label="账号创建进度">
           <RailStep label="验证邀请" active={step === "verify"} complete={step !== "verify"} />
