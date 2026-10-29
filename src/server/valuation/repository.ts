@@ -16,7 +16,10 @@ export class ValuationRepository implements HistoryStore {
   const records=await this.db.$queryRaw<Array<{date:string;value:string|null;quality:Observation['quality']}>>`
     SELECT DISTINCT ON (date) date, value::text, quality FROM research_observations
     WHERE series_key=${definition.key} ORDER BY date ASC, revision DESC`;
-  return {definition,observations:records.map(p=>({...p,value:p.value===null?null:p.value.replace(/\.?0+$/,'')||'0'})),
+  const observations=records.map(p=>({...p,value:p.value===null?null:p.value.replace(/\.?0+$/,'')||'0'}));
+  // Dates are ascending: keep the last monthly label without deleting source evidence.
+  const points=definition.frequency==='monthly'?[...new Map(observations.map(p=>[p.date.slice(0,7),p])).values()]:observations;
+  return {definition,observations:points,
     checkedAt:row.checkedAt?.toISOString()??null,lastAttemptAt:row.lastAttemptAt?.toISOString()??null,
     retryAt:row.retryAt?.toISOString()??null,leaseUntil:row.leaseUntil?.toISOString()??null,
     cursor:row.cursor,complete:row.complete,failures:row.failures,error:row.error};

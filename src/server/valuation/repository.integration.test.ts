@@ -3,12 +3,18 @@ import {afterAll,describe,expect,it} from 'vitest';
 import {createPrismaClient} from '@/server/db/client';
 import {ValuationRepository} from './repository';
 import {resolveValuationProduct} from './catalog';
+import {summarizeValuation} from './statistics';
+import type {Observation} from './types';
 const databaseUrl=process.env.TEST_DATABASE_URL;
 describe.skipIf(!databaseUrl)('persistent valuation histories',()=>{
  const db=createPrismaClient(databaseUrl!),repo=new ValuationRepository(db);
  const s={...resolveValuationProduct('510880')!.series.pe!,key:`test:${randomUUID()}`};
+ const monthly={...resolveValuationProduct('VOO')!.series.pe!,key:`test:${randomUUID()}`};
+ const invalidMonthly={...monthly,key:`test:${randomUUID()}`};
+ const daily={...s,key:`test:${randomUUID()}`};
+ const keys=[s.key,monthly.key,invalidMonthly.key,daily.key];
  const now=new Date('2026-10-29T08:00:00Z');
- afterAll(async()=>{await db.researchObservation.deleteMany({where:{seriesKey:s.key}});await db.researchSeries.deleteMany({where:{key:s.key}});await db.$disconnect();});
+ afterAll(async()=>{await db.researchObservation.deleteMany({where:{seriesKey:{in:keys}}});await db.researchSeries.deleteMany({where:{key:{in:keys}}});await db.$disconnect();});
  it('grants exactly one lease across independent repository instances',async()=>{
   const results=await Promise.all([repo.claimSeries(s,now),new ValuationRepository(db).claimSeries(s,now)]);
   expect(results.filter(Boolean)).toHaveLength(1);
@@ -27,5 +33,41 @@ describe.skipIf(!databaseUrl)('persistent valuation histories',()=>{
   await repo.failBatch(replacement!,'HTTP 403',new Date(now.getTime()+124000));
   expect((await repo.readSeries(s))?.observations[0].value).toBe('12');
   expect((await repo.readSeries(s))?.error).toContain('403');
+ });
+ it('counts a monthly observation once across archived fallback, refreshes and revisions',async()=>{
+  const seed=await repo.claimSeries(monthly,now);
+  await repo.failBatch(seed!,'HTTP 403',now,[{date:'2026-09-30',value:'10',quality:'valid'},{date:'2026-10-27',value:'20',quality:'valid'}]);
+  const refreshedAt=new Date(+now+16*60000);
+  const claim=await repo.claimSeries(monthly,refreshedAt);
+  await repo.commitBatch(claim!,{observations:[{date:'2026-10-29',value:'30',quality:'valid'}],reachedStart:true},refreshedAt,{cursor:null,complete:true});
+  const points=(await new ValuationRepository(db).readSeries(monthly))!.observations;
+  expect(points).toEqual([{date:'2026-09-30',value:'10',quality:'valid'},{date:'2026-10-29',value:'30',quality:'valid'}]);
+  expect(summarizeValuation(points)).toMatchObject({validCount:2,referenceCount:1,p30:'16',p70:'24',currentValue:'30',currentPercentile:null});
+  for(const observation of [{date:'2026-10-29',value:'40',quality:'valid'},{date:'2026-10-27',value:'25',quality:'valid'}] satisfies Observation[]){
+   const revision=await repo.claimSeries(monthly,refreshedAt);
+   await repo.commitBatch(revision!,{observations:[observation],reachedStart:true},refreshedAt,{cursor:null,complete:true});
+  }
+  const revised=(await repo.readSeries(monthly))!.observations;
+  expect(revised).toEqual([{date:'2026-09-30',value:'10',quality:'valid'},{date:'2026-10-29',value:'40',quality:'valid'}]);
+  expect(summarizeValuation(revised)).toMatchObject({validCount:2,p30:'19',p70:'31',currentValue:'40',currentPercentile:null});
+  expect(await db.researchObservation.count({where:{seriesKey:monthly.key}})).toBe(5);
+ });
+ it('keeps the latest monthly missing value instead of falling back to an earlier positive value',async()=>{
+  for(const observations of [
+   [{date:'2026-09-30',value:'10',quality:'valid'},{date:'2026-10-27',value:'20',quality:'valid'}],
+   [{date:'2026-10-29',value:null,quality:'missing'}],
+  ] satisfies Observation[][]){
+   const claim=await repo.claimSeries(invalidMonthly,now);
+   await repo.commitBatch(claim!,{observations,reachedStart:true},now,{cursor:null,complete:true});
+  }
+  const points=(await repo.readSeries(invalidMonthly))!.observations;
+  expect(points).toEqual([{date:'2026-09-30',value:'10',quality:'valid'},{date:'2026-10-29',value:null,quality:'missing'}]);
+  expect(summarizeValuation(points)).toMatchObject({validCount:1,currentValue:null,currentPercentile:null,latestDate:'2026-10-29',latestValidDate:'2026-09-30'});
+  expect(await db.researchObservation.count({where:{seriesKey:invalidMonthly.key}})).toBe(3);
+ });
+ it('keeps separate daily dates in the same month',async()=>{
+  const claim=await repo.claimSeries(daily,now);
+  await repo.commitBatch(claim!,{observations:[{date:'2026-10-27',value:'10',quality:'valid'},{date:'2026-10-28',value:'20',quality:'valid'}],reachedStart:true},now,{cursor:null,complete:true});
+  expect((await repo.readSeries(daily))!.observations).toEqual([{date:'2026-10-27',value:'10',quality:'valid'},{date:'2026-10-28',value:'20',quality:'valid'}]);
  });
 });
