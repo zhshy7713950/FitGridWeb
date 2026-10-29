@@ -1,6 +1,9 @@
 import { AdminService, PrismaAdminRepository } from "@/server/admin/admin-service";
 import { getAuth } from "@/server/auth/auth";
 import { getPrismaClient } from "@/server/db/client";
+import { AlertRepository } from "@/server/price-alerts/repository";
+import { PriceAlertService } from "@/server/price-alerts/service";
+import { assertMaintenanceAvailable } from "@/server/maintenance/http";
 import { GridService, type OwnerScope } from "@/server/grid-application/grid-service";
 import { withOwnerScope } from "@/server/grid-persistence/prisma-grid-trade-store";
 import { ExportService } from "@/server/import-export/export-service";
@@ -68,6 +71,7 @@ export function getRuntimeServices() {
   if (!ownerRefSecret || ownerRefSecret.length < 32) {
     throw new Error("OWNER_REF_SECRET must contain at least 32 characters");
   }
+  const maintenance = new FileMaintenanceGateway(maintenanceConfiguration);
   return {
     prisma,
     auth: getAuth(),
@@ -76,7 +80,12 @@ export function getRuntimeServices() {
     admin: new AdminService(new PrismaAdminRepository(prisma), cursorSecret),
     imports: new ImportService(new PrismaImportRepository(prisma)),
     exports: new ExportService(scope, ownerRefSecret),
-    maintenance: new FileMaintenanceGateway(maintenanceConfiguration),
+    maintenance,
+    alerts: new PriceAlertService(new AlertRepository(prisma), {
+      encryptionKey: process.env.NOTIFICATION_ENCRYPTION_KEY ?? "",
+      baseUrl: (process.env.BETTER_AUTH_URL ?? "").replace(/\/$/, ""),
+      beforeRequest: async () => assertMaintenanceAvailable(await maintenance.getMaintenanceMode()),
+    }),
     downloadTokens: new DownloadTokenService({
       secret: maintenanceConfiguration.downloadTokenSecret,
       markerDirectory: maintenanceConfiguration.downloadTokenMarkerDirectory,

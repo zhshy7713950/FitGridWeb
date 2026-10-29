@@ -103,3 +103,5 @@ describe("application paths", () => {
     expect(unauthorizedRoute(visiblePath, basePath)).toBe("/login?returnTo=%2Fgrids");
   });
 });
+
+ it.each(["/price-alerts", "/price-alerts/new?market=us&code=AAPL", "/price-alerts/rule-1/edit", "/settings/notifications"])("preserves alert return path %s", (path) => { expect(safeReturnPath(path)).toBe(path); });

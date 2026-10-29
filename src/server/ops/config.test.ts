@@ -31,6 +31,18 @@ describe("production configuration", () => {
     expect(validateDeploymentEnvironment(validEnvironment).APP_IMAGE).toContain("sha-");
   });
 
+  it("accepts optional independent alert secrets and rejects partial or reused keys", () => {
+    const alert = { PRICE_ALERTS_TASK_SECRET: "c".repeat(64), NOTIFICATION_ENCRYPTION_KEY: "d".repeat(64) };
+    expect(validateDeploymentEnvironment({ ...validEnvironment, ...alert })).toMatchObject(alert);
+    for (const patch of [
+      { ...alert, PRICE_ALERTS_TASK_SECRET: "short" },
+      { ...alert, NOTIFICATION_ENCRYPTION_KEY: "g".repeat(64) },
+      { ...alert, PRICE_ALERTS_TASK_SECRET: validEnvironment.BETTER_AUTH_SECRET },
+      { ...alert, NOTIFICATION_ENCRYPTION_KEY: alert.PRICE_ALERTS_TASK_SECRET },
+      { PRICE_ALERTS_TASK_SECRET: alert.PRICE_ALERTS_TASK_SECRET },
+    ]) expect(() => validateDeploymentEnvironment({ ...validEnvironment, ...patch })).toThrow();
+  });
+
   it.each([
     ["missing secret", { BETTER_AUTH_SECRET: "" }],
     ["short secret", { OWNER_REF_SECRET: "too-short" }],

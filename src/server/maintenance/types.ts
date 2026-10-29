@@ -46,6 +46,9 @@ export interface RestorePreview {
   gridTrades: number;
   invitations: number;
   importPreviews: number;
+  marketInstruments?: number;
+  priceAlerts?: number;
+  priceAlertEvents?: number;
 }
 
 export interface MaintenanceJobStatus {

@@ -1,0 +1,18 @@
+[Unit]
+Description=FitGridWeb private price alert tick
+Requires=docker.service
+After=docker.service fitgridweb.service
+ConditionPathExists=!/run/fitgridweb/maintenance.flag
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=/etc/fitgridweb/fitgridweb.env
+ExecStart=/usr/local/libexec/fitgridweb-price-alerts-tick
+UMask=0077
+TimeoutStartSec=130
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

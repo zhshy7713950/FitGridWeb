@@ -309,6 +309,17 @@ ensure_environment() {
   owner_secret=$(secret_or_new OWNER_REF_SECRET "$environment_file")
   cursor_secret=$(secret_or_new CURSOR_SIGNING_SECRET "$environment_file")
 
+  alerts_task_secret=$(environment_value PRICE_ALERTS_TASK_SECRET "$environment_file")
+  case "$alerts_task_secret" in *[!A-Za-z0-9_+/=.-]*|*REPLACE*|*replace*|*changeme*|'') alerts_task_secret= ;; esac
+  if [ "${#alerts_task_secret}" -lt 32 ] || [ "$alerts_task_secret" = "$auth_secret" ] || [ "$alerts_task_secret" = "$owner_secret" ] || [ "$alerts_task_secret" = "$cursor_secret" ]; then
+    alerts_task_secret=$(openssl rand -hex 32)
+  fi
+  notification_encryption_key=$(environment_value NOTIFICATION_ENCRYPTION_KEY "$environment_file")
+  case "$notification_encryption_key" in *[!a-fA-F0-9]*|'') notification_encryption_key= ;; esac
+  if [ "${#notification_encryption_key}" -ne 64 ] || [ "$notification_encryption_key" = "$auth_secret" ] || [ "$notification_encryption_key" = "$owner_secret" ] || [ "$notification_encryption_key" = "$alerts_task_secret" ] || [ "$notification_encryption_key" = "$cursor_secret" ]; then
+    notification_encryption_key=$(openssl rand -hex 32)
+  fi
+
   log_level=$(environment_value LOG_LEVEL "$environment_file")
   case $log_level in debug|info|warn|error) : ;; *) log_level=info ;; esac
   backup_directory=$(environment_value BACKUP_DIR "$environment_file")
@@ -368,6 +379,8 @@ ensure_environment() {
     printf 'BETTER_AUTH_SECRET=%s\n' "$auth_secret"
     printf 'OWNER_REF_SECRET=%s\n' "$owner_secret"
     printf 'CURSOR_SIGNING_SECRET=%s\n' "$cursor_secret"
+    printf 'PRICE_ALERTS_TASK_SECRET=%s\n' "$alerts_task_secret"
+    printf 'NOTIFICATION_ENCRYPTION_KEY=%s\n' "$notification_encryption_key"
     printf 'LOG_LEVEL=%s\n' "$log_level"
     printf 'BACKUP_DIR=%s\n' "$backup_directory"
     printf 'BACKUP_REMOTE_DIR=%s\n' "$backup_remote_directory"

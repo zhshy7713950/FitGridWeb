@@ -173,9 +173,9 @@ describe("installer environment", () => {
     const first = run(`ensure_environment ${args}`, files);
     expect(first.status, first.stderr).toBe(0);
     const firstEnvironment = await readFile(files.environment, "utf8");
-    const secrets = [...firstEnvironment.matchAll(/^(?:POSTGRES_PASSWORD|APP_DATABASE_PASSWORD|BETTER_AUTH_SECRET|OWNER_REF_SECRET|CURSOR_SIGNING_SECRET)=([a-f0-9]{64})$/gm)].map((match) => match[1]);
-    expect(secrets).toHaveLength(5);
-    expect(new Set(secrets).size).toBe(5);
+    const secrets = [...firstEnvironment.matchAll(/^(?:POSTGRES_PASSWORD|APP_DATABASE_PASSWORD|BETTER_AUTH_SECRET|OWNER_REF_SECRET|CURSOR_SIGNING_SECRET|PRICE_ALERTS_TASK_SECRET|NOTIFICATION_ENCRYPTION_KEY)=([a-f0-9]{64})$/gm)].map((match) => match[1]);
+    expect(secrets).toHaveLength(7);
+    expect(new Set(secrets).size).toBe(7);
     expect(first.stdout + first.stderr).not.toContain(secrets[0]);
     expect(firstEnvironment).toContain("ADMIN_OPS_WEB_DIR=/var/lib/fitgridweb/admin-ops/web");
     expect(firstEnvironment).toContain("ADMIN_OPS_ROOT_DIR=/var/lib/fitgridweb/admin-ops/root");

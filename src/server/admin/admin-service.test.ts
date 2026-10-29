@@ -150,9 +150,18 @@ function managedDatabaseUser(overrides: Record<string, unknown> = {}) {
 }
 
 describe("PrismaAdminRepository", () => {
+  function alertTransaction(calls?: string[]) {
+    return {
+      $queryRaw: vi.fn(async () => { calls?.push("owner-scope"); return []; }),
+      $executeRaw: vi.fn(async () => { calls?.push("cancel-evidence"); return 0; }),
+      priceAlert: { updateMany: vi.fn(async () => { calls?.push("pause-alerts"); return { count: 1 }; }) },
+      priceAlertOutbox: { updateMany: vi.fn(async () => { calls?.push("cancel-outbox"); return { count: 1 }; }) },
+    };
+  }
   it("checks, updates, and revokes sessions inside one serializable transaction", async () => {
     const calls: string[] = [];
     const tx = {
+      ...alertTransaction(calls),
       user: {
         findUnique: vi.fn(async () => {
           calls.push("find");
@@ -185,7 +194,7 @@ describe("PrismaAdminRepository", () => {
     expect(transaction).toHaveBeenCalledWith(expect.any(Function), {
       isolationLevel: "Serializable",
     });
-    expect(calls).toEqual(["find", "count", "update", "revoke"]);
+    expect(calls).toEqual(["find", "count", "update", "revoke", "owner-scope", "pause-alerts", "cancel-evidence", "cancel-outbox"]);
   });
 
   it("returns LAST_ACTIVE_ADMIN without updating status or revoking sessions", async () => {
@@ -209,6 +218,7 @@ describe("PrismaAdminRepository", () => {
 
   it("retries a serializable write conflict with a bounded P2034 policy", async () => {
     const tx = {
+      ...alertTransaction(),
       user: {
         findUnique: vi.fn(async () => managedDatabaseUser()),
         count: vi.fn(async () => 2),
@@ -230,8 +240,9 @@ describe("PrismaAdminRepository", () => {
     expect(transaction).toHaveBeenCalledTimes(3);
   });
 
-  it("retries a PostgreSQL adapter TransactionWriteConflict", async () => {
+  it.each(["direct", "raw-query"])("retries a %s PostgreSQL adapter TransactionWriteConflict", async (source) => {
     const tx = {
+      ...alertTransaction(),
       user: {
         findUnique: vi.fn(async () => managedDatabaseUser()),
         count: vi.fn(async () => 2),
@@ -247,9 +258,12 @@ describe("PrismaAdminRepository", () => {
         originalMessage: "could not serialize access due to read/write dependencies among transactions",
       },
     });
+    const error = source === "raw-query"
+      ? Object.assign(new Error("raw query failed"), { code: "P2010", meta: { driverAdapterError: conflict } })
+      : conflict;
     const transaction = vi
       .fn()
-      .mockRejectedValueOnce(conflict)
+      .mockRejectedValueOnce(error)
       .mockImplementation(async (callback: (client: typeof tx) => unknown) => callback(tx));
     const repository = new PrismaAdminRepository({ $transaction: transaction } as unknown as PrismaClient);
 
@@ -257,6 +271,30 @@ describe("PrismaAdminRepository", () => {
       kind: "updated",
     });
     expect(transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry a raw query failure unrelated to serialization", async () => {
+    const error = Object.assign(new Error("raw query failed"), {
+      code: "P2010",
+      meta: { driverAdapterError: { cause: { kind: "UniqueConstraintViolation", originalCode: "23505" } } },
+    });
+    const transaction = vi.fn().mockRejectedValue(error);
+    const repository = new PrismaAdminRepository({ $transaction: transaction } as unknown as PrismaClient);
+
+    await expect(repository.updateStatusAtomically("member", "disabled")).rejects.toBe(error);
+    expect(transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops retrying raw serialization conflicts after three attempts", async () => {
+    const error = Object.assign(new Error("raw query failed"), {
+      code: "P2010",
+      meta: { driverAdapterError: { cause: { kind: "TransactionWriteConflict", originalCode: "40001" } } },
+    });
+    const transaction = vi.fn().mockRejectedValue(error);
+    const repository = new PrismaAdminRepository({ $transaction: transaction } as unknown as PrismaClient);
+
+    await expect(repository.updateStatusAtomically("member", "disabled")).rejects.toBe(error);
+    expect(transaction).toHaveBeenCalledTimes(3);
   });
 
   it("stops retrying after three P2034 conflicts", async () => {

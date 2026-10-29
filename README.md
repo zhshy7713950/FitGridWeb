@@ -6,6 +6,8 @@ F.I.T Grid Web 是对 Android `FitProj` v2.1.0 网格交易能力的 Web 迁移�
 
 Android 源仓库仅作为只读行为参考，不属于本仓库，也不得把 Web 代码提交到 Android 仓库。
 
+股价预警支持沪深及美股股票、场内 ETF，提供指定价格、动态日均线和均线百分比条件，使用 Bark 通知。操作与升级见[股价预警部署与恢复](docs/price-alerts.md)，主备行情检查见[行情诊断](docs/price-alerts-diagnostics.md)，本地证据与待完成的 VPS 验收见[验证记录](docs/price-alerts-verification.md)。
+
 ## 本地前端调试
 
 只检查登录页、应用框架、响应式布局、搜索和分页时，不需要 PostgreSQL、Docker 或生产镜像：

@@ -76,3 +76,43 @@ export type GridTrade = Prisma.GridTradeModel
  * 
  */
 export type ImportPreview = Prisma.ImportPreviewModel
+/**
+ * Model MarketInstrument
+ * 
+ */
+export type MarketInstrument = Prisma.MarketInstrumentModel
+/**
+ * Model MarketMinute
+ * 
+ */
+export type MarketMinute = Prisma.MarketMinuteModel
+/**
+ * Model MarketDailyBasis
+ * 
+ */
+export type MarketDailyBasis = Prisma.MarketDailyBasisModel
+/**
+ * Model MarketScan
+ * 
+ */
+export type MarketScan = Prisma.MarketScanModel
+/**
+ * Model PriceAlert
+ * 
+ */
+export type PriceAlert = Prisma.PriceAlertModel
+/**
+ * Model PriceAlertChannel
+ * 
+ */
+export type PriceAlertChannel = Prisma.PriceAlertChannelModel
+/**
+ * Model PriceAlertEvent
+ * 
+ */
+export type PriceAlertEvent = Prisma.PriceAlertEventModel
+/**
+ * Model PriceAlertOutbox
+ * 
+ */
+export type PriceAlertOutbox = Prisma.PriceAlertOutboxModel

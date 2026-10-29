@@ -329,6 +329,11 @@ case "\${MAINTENANCE_HEALTH_PHASE:-}" in
       printf 'health-failed\n' >>"$COMMAND_LOG"
       exit 22
     fi ;;
+  timer-recovery)
+    if [ "\${ALERT_RECOVERY_HEALTH:-true}" != true ]; then
+      printf 'health-failed\n' >>"$COMMAND_LOG"
+      exit 22
+    fi ;;
   snapshot-recovery)
     if [ "$SNAPSHOT_RECOVERY_HEALTH" != true ]; then
       printf 'health-failed\n' >>"$COMMAND_LOG"
@@ -709,6 +714,29 @@ exec "${realSha256sum}" "$@"`,
     maintenance: () => readJson(path.join(statuses, "maintenance.json")),
     rootMaintenance: () => readJson(path.join(rootOps, "maintenance.json")),
   };
+}
+
+async function configureAlertTimer(files: Awaited<ReturnType<typeof workerFixture>>, active = true) {
+  const state = path.join(files.root, "alert-timer-active");
+  await writeFile(state, active ? "active\n" : "inactive\n");
+  await writeFile(files.environmentFile, `${await readFile(files.environmentFile, "utf8")}\nPRICE_ALERTS_TASK_SECRET=${"a".repeat(64)}\n`);
+  await executable(path.join(files.root, "bin"), "systemctl", `
+case "$*" in
+  "show --property=LoadState --value "*) printf 'loaded\\n' ;;
+  "show --property=ActiveState --value fitgridweb-price-alerts.timer") cat "${state}" ;;
+  "show --property=ActiveState --value fitgridweb-price-alerts.service") printf 'inactive\\n' ;;
+  "stop fitgridweb-price-alerts.timer") printf 'inactive\\n' >"${state}"; printf 'stop-alert-timer\\n' >>"$COMMAND_LOG" ;;
+  "stop fitgridweb-price-alerts.service") printf 'stop-alert-service\\n' >>"$COMMAND_LOG" ;;
+  "start fitgridweb-price-alerts.timer")
+    [ ! -e "$MAINTENANCE_FENCE_FILE" ] || exit 81
+    /usr/bin/jq -e '.active == false' "$ROOT_OPS_DIRECTORY/maintenance.json" >/dev/null || exit 82
+    grep -q 'health-ok' "$COMMAND_LOG" || exit 83
+    printf 'active\\n' >"${state}"
+    printf 'start-alert-timer\\n' >>"$COMMAND_LOG"
+    [ "\${FAIL_ALERT_TIMER_START:-false}" != true ] || exit 84 ;;
+  *) exit 12 ;;
+esac`);
+  return state;
 }
 
 describe("host maintenance worker", { timeout: 15_000 }, () => {
@@ -1136,6 +1164,94 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "succeeded" });
     expect(await readFile(path.join(files.root, "ln.log"), "utf8")).toBe("claim\n");
   });
+
+  it.each([false, true])("waits for alert timer/service before snapshot, aborting on stop failure (%s)", async (fail) => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+    await writeFile(files.environmentFile, `${await readFile(files.environmentFile, "utf8")}\nPRICE_ALERTS_TASK_SECRET=${"a".repeat(64)}\n`);
+    await executable(path.join(files.root, "bin"), "systemctl", `
+case "$*" in
+  "show --property=LoadState --value "*) printf 'loaded\\n' ;;
+  "show --property=ActiveState --value "*) printf 'inactive\\n' ;;
+  "stop fitgridweb-price-alerts.timer") printf 'stop-alert-timer\\n' >>"$COMMAND_LOG" ;;
+  "stop fitgridweb-price-alerts.service") printf 'stop-alert-service\\n' >>"$COMMAND_LOG"; exit ${fail ? 1 : 0} ;;
+  *) exit 12 ;;
+esac`);
+    const result = files.runWorker();
+    const sequence = await files.commandSequence();
+    expect(sequence.slice(0, 2)).toEqual(["stop-alert-timer", "stop-alert-service"]);
+    if (fail) {
+      expect(result.status).not.toBe(0);
+      expect(sequence).not.toContain("rollback-snapshot");
+      expect(sequence).not.toContain("reset-schema");
+    } else {
+      expect(result.status, result.stderr).toBe(0);
+      expect(sequence.indexOf("stop-alert-service")).toBeLessThan(sequence.indexOf("rollback-snapshot"));
+    }
+  }, 30000);
+
+  it.each([
+    ["restore", true], ["restore", false],
+    ["rollback", true], ["rollback", false],
+    ["snapshot", true], ["snapshot", false],
+  ] as const)("restores the prior alert timer state after healthy %s (active=%s)", async (outcome, wasActive) => {
+    const files = await workerFixture({ restoredHealth: outcome !== "rollback" });
+    await files.prepareRestore();
+    await files.enqueueRestore();
+    const timer = await configureAlertTimer(files, wasActive);
+    const result = files.runWorker(outcome === "snapshot" ? { FAIL_SYNC_TARGET: "rollback.dump.enc" } : {});
+    expect(result.status === 0).toBe(outcome !== "snapshot");
+    expect(await readFile(timer, "utf8")).toBe(wasActive ? "active\n" : "inactive\n");
+    expect(await files.maintenance()).toMatchObject({ active: false });
+    await expect(stat(files.fence)).rejects.toThrow();
+    await expect(stat(path.join(files.rootOps, "alert-timer-state.json"))).rejects.toThrow();
+    const sequence = await files.commandSequence();
+    if (wasActive) expect(sequence.lastIndexOf("start-alert-timer")).toBeGreaterThan(sequence.lastIndexOf("health-ok"));
+    else expect(sequence).not.toContain("start-alert-timer");
+    expect(Object.keys(await files.maintenance()).sort()).toEqual(["active", "schemaVersion", "updatedAt"]);
+  }, 30000);
+
+  it("keeps the alert timer stopped and visible intervention on a failed resume", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+    const timer = await configureAlertTimer(files);
+    const result = files.runWorker({ FAIL_ALERT_TIMER_START: "true" });
+    expect(result.status).not.toBe(0);
+    expect(await readFile(timer, "utf8")).toBe("inactive\n");
+    expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "intervention-required", code: "ALERT_TIMER_START_FAILED" });
+    expect(await files.rootMaintenance()).toMatchObject({ active: true });
+    expect(await stat(files.fence)).toBeDefined();
+    expect(await readJson(path.join(files.rootOps, "alert-timer-state.json"))).toEqual({ schemaVersion: 1, jobId: RESTORE_JOB, active: true });
+    expect((await stat(path.join(files.rootOps, "alert-timer-state.json"))).mode & 0o777).toBe(0o600);
+  }, 30000);
+
+  it("stops the timer and requires intervention for malformed private resume state", async () => {
+    const files = await workerFixture();
+    await files.prepareRestore();
+    await files.enqueueRestore();
+    const timer = await configureAlertTimer(files);
+    const stateFile = path.join(files.rootOps, "alert-timer-state.json");
+    await writeFile(stateFile, JSON.stringify({ schemaVersion: 1, jobId: RESTORE_JOB, active: "true" }));
+    await chmod(stateFile, 0o600);
+    const result = files.runWorker();
+    expect(result.status).not.toBe(0);
+    expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "intervention-required", code: "ALERT_TIMER_STATE_FAILED" });
+    expect(await readFile(timer, "utf8")).toBe("inactive\n");
+    expect(await files.commandSequence()).not.toContain("rollback-snapshot");
+  }, 30000);
+
+  it("does not resume the alert timer when rollback health is unresolved", async () => {
+    const files = await workerFixture({ restoredHealth: false, rollbackHealth: false });
+    await files.prepareRestore();
+    await files.enqueueRestore();
+    const timer = await configureAlertTimer(files);
+    expect(files.runWorker().status).not.toBe(0);
+    expect(await readFile(timer, "utf8")).toBe("inactive\n");
+    expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "intervention-required", code: "ROLLBACK_FAILED" });
+    expect(await files.commandSequence()).not.toContain("start-alert-timer");
+  }, 30000);
 
   it("recreates the reviewed schema before restoring only portable table data", async () => {
     const files = await workerFixture();
@@ -1982,8 +2098,9 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     ]));
   });
 
-  it("completes a terminal restore after power loss while clearing the authoritative marker", async () => {
+  it.each([[true, true], [false, true], [true, false]] as const)("completes a terminal restore after power loss while clearing the authoritative marker (active=%s, healthy=%s)", async (wasActive, recoveryHealthy) => {
     const files = await workerFixture();
+    const timer = await configureAlertTimer(files, wasActive);
     await files.prepareRestore();
     await files.enqueueRestore();
     await writeFile(path.join(files.statuses, "active-job.json"), JSON.stringify({
@@ -2003,23 +2120,40 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     });
     const childExit = new Promise<number | null>((resolve) => child.on("exit", resolve));
 
-    await waitForFile(String(files.env.INACTIVE_MARKER_HOLD_FILE));
-    const terminalBeforeMarkerClear = path.join(files.rootOps, "completed", `${RESTORE_JOB}.json`);
-    expect(await readJson(terminalBeforeMarkerClear))
-      .toMatchObject({ id: RESTORE_JOB, type: "restore", state: "succeeded" });
-    expect((await stat(terminalBeforeMarkerClear)).mode & 0o777).toBe(0o400);
-    const beforeCrash = await files.commandSequence();
-    expect(beforeCrash.lastIndexOf("sync-terminal")).toBeLessThan(beforeCrash.lastIndexOf("sync-marker"));
-    expect(beforeCrash.lastIndexOf("sync-terminal-dir")).toBeLessThan(beforeCrash.lastIndexOf("sync-marker"));
-    if (child.pid === undefined) throw new Error("worker did not start");
-    process.kill(-child.pid, "SIGTERM");
+    try {
+      await waitForFile(String(files.env.INACTIVE_MARKER_HOLD_FILE), 20000);
+      const terminalBeforeMarkerClear = path.join(files.rootOps, "completed", `${RESTORE_JOB}.json`);
+      expect(await readJson(terminalBeforeMarkerClear))
+        .toMatchObject({ id: RESTORE_JOB, type: "restore", state: "succeeded" });
+      expect((await stat(terminalBeforeMarkerClear)).mode & 0o777).toBe(0o400);
+      const beforeCrash = await files.commandSequence();
+      expect(beforeCrash.lastIndexOf("sync-terminal")).toBeLessThan(beforeCrash.lastIndexOf("sync-marker"));
+      expect(beforeCrash.lastIndexOf("sync-terminal-dir")).toBeLessThan(beforeCrash.lastIndexOf("sync-marker"));
+      if (child.pid === undefined) throw new Error("worker did not start");
+    } finally {
+      if (child.pid !== undefined) {
+        try { process.kill(-child.pid, "SIGTERM"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
+      }
+    }
     expect(await childExit).not.toBe(0);
     expect((await stat(files.fence)).mode & 0o777).toBe(0o644);
 
-    const recovery = files.runRecovery();
+    expect(await readJson(path.join(files.rootOps, "alert-timer-state.json"))).toEqual({ schemaVersion: 1, jobId: RESTORE_JOB, active: wasActive });
+    // A host restart may have auto-started an enabled timer; persisted intent
+    // must still preserve an administrator's earlier manual stop.
+    await writeFile(timer, "active\n");
+    const recovery = files.runRecovery({ ALERT_RECOVERY_HEALTH: String(recoveryHealthy) });
+    if (!recoveryHealthy) {
+      expect(recovery.status).not.toBe(0);
+      expect(await readFile(timer, "utf8")).toBe("inactive\n");
+      expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "intervention-required", code: "ALERT_TIMER_RECOVERY_FAILED" });
+      expect(await stat(files.fence)).toBeDefined();
+      return;
+    }
 
     expect(recovery.status, recovery.stderr).toBe(0);
     expect(await files.status(RESTORE_JOB)).toMatchObject({ state: "succeeded" });
+    expect(await readFile(timer, "utf8")).toBe(wasActive ? "active\n" : "inactive\n");
     expect(await readJson(path.join(files.rootOps, "completed", `${RESTORE_JOB}.json`)))
       .toMatchObject({ id: RESTORE_JOB, type: "restore", state: "succeeded" });
     expect(await files.rootMaintenance()).toMatchObject({ active: false });
@@ -2027,7 +2161,7 @@ describe("host maintenance worker", { timeout: 15_000 }, () => {
     await expect(stat(files.fence)).rejects.toThrow();
     await expect(stat(path.join(files.statuses, "active-job.json"))).rejects.toThrow();
     await expect(stat(path.join(files.rootOps, "claimed", `${RESTORE_JOB}.json`))).rejects.toThrow();
-  });
+  }, 30000);
 
   it("marks an interrupted in-maintenance restore for intervention instead of retrying it", async () => {
     const files = await workerFixture();
