@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>FitGrid · 浅色皮肤提案</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./demo.js" defer></script>
+</head>
+<body data-theme="azure">
+  <svg class="svg-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v5c0 5-4 8-8 10-4-2-8-5-8-10V6Z"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 5"/></symbol>
+    <symbol id="i-data" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 4 16 4 16 0V5M4 12v7c0 4 16 4 16 0v-7"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  </svg>
+
+  <section class="studio" aria-label="皮肤方案选择">
+    <header class="studio-heading">
+      <div><span class="studio-brand">FITGRID <span>/ DESIGN STUDY</span></span><h1>给策略工作台，换一种明亮。</h1><p>三种浅色方向，同一套网格数据。点击方案，即刻预览。</p></div>
+      <button id="compare-toggle" class="compare-toggle" aria-pressed="false"><svg><use href="#i-grid"/></svg><span>三款并排对比</span></button>
+    </header>
+    <div class="theme-options" role="group" aria-label="选择浅色皮肤">
+      <button class="theme-option" data-choice="azure" aria-pressed="true"><span class="theme-swatch swatch-azure"><i></i><i></i><i></i></span><span class="option-copy"><strong>晴空蓝 <small>推荐</small></strong><span>冷白 × 矢车菊蓝 · 清晰、利落、专注</span></span><span class="option-check"><svg><use href="#i-check"/></svg></span></button>
+      <button class="theme-option" data-choice="jade" aria-pressed="false"><span class="theme-swatch swatch-jade"><i></i><i></i><i></i></span><span class="option-copy"><strong>松石绿</strong><span>雾绿 × 深松石 · 柔和、安静、从容</span></span><span class="option-check"><svg><use href="#i-check"/></svg></span></button>
+      <button class="theme-option" data-choice="porcelain" aria-pressed="false"><span class="theme-swatch swatch-porcelain"><i></i><i></i><i></i></span><span class="option-copy"><strong>暖瓷橙</strong><span>暖瓷白 × 琥珀橙 · 温润、轻盈、有序</span></span><span class="option-check"><svg><use href="#i-check"/></svg></span></button>
+    </div>
+    <div class="preview-caption"><span><span class="live-dot"></span><strong id="active-title">晴空蓝</strong><span id="active-description">清爽的冷白工作区，让数据成为视觉中心。</span></span><span>交互原型 · 演示数据</span></div>
+  </section>
+
+  <div id="comparison" class="comparison" hidden></div>
+
+  <div class="app" id="single-preview">
+    <aside class="sidebar" aria-label="应用导航预览">
+      <a class="brand" href="./" aria-label="FitGrid 策略工作台"><span class="brand-mark"><svg><use href="#i-grid"/></svg></span><span>FitGrid<small>策略工作台</small></span></a>
+      <span class="nav-label">工作空间</span>
+      <nav class="navigation" aria-label="主导航">
+        <button class="nav-item active" aria-current="page"><svg><use href="#i-grid"/></svg><span>网格产品</span><span class="nav-count">6</span></button>
+        <button class="nav-item" data-notice="股价提醒" aria-label="股价提醒"><svg><use href="#i-bell"/></svg><span>股价提醒</span><span class="notice-dot"></span></button>
+        <span class="nav-label nav-group">管理</span>
+        <button class="nav-item" data-notice="账号管理" aria-label="账号管理"><svg><use href="#i-users"/></svg><span>账号管理</span></button>
+        <button class="nav-item" data-notice="数据管理" aria-label="数据管理"><svg><use href="#i-data"/></svg><span>数据管理</span></button>
+        <span class="nav-label nav-group">偏好设置</span>
+        <button class="nav-item" data-notice="通知设置" aria-label="通知设置"><svg><use href="#i-bell"/></svg><span>通知设置</span></button>
+        <button class="nav-item" data-notice="安全设置" aria-label="安全设置"><svg><use href="#i-shield"/></svg><span>安全设置</span></button>
+      </nav>
+      <div class="sidebar-bottom"><div class="appearance"><svg><use href="#i-sun"/></svg><span>明亮模式</span><span class="appearance-dot"></span></div><div class="profile"><span class="avatar">D</span><span><strong>Demo 用户</strong><small>管理员</small></span><span class="profile-menu" aria-hidden="true">···</span></div></div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar"><span class="breadcrumb">工作空间 <span>/</span> <strong>网格产品</strong></span><div class="topbar-right"><span class="safe"><svg><use href="#i-shield"/></svg>安全连接</span><span class="topbar-divider"></span><button class="theme-cycle" id="cycle-theme" title="切换下一款浅色皮肤"><svg><use href="#i-sun"/></svg><span>一键换肤</span><span class="theme-dots"><i></i><i></i><i></i></span></button></div></header>
+      <main class="content">
+        <header class="page-heading"><div><span class="eyebrow">YOUR STRATEGIES, IN FOCUS</span><h2>网格产品<span class="heading-dot">.</span></h2><p>把握每一个网格，让策略井然有序。</p></div><div class="page-actions"><button class="button" data-notice="导入数据"><svg><use href="#i-upload"/></svg>导入数据</button><button class="button primary" data-notice="新建产品"><svg><use href="#i-plus"/></svg>新建产品</button></div></header>
+        <section class="stats" aria-label="策略概览">
+          <div class="stat"><span class="stat-label">策略产品<svg><use href="#i-grid"/></svg></span><strong>6<span>个</span></strong><small>覆盖 6 个 ETF 品种</small></div>
+          <div class="stat"><span class="stat-label">做多 / 做空<span class="stat-symbol">↗</span></span><strong>5<span class="stat-slash">/</span>1</strong><small><span class="tiny-dot long-dot"></span>做多为主的策略组合</small></div>
+          <div class="stat budget"><span class="stat-label">单份预算合计<span class="currency-symbol">¥</span></span><strong><span class="currency">¥</span>11,500<span>.00</span></strong><small>所有产品的每份金额之和</small></div>
+          <div class="stat"><span class="stat-label">价格提醒<svg><use href="#i-bell"/></svg></span><strong>3<span>条</span></strong><small><span class="tiny-dot"></span>演示提醒 · 等待触发</small></div>
+        </section>
+        <div class="main-grid">
+          <section class="panel products-panel" aria-labelledby="products-title">
+            <header class="panel-heading"><div><h3 id="products-title">我的产品 <span>6</span></h3><p>选择产品，查看网格配置</p></div><button class="text-button" id="refresh">↻ <span>刷新</span></button></header>
+            <div class="list-controls"><div class="filters" role="group" aria-label="按策略方向筛选"><button data-filter="all" aria-pressed="true">全部 <span>6</span></button><button data-filter="long" aria-pressed="false">做多</button><button data-filter="short" aria-pressed="false">做空</button></div><label class="search"><svg><use href="#i-search"/></svg><input id="search" type="search" placeholder="搜索名称或代码" aria-label="搜索产品名称或代码"></label></div>
+            <div class="table-scroll"><table class="product-table"><thead><tr><th scope="col">产品名称 / 代码</th><th scope="col">方向</th><th scope="col">最高价</th><th scope="col">每份金额</th><th scope="col"><span class="sr-only">查看产品</span></th></tr></thead><tbody id="product-rows"></tbody></table><div class="empty" id="empty" hidden>没有匹配的产品，请调整搜索或筛选条件。</div></div>
+            <footer class="table-footer"><span id="result-count">共 6 个产品</span><span>价格单位：人民币 / 元</span></footer>
+          </section>
+          <aside class="panel detail-panel" aria-labelledby="detail-title">
+            <div class="detail-heading"><span class="eyebrow">STRATEGY SNAPSHOT</span><span class="detail-tag">配置预览</span></div>
+            <div class="detail-name"><span class="product-avatar" id="detail-avatar">Au</span><div><h3 id="detail-title">黄金 ETF</h3><span id="detail-code">518880 · ETF</span></div><span class="badge" id="detail-direction">做多</span></div>
+            <div class="detail-metrics"><div><span>最高价</span><strong id="detail-price">6.9200</strong></div><div><span>每份金额</span><strong id="detail-share">1,500<small>.00</small></strong></div></div>
+            <div class="ladder-heading"><h4>网格价格阶梯</h4><span>档位幅度 5%</span></div>
+            <div class="ladder" id="ladder"></div>
+            <div class="legend"><span><i class="buy-key"></i>买入价</span><span><i class="sell-key"></i>卖出价</span></div>
+            <div class="strategy-note"><svg><use href="#i-grid"/></svg><p>价格有边界，策略有节奏。<br><span>按预设档位，规划每一次买卖。</span></p></div>
+            <button class="detail-action" id="detail-action">查看网格明细<svg><use href="#i-arrow"/></svg></button>
+          </aside>
+        </div>
+        <footer class="workspace-footer"><span><span class="footer-mark">▦</span> FitGrid · 策略有序，交易有度</span><span>视觉原型 · 数据仅用于样式展示</span></footer>
+      </main>
+    </div>
+  </div>
+  <footer class="studio-footer"><span id="design-notes">冷白主背景 / 蓝色焦点 / 紧凑圆角 / 清晰分层</span><span>浅色主题提案 · 2026.10</span></footer>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <dialog id="detail-dialog" aria-labelledby="dialog-title"><div class="dialog-heading"><div><span class="eyebrow">GRID DETAILS</span><h3 id="dialog-title">黄金 ETF · 网格明细</h3></div><button id="close-dialog" class="button" aria-label="关闭网格明细">关闭 ×</button></div><p>样式演示 · 以下档位由最高价按固定 5% 幅度展示。</p><div class="table-scroll"><table><thead><tr><th scope="col">档位</th><th scope="col">买入价</th><th scope="col">卖出价</th><th scope="col">价差比例</th></tr></thead><tbody id="dialog-rows"></tbody></table></div><p class="dialog-note">正式计算结果以现有网格算法为准。</p></dialog>
+</body>
+</html>

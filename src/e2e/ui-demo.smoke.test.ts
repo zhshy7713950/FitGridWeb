@@ -186,6 +186,116 @@ describe.sequential("database-free UI demo", () => {
     return { page, consoleErrors };
   }
 
+  async function selectTheme(page: Page, theme: "light" | "dark") {
+    if (await page.locator("html").getAttribute("data-theme") !== theme) {
+      await page.getByRole("button", { name: theme === "dark" ? "切换为深色模式" : "切换为浅色模式" }).click();
+    }
+    await expect.poll(() => page.locator("html").getAttribute("data-theme")).toBe(theme);
+    await page.getByRole("button", { name: theme === "dark" ? "切换为浅色模式" : "切换为深色模式" }).waitFor();
+  }
+
+  it("restores the saved theme before React loads", async () => {
+    const { page } = await newPage({ width: 1440, height: 900 });
+    await page.addInitScript(() => localStorage.setItem("fitgrid-theme", "dark"));
+    await page.route(/\/_next\/static\/.*\.js(?:\?|$)/, (route) => route.abort());
+    await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
+    expect(await page.locator("html").getAttribute("data-theme")).toBe("dark");
+    expect(await page.locator('meta[name="theme-color"]').getAttribute("content")).toBe("#0B0F14");
+    expect(await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor)).toBe("rgb(11, 15, 20)");
+  }, 30_000);
+
+  it("defaults to light and remembers theme across navigation, reload, tabs and login", async () => {
+    const { page, consoleErrors } = await newPage({ width: 1440, height: 900 });
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle" });
+    expect(await page.locator("html").getAttribute("data-theme")).toBe("light");
+    await page.getByLabel("用户名", { exact: true }).fill("demo");
+    await page.getByLabel("密码", { exact: true }).fill("fitgrid-demo");
+    await selectTheme(page, "dark");
+    expect(await page.getByLabel("用户名", { exact: true }).inputValue()).toBe("demo");
+    expect(await page.getByLabel("密码", { exact: true }).inputValue()).toBe("fitgrid-demo");
+    expect(await page.evaluate(() => localStorage.getItem("fitgrid-theme"))).toBe("dark");
+    await page.getByRole("button", { name: "登录工作台" }).click();
+    await page.waitForURL(`${baseUrl}/grids`);
+    expect(await page.locator("html").getAttribute("data-theme")).toBe("dark");
+    await page.reload({ waitUntil: "networkidle" });
+    expect(await page.locator("html").getAttribute("data-theme")).toBe("dark");
+    expect(await page.locator('meta[name="theme-color"]').count()).toBe(1);
+    expect(await page.locator('meta[name="theme-color"]').getAttribute("content")).toBe("#0B0F14");
+    expect(await page.locator('meta[name="color-scheme"]').getAttribute("content")).toBe("dark");
+
+    const otherTab = await page.context().newPage();
+    await otherTab.goto(`${baseUrl}/login`, { waitUntil: "networkidle" });
+    await selectTheme(otherTab, "light");
+    await expect.poll(() => page.locator("html").getAttribute("data-theme")).toBe("light");
+    await selectTheme(page, "dark");
+    await expect.poll(() => otherTab.locator("html").getAttribute("data-theme")).toBe("dark");
+    await otherTab.close();
+
+    await page.getByRole("button", { name: "退出登录" }).click();
+    await page.waitForURL(`${baseUrl}/login`);
+    expect(await page.locator("html").getAttribute("data-theme")).toBe("dark");
+    await page.getByLabel("密码", { exact: true }).fill("fitgrid-demo");
+    await page.getByRole("button", { name: "登录工作台" }).click();
+    await page.waitForURL(`${baseUrl}/grids`);
+    expect(await page.locator("html").getAttribute("data-theme")).toBe("dark");
+    expect(consoleErrors).toEqual([]);
+  }, 60_000);
+
+  it.each(["light", "dark"] as const)("applies the %s theme throughout the app without changing layouts", async (theme) => {
+    const { page, consoleErrors } = await newPage({ width: 1440, height: 900 });
+    await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle" });
+    await selectTheme(page, theme);
+    for (const path of ["/login", "/grids", "/grids/new", "/grids/import", "/price-alerts", "/price-alerts/new", "/settings/notifications", "/settings/security", "/admin", "/admin/data", "/invite/invalid-demo-invitation-token-0001"]) {
+      await page.goto(`${baseUrl}${path}`, { waitUntil: "networkidle" });
+      expect(await page.locator("html").getAttribute("data-theme")).toBe(theme);
+      expect(await page.getByRole("button", { name: theme === "dark" ? "切换为浅色模式" : "切换为深色模式" }).isVisible()).toBe(true);
+      const surfaceValues = await page.locator("main, main *").evaluateAll(elements => [...new Set(elements.map(element => getComputedStyle(element).getPropertyValue("--surface").trim()))]);
+      expect(surfaceValues).toHaveLength(1);
+      expect(surfaceValues[0]).toMatch(theme === "light" ? /^#(?:fff|ffffff)$/i : /^#131722$/i);
+      await expectNoHorizontalOverflow(page);
+    }
+
+    await page.goto(`${baseUrl}/grids`, { waitUntil: "networkidle" });
+    await page.getByRole("link", { name: "黄金 ETF", exact: true }).waitFor();
+    for (const width of [320, 390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expectNoHorizontalOverflow(page);
+      const toggle = page.getByRole("button", { name: theme === "dark" ? "切换为浅色模式" : "切换为深色模式" });
+      const toggleBox = await toggle.boundingBox();
+      expect(toggleBox).not.toBeNull();
+      expect(toggleBox!.x).toBeGreaterThanOrEqual(0);
+      expect(toggleBox!.x + toggleBox!.width).toBeLessThanOrEqual(width);
+      if (width < 768) expect(toggleBox!.height).toBeGreaterThanOrEqual(44);
+      await page.screenshot({ path: `/tmp/fitgrid-theme-${theme}-${width}-grids.png`, fullPage: true });
+    }
+    await page.getByRole("button", { name: "数据备份", exact: true }).click();
+    const backup = page.getByRole("dialog", { name: "数据备份" });
+    expect(await backup.evaluate(e => getComputedStyle(e).backgroundColor)).toBe(theme === "light" ? "rgb(255, 255, 255)" : "rgb(19, 23, 34)");
+    await page.getByRole("button", { name: "关闭数据备份", exact: true }).click();
+    await page.getByRole("link", { name: "黄金 ETF", exact: true }).click();
+    await page.waitForURL(`${baseUrl}/grids/demo-grid-01`);
+    const medium = page.locator('tbody tr[data-grid-size="medium"]');
+    const large = page.locator('tbody tr[data-grid-size="large"]');
+    await medium.waitFor();
+    const expectedMedium = theme === "light" ? "rgb(14, 98, 136)" : "rgb(56, 189, 248)";
+    const expectedLarge = theme === "light" ? "rgb(128, 83, 0)" : "rgb(242, 201, 76)";
+    expect(await medium.locator("td:nth-child(2) span").evaluate(e => getComputedStyle(e).color)).toBe(expectedMedium);
+    expect(await large.locator("td:nth-child(2) span").evaluate(e => getComputedStyle(e).color)).toBe(expectedLarge);
+    await page.screenshot({ path: `/tmp/fitgrid-theme-${theme}-detail.png`, fullPage: true });
+    await page.getByRole("button", { name: "查看第 1 笔明细" }).click();
+    const inspector = page.getByRole("dialog", { name: "网格行明细" });
+    expect(await inspector.evaluate(e => getComputedStyle(e).backgroundColor)).toBe(theme === "light" ? "rgb(255, 255, 255)" : "rgb(19, 23, 34)");
+    await page.getByRole("button", { name: "关闭", exact: true }).click();
+    await page.setViewportSize({ width: 320, height: 844 });
+    await expectNoHorizontalOverflow(page);
+    await page.getByRole("button", { name: "更多操作" }).click();
+    const menu = page.getByRole("group", { name: "更多操作菜单" });
+    expect(await menu.evaluate(e => getComputedStyle(e).backgroundColor)).toBe(theme === "light" ? "rgb(255, 255, 255)" : "rgb(19, 23, 34)");
+    await page.keyboard.press("Escape");
+    expect(consoleErrors).toEqual([]);
+  }, 120_000);
+
   it("keeps invalid invitations public and removes every registration field", async () => {
     const { page, consoleErrors } = await newPage();
     await page.goto(`${baseUrl}/invite/invalid-demo-invitation-token-0001`, {
@@ -520,8 +630,8 @@ describe.sequential("database-free UI demo", () => {
     expect(mediumPalette.backgrounds[0]).not.toBe(smallPalette.backgrounds[0]);
     expect(largePalette.backgrounds[0]).not.toBe(smallPalette.backgrounds[0]);
     expect(mediumPalette.backgrounds[0]).not.toBe(largePalette.backgrounds[0]);
-    expect(mediumPalette.labelColor).toBe("rgb(56, 189, 248)");
-    expect(largePalette.labelColor).toBe("rgb(242, 201, 76)");
+    expect(mediumPalette.labelColor).toBe("rgb(14, 98, 136)");
+    expect(largePalette.labelColor).toBe("rgb(128, 83, 0)");
     const mediumRow = page.locator('tbody tr[data-grid-size="medium"]');
     const mediumDefaultBackground = mediumPalette.backgrounds[0];
     await mediumRow.locator("td").first().click();

@@ -1,8 +1,9 @@
 .page {
+  position: relative;
   min-height: 100dvh;
   display: grid;
   place-items: center;
-  padding: 32px;
+  padding: 72px 32px 32px;
   background: var(--canvas);
 }
 
@@ -43,8 +44,8 @@
   width: 30px;
   height: 30px;
   border-radius: 6px;
-  color: white;
   background: var(--action);
+  color: var(--on-action);
   font-size: 11px;
 }
 
@@ -52,7 +53,7 @@
   position: absolute;
   inset: 72px 24px auto;
   width: calc(100% - 48px);
-  color: var(--action);
+  color: var(--action-text);
 }
 
 .ladderBand {
@@ -81,7 +82,7 @@
 }
 
 .nodes {
-  fill: #6e91ff;
+  fill: var(--action);
   stroke: var(--surface);
   stroke-width: 4;
 }
@@ -143,7 +144,7 @@
 }
 
 .demoNotice code {
-  color: #9db5ff;
+  color: var(--action-text);
   font-family: "SFMono-Regular", Consolas, monospace;
 }
 
@@ -164,11 +165,11 @@
 }
 
 .field input:focus {
-  border-color: var(--action);
+  border-color: var(--action-text);
 }
 
 .field span {
-  color: #ff8f99;
+  color: var(--negative);
   font-size: 12px;
 }
 
@@ -176,8 +177,8 @@
   min-height: 44px;
   border: 0;
   border-radius: 5px;
-  color: white;
   background: var(--action);
+  color: var(--on-action);
   font-weight: 700;
   cursor: pointer;
 }
@@ -193,9 +194,9 @@
   grid-template-columns: 24px 1fr;
   gap: 10px;
   padding: 11px 12px;
-  border: 1px solid color-mix(in srgb, var(--negative) 72%, white);
+  border: 1px solid color-mix(in srgb, var(--negative) 72%, var(--line));
   border-radius: 5px;
-  color: #ffd7db;
+  color: var(--negative);
   background: color-mix(in srgb, var(--negative) 16%, var(--surface));
   font-size: 13px;
   line-height: 1.5;
@@ -207,8 +208,8 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  color: #111318;
-  background: #ff6b78;
+  color: var(--on-negative);
+  background: var(--negative);
   font-weight: 900;
 }
 
@@ -218,7 +219,7 @@
 }
 
 .error strong {
-  color: #fff1f2;
+  color: var(--negative);
   font-size: 12px;
   letter-spacing: 0.04em;
 }

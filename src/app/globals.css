@@ -1,13 +1,50 @@
+/* Default to the selected Sky Blue skin, independently of system appearance. */
 :root {
+  --canvas: #f3f6fb;
+  --surface: #ffffff;
+  --surface-raised: #f8faff;
+  --sidebar: #ffffff;
+  --line: #e6ebf3;
+  --action: #3865cd;
+  --action-text: #3865cd;
+  --action-tint: #edf3ff;
+  --on-action: #ffffff;
+  --positive: #247b65;
+  --on-positive: #ffffff;
+  --negative: #bc3146;
+  --on-negative: #ffffff;
+  --warning: #966500;
+  --grid-medium: #0e6288;
+  --grid-large: #805300;
+  --text: #25344a;
+  --text-muted: #61738b;
+  --overlay: rgb(28 43 64 / 34%);
+  --shadow-color: rgb(37 52 74 / 12%);
+  --panel-radius: 10px;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
   --canvas: #0b0f14;
   --surface: #131722;
   --surface-raised: #1e222d;
+  --sidebar: #0d141d;
   --line: #2a2e39;
   --action: #2962ff;
-  --positive: #089981;
+  --action-text: #9db5ff;
+  --action-tint: #192b53;
+  --on-action: #ffffff;
+  --positive: #22ab94;
+  --on-positive: #080d12;
   --negative: #f23645;
-  --text: #d1d4dc;
-  --text-muted: #787b86;
+  --on-negative: #080d12;
+  --warning: #e9b85e;
+  --grid-medium: #38bdf8;
+  --grid-large: #f2c94c;
+  --text: #e6eaf2;
+  --text-muted: #97a1b1;
+  --overlay: rgb(8 13 18 / 78%);
+  --shadow-color: rgb(0 0 0 / 42%);
   color-scheme: dark;
 }
 

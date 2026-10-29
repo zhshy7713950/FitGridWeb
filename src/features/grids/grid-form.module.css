@@ -39,7 +39,7 @@
 .panel {
   position: relative;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--panel-radius);
   background: var(--surface);
   overflow: hidden;
 }
@@ -253,9 +253,9 @@
 }
 
 .actions button {
-  border-color: var(--action);
-  color: white;
+  border-color: var(--action-text);
   background: var(--action);
+  color: var(--on-action);
 }
 
 .actions button:disabled {

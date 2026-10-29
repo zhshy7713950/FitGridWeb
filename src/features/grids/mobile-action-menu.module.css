@@ -12,10 +12,10 @@
   display: inline-grid;
   place-items: center;
   padding: 0;
-  border: 1px solid #2b3444;
+  border: 1px solid var(--line);
   border-radius: 5px;
-  color: #e6eaf2;
-  background: #111722;
+  color: var(--text);
+  background: var(--surface);
 }
 
 .trigger svg {
@@ -25,8 +25,8 @@
 }
 
 .trigger[aria-expanded="true"] {
-  border-color: #2962ff;
-  background: color-mix(in srgb, #2962ff 16%, #111722);
+  border-color: var(--action-text);
+  background: color-mix(in srgb, var(--action) 16%, var(--surface));
 }
 
 .panel {
@@ -36,10 +36,10 @@
   width: 184px;
   overflow: hidden;
   padding: 5px;
-  border: 1px solid #2b3444;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: #111722;
-  box-shadow: 0 16px 38px rgb(0 0 0 / 42%);
+  background: var(--surface);
+  box-shadow: 0 16px 38px var(--shadow-color);
 }
 
 .panel > button,
@@ -52,7 +52,7 @@
   padding: 0 12px;
   border: 0;
   border-radius: 4px;
-  color: #e6eaf2;
+  color: var(--text);
   background: transparent;
   font-weight: 650;
   text-align: left;
@@ -63,11 +63,11 @@
 .panel > a:hover,
 .panel > button:focus-visible,
 .panel > a:focus-visible {
-  background: color-mix(in srgb, #2962ff 14%, #111722);
+  background: color-mix(in srgb, var(--action) 14%, var(--surface));
 }
 
 .panel > [data-danger="true"] {
-  color: #f23645;
+  color: var(--negative);
 }
 
 .panel > button:disabled {

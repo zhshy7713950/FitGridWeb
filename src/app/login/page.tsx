@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { LoginBrand } from "@/features/auth/login-brand";
 import { LoginForm } from "@/features/auth/login-form";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { safeReturnPath } from "@/lib/app-paths";
 import { isUiDemoMode } from "@/lib/ui-demo";
 import { getOptionalSession } from "@/server/auth/session";
@@ -18,6 +19,7 @@ export default async function LoginPage({ searchParams }: {
 
   return (
     <main className={styles.page}>
+      <ThemeToggle floating />
       <div className={styles.loginCard}>
         <LoginBrand />
         <section className={styles.panel} aria-labelledby="login-title">
