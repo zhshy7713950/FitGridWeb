@@ -176,19 +176,21 @@ export async function selectSources(primary: SourceResult, needsMA: boolean, bac
 export async function fetchSource(provider: Provider, product: Instrument, window: ScanWindow, requiredDays: number, basis: DailyBasis | null, options: RequestOptions): Promise<SourceResult> {
   const started = performance.now(); let bars: MinuteBar[] = []; let error: string | null = null;
   let dailyError: string | null = null;
+  let missingMinutes: string[] = [];
   if (basis) { try { assertDailyBasis(basis, product.market, window.sessionDate, provider); } catch { basis = null; } }
   try {
     const body = await fetchJson(sourceUrl(provider, product), options);
     const receivedAt = Date.now();
     const assessed = assessWindow(parseMinutes(provider, body, product, { window, receivedAt }), window, receivedAt);
-    if (assessed.missing.length) throw new Error(`分钟覆盖不完整，缺少 ${assessed.missing.length} 分钟`);
+    missingMinutes = assessed.missing;
+    if (missingMinutes.length) throw new Error(`分钟覆盖不完整，缺少 ${missingMinutes.length} 分钟（UTC 起始时间：${missingMinutes.slice(0, 3).join("、")}）`);
     bars = assessed.bars;
     if (requiredDays > 0 && (!basis || basis.closes.length < requiredDays - 1)) {
       try { basis = parseDaily(provider, await fetchJson(sourceUrl(provider, product, true), options), product, window.sessionDate, new Date().toISOString()); }
       catch (cause) { basis = null; dailyError = cause instanceof Error && /^(均线日线|日线|Yahoo|腾讯|东方财富|行情返回 HTTP)/.test(cause.message) ? cause.message : "均线日线不可用"; }
     }
   } catch (cause) { error = cause instanceof Error && /^(分钟|行情|腾讯|Yahoo|东方|同一)/.test(cause.message) ? cause.message : "行情请求失败或超时"; }
-  return { provider, bars, basis: basis?.sessionDate === window.sessionDate ? basis : null, fetchedAt: new Date().toISOString(), durationMs: Math.round(performance.now() - started), error, ...(dailyError ? { dailyError } : {}) };
+  return { provider, bars, basis: basis?.sessionDate === window.sessionDate ? basis : null, fetchedAt: new Date().toISOString(), durationMs: Math.round(performance.now() - started), error, missingMinutes, ...(dailyError ? { dailyError } : {}) };
 }
 
 export async function resolveInstrument(market: Market, rawCode: string, options: RequestOptions = {}): Promise<Omit<Instrument, "id">> {

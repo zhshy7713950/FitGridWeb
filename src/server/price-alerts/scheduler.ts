@@ -92,12 +92,14 @@ export class AlertScheduler {
         await this.guard(signal);
         const id = `${market}:${window.sessionDate}:${window.end}`;
         const previous = await this.repository.prisma.marketScan.findUnique({ where: { id } });
-        if (previous && previous.status !== "running") continue;
+        if (previous && previous.status !== "running" && previous.status !== "partial") continue;
+        if (!canFetchWindow(window, this.repository.clock())) continue;
         await this.repository.prisma.marketScan.upsert({ where: { id }, create: { id, market, windowEnd: new Date(window.end), status: "running", report: {}, createdAt: new Date(started) }, update: { status: "running" } });
         const reports: unknown[] = [];
         await mapLimited(selected, 8, async (rows) => {
-          try { reports.push(await this.collect(rows.filter((r) => r.activeFrom.getTime() < window.end), window, signal)); }
-          catch { for (const r of rows) await this.repository.recordFailure(r, "采集任务中断、超时或维护中"); reports.push({ code: rows[0].instrument.code, error: "采集任务中断、超时或维护中" }); }
+          const pending = rows.filter((r) => r.activeFrom.getTime() < window.end && (!r.cursor || r.cursor.getTime() < window.end));
+          try { reports.push(await this.collect(pending, window, signal)); }
+          catch { for (const r of pending) await this.repository.recordFailure(r, "采集任务中断、超时或维护中"); reports.push({ code: rows[0].instrument.code, error: "采集任务中断、超时或维护中" }); }
         });
         const failed = reports.some((r) => r && typeof r === "object" && "error" in r && Boolean(r.error));
         await this.repository.prisma.marketScan.update({ where: { id }, data: { status: failed ? "partial" : "complete", report: jsonValue({ window, instruments: reports, durationMs: this.repository.clock() - started }), finishedAt: new Date(this.repository.clock()) } });
@@ -163,14 +165,27 @@ export class AlertScheduler {
     };
     const primary = await get(product.market === "cn" ? "tencent" : "yahoo");
     const selected = await selectSources(primary, maxDays > 0, () => get("eastmoney"), maxDays);
-    await beforeRequest();
+    const diagnostics = { code: product.code, primary: { provider: primary.provider, error: primary.error, minutes: primary.bars.length, missingMinutes: primary.missingMinutes ?? [], dailyReady: Boolean(primary.basis), dailyError: primary.dailyError ?? null, dailyCount: primary.basis?.closes.length ?? 0 }, backup: selected.backup ? { error: selected.backup.error, minutes: selected.backup.bars.length, missingMinutes: selected.backup.missingMinutes ?? [], dailyReady: Boolean(selected.backup.basis), dailyError: selected.backup.dailyError ?? null, dailyCount: selected.backup.basis?.closes.length ?? 0 } : null };
+    try { await beforeRequest(); }
+    catch {
+      const details = [primary, selected.backup].flatMap((s) => s ? [s.error ?? s.dailyError].filter(Boolean) : []).join("；");
+      const error = `${details ? `${details}；` : ""}采集任务中断、超时或维护中，未执行判断`;
+      for (const rule of rows) await this.repository.recordFailure(rule, error);
+      return { ...diagnostics, triggers: 0, missingRules: rows.length, degraded: recovery.degraded, error };
+    }
     await this.repository.saveSource(product, primary, window.sessionDate, Boolean(selected.price === primary));
     if (selected.backup) await this.repository.saveSource(product, selected.backup, window.sessionDate, selected.price === selected.backup);
     let failed = 0; let triggers = 0;
     for (const rule of rows) {
       const condition = ruleSchema.parse(rule.condition);
       const source = condition.kind === "price" ? selected.price : [primary, selected.backup].find((s) => s && !s.error && s.basis && s.basis.closes.length >= condition.days - 1);
-      if (!source || source.error) { failed++; await this.repository.recordFailure(rule, condition.kind === "price" ? "主备源均未完整覆盖目标分钟" : "主备分钟或均线日线不完整／历史不足"); continue; }
+      if (!source || source.error) {
+        const reasons = [primary, selected.backup].filter((s): s is SourceResult => s !== null).map((s) => {
+          const reason = s.error ?? s.dailyError ?? `均线历史数据不足：需要 ${condition.kind === "price" ? 0 : condition.days - 1} 条，现有 ${s.basis?.closes.length ?? 0} 条`;
+          return `${s.provider}: ${reason}`;
+        });
+        failed++; await this.repository.recordFailure(rule, reasons.join("；")); continue;
+      }
       try {
         if (condition.kind !== "price") historySum(source.basis!, condition.days);
         for (const block of recovery.windows) {
@@ -182,7 +197,7 @@ export class AlertScheduler {
         }
       } catch { failed++; await this.repository.recordFailure(rule, "判定未完成，请检查数据覆盖和均线历史"); }
     }
-    return { code: product.code, primary: { provider: primary.provider, error: primary.error, minutes: primary.bars.length, dailyReady: Boolean(primary.basis) }, backup: selected.backup ? { error: selected.backup.error, minutes: selected.backup.bars.length, dailyReady: Boolean(selected.backup.basis) } : null, triggers, missingRules: failed, degraded: recovery.degraded, error: failed ? "部分规则数据不可用" : null };
+    return { ...diagnostics, triggers, missingRules: failed, degraded: recovery.degraded, error: failed ? "部分规则数据不可用" : null };
   }
   private async snapshotDelivery(tx: Prisma.TransactionClient, id: string, status: string, error: string | null, acceptedAt: Date | null, attempts: number) {
     const delivery = JSON.stringify({ status, lastError: error, acceptedAt: acceptedAt?.toISOString() ?? null, attempts });

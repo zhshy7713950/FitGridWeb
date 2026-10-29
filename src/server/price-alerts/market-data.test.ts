@@ -140,3 +140,13 @@ describe("HTTP and primary/fallback selection", () => {
     expect((await selectSources({ ...source, error: "timeout", bars: [] }, false, async () => backup)).price?.provider).toBe("eastmoney");
   });
 });
+
+it("retains the exact missing minute in fetch results and its error", async () => {
+  const body = await fixture("yahoo-spy"); const d = body.chart.result[0];
+  const closing = { ...window, market: "us" as const, sessionDate: "2026-10-26", start: Date.parse("2026-10-26T19:50:00Z"), end: Date.parse("2026-10-26T20:00:00Z"), segmentStart: Date.parse("2026-10-26T13:30:00Z"), segmentEnd: Date.parse("2026-10-26T20:00:00Z") };
+  d.indicators.quote[0].open[d.timestamp.indexOf(Date.parse("2026-10-26T19:59:00Z") / 1000)] = null;
+  vi.stubGlobal("fetch", async () => Response.json(body));
+  const result = await fetchSource("yahoo", us, closing, 0, null, {});
+  expect(result).toMatchObject({ missingMinutes: ["2026-10-26T19:59:00.000Z"] });
+  expect(result.error).toContain("2026-10-26T19:59:00.000Z");
+});

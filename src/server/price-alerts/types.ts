@@ -26,7 +26,7 @@ export interface ScanWindow {
 }
 export interface EvaluationState { armed: boolean; cursor: number | null; activeFrom: number }
 export interface Trigger { minuteStart: number; minuteEnd: number; price: string; threshold: string; ma: string | null }
-export interface SourceResult { provider: Provider; bars: MinuteBar[]; basis: DailyBasis | null; fetchedAt: string; durationMs: number; error: string | null; dailyError?: string | null }
+export interface SourceResult { provider: Provider; bars: MinuteBar[]; basis: DailyBasis | null; fetchedAt: string; durationMs: number; error: string | null; dailyError?: string | null; missingMinutes?: string[] }
 
 export interface InstrumentCandidate {
   code: string; name: string; market: "cn" | "us"; currency: "CNY" | "USD"; kind: "stock" | "etf"; exchange: string;
