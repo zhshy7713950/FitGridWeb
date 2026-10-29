@@ -14,11 +14,14 @@ Branch: codex/etf-valuation; isolated managed worktree.
 - Task 1: complete — 9 mapping/source tests; 49 live probes: 41 success / 8 failed; archived inputs SHA256-verified.
 - Task 2: complete — 6 mathematical/MA tests passed after observed RED.
 - Task 3: complete — 3 real PostgreSQL integration tests; migration + generated client verified.
-- Task 4: pending
-- Task 5: pending
+- Task 4: complete — 8 cache/cadence/resume/failure tests, archived dates preserved.
+- Task 5: complete — authenticated routes, private headers, strict inputs, basePath client, OpenAPI route coverage.
 - Task 6: pending
 - Task 7: pending
 
 Ruling: bootstrap verified archived values once on first refresh of an empty series, never in GET or at every startup — preserves usable free histories when upstream is currently 403 — captures remain explicitly dated, never claimed live.
 Ruling: Prisma empty-update upsert raced on initial concurrent creation; replaced with native INSERT ON CONFLICT DO NOTHING, proven by a two-connection test.
 Ruling: invoke installed JS CLIs directly because pnpm11 attempts to purge symlinked dependencies; project package versions remain unchanged.
+
+Ruling: process at most four source batches per refresh because a global monthly source can use two HTTP requests; remains below the plan eight-request ceiling.
+Ruling: pnpm_config_verify_deps_before_run=false permits standard pnpm checks with the shared dependency tree, without modifying project config.
