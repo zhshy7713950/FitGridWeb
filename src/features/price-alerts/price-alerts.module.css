@@ -49,5 +49,5 @@
 @media (max-width: 900px) { .card { grid-template-columns: 1fr 1fr; } .card > .actions { grid-column: 1 / -1; } .columns { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .page { padding: 20px 16px 32px; } .heading { flex-direction: column; gap: 12px; } .heading h1 { font-size: 24px; } .card { grid-template-columns: 1fr; gap: 18px; padding: 20px; } .panel { padding: 20px; } .metrics { gap: 20px 12px; } .actions { width: 100%; } .actions button, .actions a { flex: 1; text-align: center; white-space: nowrap; } .form { max-width: none; } }
 
-.conditionSummary { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 10px 24px; margin: 16px 0; }
+.conditionSummary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: baseline; gap: 10px 20px; margin: 16px 0; }
 .triggerPrice { font-variant-numeric: tabular-nums; white-space: nowrap; }
