@@ -12,7 +12,8 @@ describe.skipIf(!databaseUrl)('persistent valuation histories',()=>{
  const monthly={...resolveValuationProduct('VOO')!.series.pe!,key:`test:${randomUUID()}`};
  const invalidMonthly={...monthly,key:`test:${randomUUID()}`};
  const daily={...s,key:`test:${randomUUID()}`};
- const keys=[s.key,monthly.key,invalidMonthly.key,daily.key];
+ const distribution={...resolveValuationProduct("508000")!.series.distribution!,key:`test:${randomUUID()}`};
+ const keys=[s.key,monthly.key,invalidMonthly.key,daily.key,distribution.key];
  const now=new Date('2026-10-29T08:00:00Z');
  afterAll(async()=>{await db.researchObservation.deleteMany({where:{seriesKey:{in:keys}}});await db.researchSeries.deleteMany({where:{key:{in:keys}}});await db.$disconnect();});
  it('grants exactly one lease across independent repository instances',async()=>{
@@ -70,4 +71,14 @@ describe.skipIf(!databaseUrl)('persistent valuation histories',()=>{
   await repo.commitBatch(claim!,{observations:[{date:'2026-10-27',value:'10',quality:'valid'},{date:'2026-10-28',value:'20',quality:'valid'}],reachedStart:true},now,{cursor:null,complete:true});
   expect((await repo.readSeries(daily))!.observations).toEqual([{date:'2026-10-27',value:'10',quality:'valid'},{date:'2026-10-28',value:'20',quality:'valid'}]);
  });
+ it('persists per-share cash, publication dates and exchange-date evidence across revisions and restarts',async()=>{
+  const evidence={verified:true,recordDate:'2026-04-03',exDate:'2026-04-07',announcedAt:'2026-04-01',noticeId:'AN202603311820912934',evidenceUrl:'https://data.eastmoney.com/notices/detail/508000/AN202603311820912934.html',contentHash:'a'.repeat(64)};
+  for(const exDate of ['2026-04-07','2026-04-08','2026-04-08']){
+   const claim=await repo.claimSeries(distribution,now);await repo.commitBatch(claim!,{observations:[{date:evidence.recordDate,value:'0.1',quality:'valid',distribution:{...evidence,exDate}}],reachedStart:true},now,{cursor:null,complete:true});
+  }
+  expect((await new ValuationRepository(db).readSeries(distribution))?.observations).toEqual([{date:evidence.recordDate,value:'0.1',quality:'valid',distribution:{...evidence,exDate:'2026-04-08'}}]);
+  expect(await db.researchObservation.count({where:{seriesKey:distribution.key}})).toBe(2);
+  const raw=await db.researchObservation.findFirst({where:{seriesKey:distribution.key}});expect(raw?.sourcePublishedAt?.toISOString()).toBe('2026-04-01T00:00:00.000Z');
+ });
+
 });

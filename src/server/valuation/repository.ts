@@ -13,10 +13,10 @@ export class ValuationRepository implements HistoryStore {
  constructor(private readonly db:PrismaClient){}
  async readSeries(definition:SeriesDefinition):Promise<SeriesSnapshot|null> {
   const row=await this.db.researchSeries.findUnique({where:{key:definition.key}});if(!row)return null;
-  const records=await this.db.$queryRaw<Array<{date:string;value:string|null;quality:Observation['quality']}>>`
-    SELECT DISTINCT ON (date) date, value::text, quality FROM research_observations
+  const records=await this.db.$queryRaw<Array<{date:string;value:string|null;quality:Observation['quality'];raw:{distribution?:Observation['distribution']}}>>`
+    SELECT DISTINCT ON (date) date, value::text, quality, raw FROM research_observations
     WHERE series_key=${definition.key} ORDER BY date ASC, revision DESC`;
-  const observations=records.map(p=>({...p,value:p.value===null?null:p.value.replace(/\.?0+$/,'')||'0'}));
+  const observations=records.map(({raw,...p})=>({...p,value:p.value===null?null:p.value.replace(/\.?0+$/,'')||'0',...(definition.metric==='distribution'&&raw.distribution?{distribution:raw.distribution}:{})}));
   // Dates are ascending: keep the last monthly label without deleting source evidence.
   const points=definition.frequency==='monthly'?[...new Map(observations.map(p=>[p.date.slice(0,7),p])).values()]:observations;
   return {definition,observations:points,
@@ -32,15 +32,15 @@ export class ValuationRepository implements HistoryStore {
  }
  private async save(tx:Prisma.TransactionClient,claim:SeriesClaim,rows:Observation[],now:Date){
   const latest=[...new Map(rows.map(p=>[p.date,p])).values()];if(!latest.length)return;
-  const payload=JSON.stringify(latest.map(p=>({...p,hash:createHash('sha256').update(JSON.stringify(p)).digest('hex')})));
+  const payload=JSON.stringify(latest.map(p=>({...p,raw:p,published_at:p.distribution?.announcedAt??null,hash:createHash('sha256').update(JSON.stringify(p)).digest('hex')})));
   await tx.$executeRaw`
-    WITH incoming AS (SELECT * FROM jsonb_to_recordset(${payload}::jsonb) AS x(date text,value text,quality text,hash text)),
+    WITH incoming AS (SELECT * FROM jsonb_to_recordset(${payload}::jsonb) AS x(date text,value text,quality text,hash text,raw jsonb,published_at text)),
     changed AS (
       SELECT i.*, COALESCE(last.revision,0)+1 AS revision FROM incoming i
       LEFT JOIN LATERAL (SELECT revision,content_hash FROM research_observations WHERE series_key=${claim.key} AND date=i.date ORDER BY revision DESC LIMIT 1) last ON true
       WHERE last.content_hash IS DISTINCT FROM i.hash
-    ) INSERT INTO research_observations(series_key,date,revision,value,quality,content_hash,raw,first_seen_at)
-      SELECT ${claim.key},date,revision,value::numeric,quality,hash,jsonb_build_object('date',date,'value',value,'quality',quality),${now} FROM changed`;
+    ) INSERT INTO research_observations(series_key,date,revision,value,quality,content_hash,raw,first_seen_at,source_published_at)
+      SELECT ${claim.key},date,revision,value::numeric,quality,hash,raw,${now},published_at::timestamp FROM changed`;
  }
  private async owned(tx:Prisma.TransactionClient,claim:SeriesClaim,now:Date){
   const rows=await tx.$queryRaw<Array<{failures:number}>>`SELECT failures FROM research_series WHERE key=${claim.key} AND lease_token=${claim.token}::uuid AND lease_until>${now} FOR UPDATE`;

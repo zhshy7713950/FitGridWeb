@@ -1,16 +1,16 @@
 import { PriceDecimal as Decimal } from '@/server/price-alerts/decimal';
 import type { MetricSummary, Observation, PricePoint } from './types';
 
-function positive(p:Observation):boolean {
-  return p.quality==='valid' && p.value!==null && new Decimal(p.value).isFinite() && new Decimal(p.value).gt(0);
+function positive(p:Observation,allowZero=false):boolean {
+  return p.quality==='valid' && p.value!==null && new Decimal(p.value).isFinite() && (allowZero?new Decimal(p.value).gte(0):new Decimal(p.value).gt(0));
 }
 function ordered(points:Observation[]) {
   for(let i=1;i<points.length;i++) if(points[i].date<=points[i-1].date) throw new Error('历史日期必须唯一并按升序排列');
 }
-export function summarizeValuation(points:Observation[]):MetricSummary {
+export function summarizeValuation(points:Observation[],options:{allowZero?:boolean}={}):MetricSummary {
   ordered(points);
-  const valid=points.filter(positive), values=valid.map(p=>new Decimal(p.value!)).sort((a,b)=>a.cmp(b));
-  const latest=points.at(-1), current=latest && positive(latest)?new Decimal(latest.value!):null;
+  const valid=points.filter(p=>positive(p,options.allowZero)), values=valid.map(p=>new Decimal(p.value!)).sort((a,b)=>a.cmp(b));
+  const latest=points.at(-1), current=latest && positive(latest,options.allowZero)?new Decimal(latest.value!):null;
   const reference=current?valid.slice(0,-1):valid;
   const quantile=(q:string)=>{
     if(values.length<2)return null;
@@ -22,7 +22,7 @@ export function summarizeValuation(points:Observation[]):MetricSummary {
     const score=reference.reduce((n,p)=>n.plus(new Decimal(p.value!).lt(current)?1:new Decimal(p.value!).eq(current)?'0.5':0),new Decimal(0));
     rank=score.mul(100).div(reference.length).toDecimalPlaces(4).toString();
   }
-  return {min:values[0]?.toString()??null,max:values.at(-1)?.toString()??null,p30:quantile('0.3'),p70:quantile('0.7'),
+  return {min:values[0]?.toString()??null,max:values.at(-1)?.toString()??null,p30:quantile('0.3'),p50:quantile('0.5'),p70:quantile('0.7'),
     currentValue:current?.toString()??null,currentPercentile:rank,latestDate:latest?.date??null,latestValidDate:valid.at(-1)?.date??null,
     validCount:valid.length,referenceCount:reference.length,start:valid[0]?.date??null,end:valid.at(-1)?.date??null};
 }

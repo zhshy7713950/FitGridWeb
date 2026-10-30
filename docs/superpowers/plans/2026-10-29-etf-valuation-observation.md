@@ -70,7 +70,7 @@
 **Interfaces:**
 - Consumes: 任务1的规范化observations。
 - Produces: `summarizeValuation(points: Observation[]): MetricSummary`；`buildPriceHistory(points: Observation[]): PriceHistory`。
-- `MetricSummary`: min/max/p30/p70/currentValue/currentPercentile、latestDate/latestValidDate、validCount/referenceCount、start/end、warnings；缺失数值为null。
+- `MetricSummary`: min/max/p30/p50/p70/currentValue/currentPercentile、latestDate/latestValidDate、validCount/referenceCount、start/end、warnings；缺失数值为null。
 - `PriceHistory`: 每点date/close/ma250/ma500、最新收盘摘要、数据质量；Decimal计算后输出字符串。
 
 - [x] **Step 1: 写失败测试。** 既往[10,20,30]当前20→rank50；全部[10,20,20,30]→P30=19/P70=21；全相等rank50；单点只有min/max；两点rank为空；null/0/负值不参与传统统计，最新一期负PE使currentValue/currentPercentile为空。
@@ -142,7 +142,7 @@
 
 - [x] **Step 1: 写入口与页面失败测试。** 桌面和移动菜单均“查看估值”且指向同产品；直接URL可加载；读缓存先呈现，然后才按服务端due状态POST；未到期不POST；用户一次点击只发一次manual刷新。
 - [x] **Step 2: 写图表/空态断言。** 三卡独立、源日期与口径可读；MA不足为提示；PE/PB缺失不显示0；单点只有点；刷新失败旧图保持；无效最新PE不显示旧正值当前分位；不匹配与REIT文案不同。
-- [x] **Step 3: 实现页面和SVG。** 使用现有主题/字体/动作样式，三卡纵向；P30/P70参考线；latest/MA数值；两类刷新时间独立。统计摘要在SVG外，触摸/键盘可查点；压缩绘图保留端点/桶极值与断点，统计始终来自全量。
+- [x] **Step 3: 实现页面和SVG。** 使用现有主题/字体/动作样式，三卡纵向；P30/P50/P70参考线；latest/MA数值；两类刷新时间独立。统计摘要在SVG外，触摸/键盘可查点；压缩绘图保留端点/桶极值与断点，统计始终来自全量。
 - [x] **Step 4: 实现刷新生命周期。** 冷启动/回补按hasMore顺序续传；busy按retryAfter只GET观察且最多120秒，超时显示重试入口；页面卸载取消后续请求；401由现有重定向处理；手动按钮pending时禁用；错误状态不无限自动重试。
 - [x] **Step 5: 补demo与主题/路由测试。** demo模式只返回fixture，不请求真实免费源；浅/深主题、390px布局、键盘聚焦/移动点、basePath返回登录后仍定位估值页。
 - [x] **Step 6: 运行前端测试并提交。** `pnpm exec vitest run src/features/valuation src/features/grids/grid-detail.test.tsx src/app/base-path-routing.test.tsx`。
@@ -171,3 +171,13 @@
 - 原对话研究文件不改写，所有开发任务均保持未勾选；本轮只新增设计与计划文档。
 
 执行状态：2026-10-29全部七项任务完成；实际数据源限制、独立数据库/浏览器专项和全套验证结果见 `2026-10-29-etf-valuation-progress.md` 及 `output/etf-valuation-observation-2026-10-29/acceptance.md`。未发布。
+
+
+## 已批准的后续增量（2026-10-29）
+
+- [x] 提醒条件右侧显示服务端触发价，覆盖上下偏离、触及、固定价及未计算状态。
+- [x] 统计、DTO和图表加入P50；与当前分位分开显示。
+- [x] 两只REIT接入基金管理人分红公告核验，分派事件复用现有长期表及修订机制。
+- [x] 按场内除息日计算12个自然月现金分派率，支持真实零、缺失留空、七天缓存及有界续传。
+- [x] REIT展示价格＋分派率图，隐藏PE/PB；更新OpenAPI合同。
+- [x] 完成数据库、真实来源、桌面/390px深浅主题、全套检查及独立代码审查；结果见 `output/reit-yield-2026-10-29/acceptance.md`。

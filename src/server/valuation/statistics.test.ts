@@ -36,3 +36,11 @@ describe('completed-close moving averages',()=>{
   const input=points([1,2]);expect(()=>buildPriceHistory([...input,input[1]])).toThrow();
  });
 });
+
+describe('P50 median',()=>{
+ it.each([
+  [[],null],[[7],null],[[10,20],'15'],[[10,20,30],'20'],[[10,20,20,30],'20'],[[4,4,4],'4'],[[null,0,-2,10,30],'20'],
+ ] as const)('computes the median of valid complete-history observations %j', (input,expected)=>{
+  expect(summarizeValuation(points([...input])).p50).toBe(expected);
+ });
+});

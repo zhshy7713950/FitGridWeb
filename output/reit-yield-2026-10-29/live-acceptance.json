@@ -1,0 +1,576 @@
+{
+  "checkedAt": "2026-10-29T14:34:25.777Z",
+  "results": [
+    {
+      "code": "508000",
+      "batches": [
+        {
+          "requests": 8,
+          "hasMore": true,
+          "price": "partial",
+          "yield": "none"
+        },
+        {
+          "requests": 8,
+          "hasMore": true,
+          "price": "partial",
+          "yield": "partial"
+        },
+        {
+          "requests": 4,
+          "hasMore": true,
+          "price": "partial",
+          "yield": "partial"
+        },
+        {
+          "requests": 1,
+          "hasMore": false,
+          "price": "source_history",
+          "yield": "source_history"
+        }
+      ],
+      "requests": 21,
+      "cachedGetRequests": 0,
+      "urls": [
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508000,day,2025-10-29,2026-10-29,640,",
+        "https://fundf10.eastmoney.com/fhsp_508000.html",
+        "https://api.fund.eastmoney.com/f10/FHGG?fundcode=508000&pageSize=100&pageIndex=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202609141829368415&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202604131821150181&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202509151744163938&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202504141656354420&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202412161641312628&client_source=web&page_index=1",
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508000,day,2024-10-28,2025-10-28,640,",
+        "https://fundf10.eastmoney.com/fhsp_508000.html",
+        "https://api.fund.eastmoney.com/f10/FHGG?fundcode=508000&pageSize=100&pageIndex=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202404151630219094&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202305071586346205&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202304091585240385&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202209211578563617&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202204081557956974&client_source=web&page_index=1",
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508000,day,2023-10-28,2024-10-27,640,",
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508000,day,2022-10-27,2023-10-27,640,",
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508000,day,2021-10-26,2022-10-26,640,",
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508000,day,2020-10-25,2021-10-25,640,",
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508000,day,2019-10-25,2020-10-24,640,"
+      ],
+      "price": {
+        "asOf": "2026-10-29",
+        "count": 1298,
+        "current": "1.789",
+        "message": null
+      },
+      "distribution": {
+        "complete": true,
+        "checkedAt": "2026-10-29T14:34:28.011Z",
+        "error": null,
+        "events": [
+          {
+            "date": "2022-04-12",
+            "value": "0.08",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2022-04-13",
+              "noticeId": "AN202204081557956974",
+              "verified": true,
+              "recordDate": "2022-04-12",
+              "announcedAt": "2022-04-08",
+              "contentHash": "04e35ca78ca68e76108ddca0916d024bca1324195f9b962c61f4cc0b2f634de4",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508000/AN202204081557956974.html"
+            }
+          },
+          {
+            "date": "2022-09-26",
+            "value": "0.06",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2022-09-27",
+              "noticeId": "AN202209211578563617",
+              "verified": true,
+              "recordDate": "2022-09-26",
+              "announcedAt": "2022-09-22",
+              "contentHash": "6f5d369a7c465a2df0acdb234d0719371abb57068fb76858885af31ea1cd195d",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508000/AN202209211578563617.html"
+            }
+          },
+          {
+            "date": "2023-04-12",
+            "value": "0.061",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2023-04-13",
+              "noticeId": "AN202304091585240385",
+              "verified": true,
+              "recordDate": "2023-04-12",
+              "announcedAt": "2023-04-10",
+              "contentHash": "56bd0123c8c6cfe2eaa9f2ab50198809e4279150540a9fef44b67e86bdf4e9cb",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508000/AN202304091585240385.html"
+            }
+          },
+          {
+            "date": "2023-05-10",
+            "value": "0.029",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2023-05-11",
+              "noticeId": "AN202305071586346205",
+              "verified": true,
+              "recordDate": "2023-05-10",
+              "announcedAt": "2023-05-08",
+              "contentHash": "47a173d46e0c567876322b0fa8e876883f01dfb9339e63b7260cf2346ab14bc5",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508000/AN202305071586346205.html"
+            }
+          },
+          {
+            "date": "2024-04-18",
+            "value": "0.07862",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2024-04-19",
+              "noticeId": "AN202404151630219094",
+              "verified": true,
+              "recordDate": "2024-04-18",
+              "announcedAt": "2024-04-16",
+              "contentHash": "3e0ba006dd6c842b9c51ca3857d129456a758e60f20e19c6eda571426cd44fb9",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508000/AN202404151630219094.html"
+            }
+          },
+          {
+            "date": "2024-12-19",
+            "value": "0.06248",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2024-12-20",
+              "noticeId": "AN202412161641312628",
+              "verified": true,
+              "recordDate": "2024-12-19",
+              "announcedAt": "2024-12-17",
+              "contentHash": "1c7c982cc4005e1039658c95a6944c62dd5970f295d2a2c3be5a5bfc8cfedbe7",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508000/AN202412161641312628.html"
+            }
+          },
+          {
+            "date": "2025-04-17",
+            "value": "0.06248",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2025-04-18",
+              "noticeId": "AN202504141656354420",
+              "verified": true,
+              "recordDate": "2025-04-17",
+              "announcedAt": "2025-04-15",
+              "contentHash": "852123127ca29ba39959a4d40deaf9547c5ac460d1dc98b16842e003f5adb36d",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508000/AN202504141656354420.html"
+            }
+          },
+          {
+            "date": "2025-09-18",
+            "value": "0.06248",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2025-09-19",
+              "noticeId": "AN202509151744163938",
+              "verified": true,
+              "recordDate": "2025-09-18",
+              "announcedAt": "2025-09-16",
+              "contentHash": "d7c1c95dce5ea3af8ce63932ab995750bc61ba426c4176498ab55185a13ceabe",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508000/AN202509151744163938.html"
+            }
+          },
+          {
+            "date": "2026-04-16",
+            "value": "0.05486",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2026-04-17",
+              "noticeId": "AN202604131821150181",
+              "verified": true,
+              "recordDate": "2026-04-16",
+              "announcedAt": "2026-04-14",
+              "contentHash": "b0dff96eade9e51ea56070f01876b98fb14dbf49ed4e4b5d86bf50c118f73c8b",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508000/AN202604131821150181.html"
+            }
+          },
+          {
+            "date": "2026-09-17",
+            "value": "0.05152",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2026-09-18",
+              "noticeId": "AN202609141829368415",
+              "verified": true,
+              "recordDate": "2026-09-17",
+              "announcedAt": "2026-09-15",
+              "contentHash": "446c7e82fcda764c4263cc5d2fca6c9e6cfff399c3744127464bba6e73cb0321",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508000/AN202609141829368415.html"
+            }
+          }
+        ]
+      },
+      "yield": {
+        "asOf": "2026-10-29",
+        "distributionAsOf": "2026-10-29",
+        "stats": {
+          "min": "1.13414157215486898709425107547907704341024638247946812671099",
+          "max": "9.1672095548317046688382193268186753528773072747014115092291",
+          "p30": "3.2565713",
+          "p50": "4.29373987",
+          "p70": "4.7432152",
+          "currentValue": "5.94633873672442705422023476802683063163778647288988261598658",
+          "currentPercentile": "90.1422",
+          "latestDate": "2026-10-29",
+          "latestValidDate": "2026-10-29",
+          "validCount": 1056,
+          "referenceCount": 1055,
+          "start": "2022-06-21",
+          "end": "2026-10-29"
+        },
+        "trailingDistribution": "0.10638",
+        "message": "来源暂未提供较新的观测，正在展示已保存数据。"
+      }
+    },
+    {
+      "code": "508056",
+      "batches": [
+        {
+          "requests": 8,
+          "hasMore": true,
+          "price": "partial",
+          "yield": "none"
+        },
+        {
+          "requests": 8,
+          "hasMore": true,
+          "price": "partial",
+          "yield": "none"
+        },
+        {
+          "requests": 8,
+          "hasMore": true,
+          "price": "partial",
+          "yield": "none"
+        },
+        {
+          "requests": 5,
+          "hasMore": true,
+          "price": "partial",
+          "yield": "partial"
+        },
+        {
+          "requests": 3,
+          "hasMore": false,
+          "price": "source_history",
+          "yield": "source_history"
+        }
+      ],
+      "requests": 32,
+      "cachedGetRequests": 0,
+      "urls": [
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508056,day,2025-10-29,2026-10-29,640,",
+        "https://fundf10.eastmoney.com/fhsp_508056.html",
+        "https://api.fund.eastmoney.com/f10/FHGG?fundcode=508056&pageSize=100&pageIndex=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202609271829936991&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202606291826533040&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202603311820912934&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202512241807194408&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202510271769985861&client_source=web&page_index=1",
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508056,day,2024-10-28,2025-10-28,640,",
+        "https://fundf10.eastmoney.com/fhsp_508056.html",
+        "https://api.fund.eastmoney.com/f10/FHGG?fundcode=508056&pageSize=100&pageIndex=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202507171710582649&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202503271648193040&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202412261641435263&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202410241640459847&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202407291638427474&client_source=web&page_index=1",
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508056,day,2023-10-28,2024-10-27,640,",
+        "https://fundf10.eastmoney.com/fhsp_508056.html",
+        "https://api.fund.eastmoney.com/f10/FHGG?fundcode=508056&pageSize=100&pageIndex=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202403281628434411&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202312151614276577&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202308311596891683&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202303301584691603&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202208311577889392&client_source=web&page_index=1",
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508056,day,2022-10-27,2023-10-27,640,",
+        "https://fundf10.eastmoney.com/fhsp_508056.html",
+        "https://api.fund.eastmoney.com/f10/FHGG?fundcode=508056&pageSize=100&pageIndex=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202203311556229391&client_source=web&page_index=1",
+        "https://np-cnotice-stock.eastmoney.com/api/content/ann?art_code=AN202111111528441645&client_source=web&page_index=1",
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508056,day,2021-10-26,2022-10-26,640,",
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508056,day,2020-10-25,2021-10-25,640,",
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh508056,day,2019-10-25,2020-10-24,640,"
+      ],
+      "price": {
+        "asOf": "2026-10-29",
+        "count": 1298,
+        "current": "2.3",
+        "message": null
+      },
+      "distribution": {
+        "complete": true,
+        "checkedAt": "2026-10-29T14:34:32.636Z",
+        "error": null,
+        "events": [
+          {
+            "date": "2021-11-16",
+            "value": "0.0522",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2021-11-17",
+              "noticeId": "AN202111111528441645",
+              "verified": true,
+              "recordDate": "2021-11-16",
+              "announcedAt": "2021-11-12",
+              "contentHash": "771a6677530c47fc2d3e012710e14e5237eb04b3465639fa60891a60062c2752",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202111111528441645.html"
+            }
+          },
+          {
+            "date": "2022-04-06",
+            "value": "0.04843",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2022-04-07",
+              "noticeId": "AN202203311556229391",
+              "verified": true,
+              "recordDate": "2022-04-06",
+              "announcedAt": "2022-03-31",
+              "contentHash": "ce8b21ff32ce7c62b3d7cb2b89ff7f5d285bce79bc56575b6dfa7a844aa2ed1e",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202203311556229391.html"
+            }
+          },
+          {
+            "date": "2022-09-05",
+            "value": "0.08921",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2022-09-06",
+              "noticeId": "AN202208311577889392",
+              "verified": true,
+              "recordDate": "2022-09-05",
+              "announcedAt": "2022-09-01",
+              "contentHash": "93a6b8a39eb44ced20ff910b5ffdd752c8fab6ebb45cef73dfe3908b13de7220",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202208311577889392.html"
+            }
+          },
+          {
+            "date": "2023-04-04",
+            "value": "0.08801",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2023-04-06",
+              "noticeId": "AN202303301584691603",
+              "verified": true,
+              "recordDate": "2023-04-04",
+              "announcedAt": "2023-03-31",
+              "contentHash": "06c174e438f4a29246cda95e256c6c7393e1897dce93f1a17e6b0b8af0445985",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202303301584691603.html"
+            }
+          },
+          {
+            "date": "2023-09-04",
+            "value": "0.08423",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2023-09-05",
+              "noticeId": "AN202308311596891683",
+              "verified": true,
+              "recordDate": "2023-09-04",
+              "announcedAt": "2023-08-31",
+              "contentHash": "c523c15f16f834412533fe402b34c836443dfeef74c369f0b0de7cb01de64e09",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202308311596891683.html"
+            }
+          },
+          {
+            "date": "2023-12-20",
+            "value": "0.0425",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2023-12-21",
+              "noticeId": "AN202312151614276577",
+              "verified": true,
+              "recordDate": "2023-12-20",
+              "announcedAt": "2023-12-16",
+              "contentHash": "2ac1ae62517b646d8767f3b1495f170a52becd10b446f454d9e4b889a7b9949a",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202312151614276577.html"
+            }
+          },
+          {
+            "date": "2024-04-02",
+            "value": "0.05405",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2024-04-03",
+              "noticeId": "AN202403281628434411",
+              "verified": true,
+              "recordDate": "2024-04-02",
+              "announcedAt": "2024-03-29",
+              "contentHash": "a800db2d096cdf14e96226ac2fedf82ab6913596da036b94f46b2b6ba3f24b19",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202403281628434411.html"
+            }
+          },
+          {
+            "date": "2024-08-01",
+            "value": "0.04583",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2024-08-02",
+              "noticeId": "AN202407291638427474",
+              "verified": true,
+              "recordDate": "2024-08-01",
+              "announcedAt": "2024-07-30",
+              "contentHash": "0d11be9f68fa430a938f7371b59b682c176dc00967b7f7e90efcf2e7e010c869",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202407291638427474.html"
+            }
+          },
+          {
+            "date": "2024-10-29",
+            "value": "0.04413",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2024-10-30",
+              "noticeId": "AN202410241640459847",
+              "verified": true,
+              "recordDate": "2024-10-29",
+              "announcedAt": "2024-10-25",
+              "contentHash": "1e673394bbb16ea8aaf4f3a16f194f2d3a44d9df7519f57b34482b2a3498cbd9",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202410241640459847.html"
+            }
+          },
+          {
+            "date": "2024-12-31",
+            "value": "0.04547",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2025-01-02",
+              "noticeId": "AN202412261641435263",
+              "verified": true,
+              "recordDate": "2024-12-31",
+              "announcedAt": "2024-12-27",
+              "contentHash": "1c14b722c145e36116b78a0445e5eb7d4b65fee86a5744226dd034415f930dbe",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202412261641435263.html"
+            }
+          },
+          {
+            "date": "2025-04-01",
+            "value": "0.0495",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2025-04-02",
+              "noticeId": "AN202503271648193040",
+              "verified": true,
+              "recordDate": "2025-04-01",
+              "announcedAt": "2025-03-28",
+              "contentHash": "4eb8f169d4a4c42ca859329e173659a98718a2ec10a70c539ab2755b320335d2",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202503271648193040.html"
+            }
+          },
+          {
+            "date": "2025-07-22",
+            "value": "0.04059",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2025-07-23",
+              "noticeId": "AN202507171710582649",
+              "verified": true,
+              "recordDate": "2025-07-22",
+              "announcedAt": "2025-07-18",
+              "contentHash": "230a9110314d209406577044154f7719e1b8e890580697dc0c7647f0a997699e",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202507171710582649.html"
+            }
+          },
+          {
+            "date": "2025-10-30",
+            "value": "0.04318",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2025-10-31",
+              "noticeId": "AN202510271769985861",
+              "verified": true,
+              "recordDate": "2025-10-30",
+              "announcedAt": "2025-10-28",
+              "contentHash": "eb4c15a7714b93d77ac65962f6778a2696467368bd83b542e65cea37ab04ca40",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202510271769985861.html"
+            }
+          },
+          {
+            "date": "2025-12-29",
+            "value": "0.04335",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2025-12-30",
+              "noticeId": "AN202512241807194408",
+              "verified": true,
+              "recordDate": "2025-12-29",
+              "announcedAt": "2025-12-25",
+              "contentHash": "963aa37ccfe3e580eb7df8684b9175ab618ccd3bd3d9e2edcbff869493eb6018",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202512241807194408.html"
+            }
+          },
+          {
+            "date": "2026-04-03",
+            "value": "0.0458",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2026-04-07",
+              "noticeId": "AN202603311820912934",
+              "verified": true,
+              "recordDate": "2026-04-03",
+              "announcedAt": "2026-04-01",
+              "contentHash": "3eae638b6f904e828786fc61491cd15230fa53006d4423d0b973cdee31555e90",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202603311820912934.html"
+            }
+          },
+          {
+            "date": "2026-07-02",
+            "value": "0.03376",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2026-07-03",
+              "noticeId": "AN202606291826533040",
+              "verified": true,
+              "recordDate": "2026-07-02",
+              "announcedAt": "2026-06-30",
+              "contentHash": "c382a9deb58ded0a4b6c9cd10309faf5faf2e689a7f5672e5c2f49b698a3af94",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202606291826533040.html"
+            }
+          },
+          {
+            "date": "2026-09-30",
+            "value": "0.03719",
+            "quality": "valid",
+            "distribution": {
+              "exDate": "2026-10-08",
+              "noticeId": "AN202609271829936991",
+              "verified": true,
+              "recordDate": "2026-09-30",
+              "announcedAt": "2026-09-28",
+              "contentHash": "41eaad2e1af784312d7860082d831be41b6bff7e8b966e9bc6a4f33b46f71148",
+              "evidenceUrl": "https://data.eastmoney.com/notices/detail/508056/AN202609271829936991.html"
+            }
+          }
+        ]
+      },
+      "yield": {
+        "asOf": "2026-10-29",
+        "distributionAsOf": "2026-10-29",
+        "stats": {
+          "min": "1.8597301792644612825725374237664017741637405285529476991314",
+          "max": "9.01463414634146341463414634146341463414634146341463414634146",
+          "p30": "4.17157704",
+          "p50": "5.0892228",
+          "p70": "5.48230949",
+          "currentValue": "8.83826086956521739130434782608695652173913043478260869565217",
+          "currentPercentile": "99.5261",
+          "latestDate": "2026-10-29",
+          "latestValidDate": "2026-10-29",
+          "validCount": 1056,
+          "referenceCount": 1055,
+          "start": "2022-06-21",
+          "end": "2026-10-29"
+        },
+        "trailingDistribution": "0.20328",
+        "message": "来源暂未提供较新的观测，正在展示已保存数据。"
+      }
+    }
+  ]
+}

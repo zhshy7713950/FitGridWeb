@@ -164,7 +164,8 @@ it("keeps the main price, source and times together with the MA evaluation snaps
   expect(within(snapshot).getByText("6.800")).toBeInTheDocument();
   expect(within(snapshot).getByText("最近有效判断的分钟收盘价")).toBeInTheDocument();
   expect(within(snapshot).getByText("东方财富")).toBeInTheDocument();
-  expect(within(snapshot).getAllByText("6.850")).toHaveLength(2);
+  expect(within(snapshot).getByText("6.850")).toBeInTheDocument();
+  expect(within(snapshot).getByLabelText("触发价格")).toHaveTextContent("触发价 ¥6.850");
   expect(within(snapshot).getByText(new Date(evaluation.minuteEnd).toLocaleString("zh-CN", { hour12: false }))).toBeInTheDocument();
   expect(within(snapshot).getByText(new Date(evaluation.fetchedAt).toLocaleString("zh-CN", { hour12: false }))).toBeInTheDocument();
   expect(within(snapshot).queryByText("99.99")).not.toBeInTheDocument();
@@ -251,7 +252,7 @@ it("clearly identifies the calculated MA price and formats historical trigger va
   render(<AlertDetailPage id="rule-1" />);
   const snapshot = await screen.findByRole("region", { name: "行情快照" });
   expect(within(snapshot).getByText("MA120 均线价格（计算值）").parentElement).toHaveTextContent("33.02");
-  expect(within(snapshot).getByText("触发边界价格").parentElement).toHaveTextContent("33.00");
+  expect(within(snapshot).getByLabelText("触发价格")).toHaveTextContent("触发价 $33.00");
   expect(screen.getByText(/触发时股价 35.00 · 触发边界价格 33.00 · 触发时均线价格（MA20）33.02/)).toBeInTheDocument();
 });
 it("explicitly marks an unavailable MA calculation instead of showing an unexplained dash", async () => {
@@ -259,4 +260,27 @@ it("explicitly marks an unavailable MA calculation instead of showing an unexpla
   render(<AlertDetailPage id="rule-1" />);
   const snapshot = await screen.findByRole("region", { name: "行情快照" });
   expect(within(snapshot).getByText("MA120 均线价格（计算值）").parentElement).toHaveTextContent("尚未计算");
+});
+
+it.each(["up", "down"] as const)("shows the server trigger boundary beside a %s MA deviation without recomputing the rounded MA", async (direction) => {
+  api.get.mockResolvedValue({ ...rule, condition: { kind: "ma_deviation", direction, days: 200, percent: "30" }, lastEvaluation: { price: "0.862", ma: "1.019", threshold: direction === "up" ? "1.3256358" : "0.712409", provider: "tencent", minuteEnd: "2026-10-29T03:01:00Z", fetchedAt: "2026-10-29T03:01:15Z", adjustment: "前复权 qfq" } });
+  render(<AlertDetailPage id="rule-1" />);
+  const condition = await screen.findByRole("group", { name: "提醒条件" });
+  expect(condition).toHaveTextContent(`${direction === "up" ? "高于" : "低于"} MA200 30%`);
+  expect(within(condition).getByLabelText("触发价格")).toHaveTextContent(direction === "up" ? "触发价 ¥1.326" : "触发价 ¥0.712");
+  expect(screen.queryByText("触发边界价格", { exact: true })).not.toBeInTheDocument();
+});
+it("shows the configured fixed target before the first evaluation", async () => {
+  render(<AlertDetailPage id="rule-1" />);
+  expect(await screen.findByLabelText("触发价格")).toHaveTextContent("触发价 ¥6.920");
+});
+it("keeps an unavailable MA threshold pending rather than estimating from a quote", async () => {
+  api.get.mockResolvedValue({ ...rule, condition: { kind: "ma_touch", direction: "up", days: 200 } });
+  render(<AlertDetailPage id="rule-1" />);
+  expect(await screen.findByLabelText("触发价格")).toHaveTextContent("触发价 待计算");
+});
+it("formats a dollar-denominated trigger with the instrument precision", async () => {
+  api.get.mockResolvedValue({ ...rule, instrument: { ...rule.instrument, market: "us", currency: "USD", kind: "stock" }, condition: { kind: "price", direction: "down", targetPrice: "123.456" } });
+  render(<AlertDetailPage id="rule-1" />);
+  expect(await screen.findByLabelText("触发价格")).toHaveTextContent("触发价 $123.46");
 });

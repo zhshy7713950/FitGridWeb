@@ -54,3 +54,40 @@ describe('cached valuation observation service',()=>{
   expect((await service().refresh('owner','grid','due')).refresh.busy).toBe(true);expect(fetcher).not.toHaveBeenCalled();
  });
 });
+
+describe('REIT derived yield cards',()=>{
+ const code='508000',reit=resolveValuationProduct(code)!;
+ const distribution:Observation={date:'2026-04-03',value:'0.1',quality:'valid',distribution:{verified:true,recordDate:'2026-04-03',exDate:'2026-04-07',announcedAt:'2026-04-01',noticeId:'AN202603311820912934',evidenceUrl:'https://data.eastmoney.com/notices/detail/508000/AN202603311820912934.html',contentHash:'a'.repeat(64)}};
+ const cacheReit=async()=>{
+  get.mockResolvedValue({id:'grid',productCode:code});
+  for(const s of [reit.series.price!,reit.series.distribution!]){
+   const c=await store.claimSeries(s,clock);await store.commitBatch(c!,{observations:s.metric==='price'?[{date:'2026-10-28',value:'2',quality:'valid'}]:[distribution],reachedStart:true},clock,{cursor:null,complete:true});
+  }
+ };
+ it('derives a cash yield from cached fund prices and verified distributions with zero GET requests',async()=>{
+  await cacheReit();const data=await service().read('owner','grid');
+  expect(data.product.kind).toBe('reit');expect(data.pe.availability).toBe('not_applicable');expect(data.pb.availability).toBe('not_applicable');
+  expect(data.dividendYield).toMatchObject({availability:'ready',asOf:'2026-10-28',trailingDistribution:'0.1',distributionAsOf:'2026-10-28',stats:{currentValue:'5'}});
+  expect(fetcher).not.toHaveBeenCalled();expect(data.dividendYield?.stale).toBe(false);
+ });
+ it('refreshes events weekly, recomputes from a new price and leaves unsupported products without a yield card',async()=>{
+  await cacheReit();clock=new Date('2026-10-29T08:00:00Z');fetcher.mockResolvedValue({observations:[{date:'2026-10-29',value:'4',quality:'valid'}],reachedStart:true});
+  const data=await service().refresh('owner','grid','due');expect(fetcher.mock.calls.every(c=>c[0].series.metric==='price')).toBe(true);
+  expect(data.dividendYield?.stats.currentValue).toBe('2.5'); // daily price recomputes against the seven-day event cache
+  clock=new Date('2026-11-04T08:00:00Z');fetcher.mockImplementation(async(r)=>({observations:r.series.metric==='distribution'?[distribution]:[{date:r.to,value:'4',quality:'valid'}],reachedStart:true}));
+  const fresh=await service().refresh('owner','grid','due');expect(fresh.dividendYield?.stats.currentValue).toBe('2.5');
+  get.mockResolvedValue({id:'grid',productCode:'VOO'});expect((await service().read('owner','grid')).dividendYield).toBeNull();
+ });
+ it('retains the price card and cached verified-yield history on distribution failure',async()=>{
+  await cacheReit();clock=new Date(+clock+8*86400000);fetcher.mockImplementation(async(r)=>{if(r.series.metric==='distribution')throw new Error('分派公告金额与汇总表冲突');return {observations:[{date:r.to,value:'2',quality:'valid'}],reachedStart:true};});
+  const data=await service().refresh('owner','grid','due');expect(data.price.stats.currentValue).toBe('2');expect(data.dividendYield?.message).toContain('更新失败');expect(data.dividendYield?.points.some(p=>p.value==='5')).toBe(true);expect(data.dividendYield?.stats.currentValue).toBeNull();
+ });
+ it('resumes unverified events under the shared source budget and passes persisted evidence into the next batch',async()=>{
+  get.mockResolvedValue({id:'grid',productCode:code});let calls=0;
+  fetcher.mockImplementation(async(r)=>{if(r.series.metric==='distribution'){calls++;return {observations:calls===1?[{...distribution,value:null,quality:'missing',distribution:{...distribution.distribution!,verified:false,exDate:null}}]:[distribution],reachedStart:calls>1};}return {observations:[{date:r.to,value:'2',quality:'valid'}],reachedStart:true};});
+  const first=await service().refresh('owner','grid','due');expect(first.refresh.hasMore).toBe(true);
+  const next=await service().refresh('owner','grid','due');expect(next.dividendYield?.stats.currentValue).toBe('5');
+  const events=fetcher.mock.calls.filter(c=>c[0].series.metric==='distribution');expect(events[1][0].knownObservations[0].distribution.verified).toBe(false);
+  expect(events.every(c=>c[0].requestBudget<=7)).toBe(true);
+ });
+});

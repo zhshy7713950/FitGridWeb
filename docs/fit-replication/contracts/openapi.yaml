@@ -2040,6 +2040,7 @@ components:
         - min
         - max
         - p30
+        - p50
         - p70
         - currentValue
         - currentPercentile
@@ -2053,6 +2054,7 @@ components:
         min: *a1
         max: *a1
         p30: *a1
+        p50: *a1
         p70: *a1
         currentValue: *a1
         currentPercentile: *a1
@@ -2116,6 +2118,8 @@ components:
             $ref: "#/components/schemas/ResearchObservation"
         stats:
           $ref: "#/components/schemas/ValuationSummary"
+        trailingDistribution: *a1
+        distributionAsOf: *a1
         prices:
           type: array
           items:
@@ -2142,6 +2146,7 @@ components:
         - price
         - pe
         - pb
+        - dividendYield
         - refresh
       properties:
         product:
@@ -2151,6 +2156,7 @@ components:
             - code
             - name
             - currency
+            - kind
           properties:
             id:
               type: string
@@ -2160,6 +2166,8 @@ components:
             name:
               type: string
             currency: *a1
+            kind:
+              enum: [etf, lof, reit, null]
         benchmark:
           type:
             - object
@@ -2179,6 +2187,14 @@ components:
           $ref: "#/components/schemas/ValuationMetricCard"
         pb:
           $ref: "#/components/schemas/ValuationMetricCard"
+        dividendYield:
+          description: REIT专用日频现金分派率；其他产品为null。数值单位为百分数，使用已核验的场内除息日和税前每份金额；缺失历史不按零计算。
+          anyOf:
+            - type: "null"
+            - allOf:
+                - $ref: "#/components/schemas/ValuationMetricCard"
+                - type: object
+                  required: [trailingDistribution, distributionAsOf]
         refresh:
           type: object
           required:

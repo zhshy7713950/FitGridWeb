@@ -1,0 +1,18 @@
+{
+  "checkedAt": "2026-10-29T14:42:28.128Z",
+  "status": "passed",
+  "method": "Whole isolated application database custom-format pg_dump/pg_restore",
+  "fixture": "synthetic database fixture; no production database access",
+  "revisionCount": 2,
+  "preserved": [
+    "per-share amount",
+    "exchange ex-date",
+    "announcement date",
+    "evidence URL",
+    "content hash",
+    "sourcePublishedAt",
+    "backfill cursor",
+    "older revision"
+  ],
+  "clientVersion": "pg_dump (PostgreSQL) 18.6"
+}

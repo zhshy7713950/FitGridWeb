@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import {act,cleanup,render,screen,waitFor} from '@testing-library/react';
+import {act,cleanup,render,screen,waitFor,within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {ValuationPage} from './valuation-page';
@@ -57,4 +57,20 @@ describe('valuation page lifecycle',()=>{
   api.getValuation.mockImplementation((_id,signal)=>new Promise((_r,reject)=>signal.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError')))));
   const view=render(<ValuationPage id="grid"/>);const signal=api.getValuation.mock.calls[0][1] as AbortSignal;view.unmount();expect(signal.aborted).toBe(true);
  });
+});
+
+it('displays P50 separately from current percentile on both PE/PB charts',async()=>{
+ const data=demoValuation('grid');data.pe.stats.p50='20';data.pb.stats.p50='1.25';api.getValuation.mockResolvedValue(data);
+ render(<ValuationPage id="grid"/>);const pe=await screen.findByRole('region',{name:'PE走势'}),pb=screen.getByRole('region',{name:'PB走势'});
+ expect(within(pe).getByText('50分位值（中位数）').parentElement).toHaveTextContent('20');expect(within(pb).getByText('50分位值（中位数）').parentElement).toHaveTextContent('1.25');
+ expect(within(pe).getByRole('img').querySelector('line[aria-label="P50（中位数）"]')).toBeTruthy();expect(within(pe).getByText('当前分位')).toBeInTheDocument();
+});
+it('shows REIT price and percentage yield with provenance instead of PE/PB cards',async()=>{
+ const data=demoValuation('grid');data.product.kind='reit';data.product.code='508000.SH';data.benchmark=null;
+ data.dividendYield={...data.pe,stats:{...data.pe.stats,currentValue:'5',p50:'4.5'},trailingDistribution:'0.1',distributionAsOf:'2026-10-28'};
+ api.getValuation.mockResolvedValue(data);render(<ValuationPage id="grid"/>);
+ const yieldCard=await screen.findByRole('region',{name:'股息率（近12个月现金分派率）'});
+ expect(screen.queryByRole('heading',{name:'PE走势'})).not.toBeInTheDocument();expect(screen.queryByRole('heading',{name:'PB走势'})).not.toBeInTheDocument();
+ expect(screen.getByRole('heading',{name:'价格走势'})).toBeInTheDocument();expect(within(yieldCard).getByText('当前分派率').parentElement).toHaveTextContent('5.00%');
+ expect(within(yieldCard).getByText(/近12个月每份分派合计/)).toHaveTextContent('0.1 CNY');expect(within(yieldCard).getByText(/分派数据截至/)).toHaveTextContent('2026-10-28');
 });

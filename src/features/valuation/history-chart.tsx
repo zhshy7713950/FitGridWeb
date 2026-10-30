@@ -17,8 +17,8 @@ export function sampleForPlot(points:HistoryPoint[],lines:ChartLine[]):HistoryPo
  }
  return [...indices].sort((a,b)=>a-b).map(i=>points[i]);
 }
-function format(v:string|null|undefined){return number(v)===null?'—':Number(v).toLocaleString('zh-CN',{maximumFractionDigits:4});}
-export function HistoryChart({label,points,lines,references=[]}:{label:string;points:HistoryPoint[];lines:ChartLine[];references?:Reference[]}){
+function format(v:string|null|undefined,unit?:'%'){return number(v)===null?'—':Number(v).toLocaleString('zh-CN',{minimumFractionDigits:unit?2:0,maximumFractionDigits:unit?2:4})+(unit??'');}
+export function HistoryChart({label,points,lines,references=[],unit}:{label:string;points:HistoryPoint[];lines:ChartLine[];references?:Reference[];unit?:'%'}){
  const host=useRef<HTMLDivElement>(null),[width,setWidth]=useState(800),[selected,setSelected]=useState<number|null>(null);
  useEffect(()=>{if(!host.current||typeof ResizeObserver==='undefined')return;const observer=new ResizeObserver(entries=>setWidth(Math.max(280,Math.round(entries[0].contentRect.width))));observer.observe(host.current);return()=>observer.disconnect();},[]);
  const sampled=useMemo(()=>sampleForPlot(points,lines),[points,lines]);
@@ -42,7 +42,7 @@ export function HistoryChart({label,points,lines,references=[]}:{label:string;po
  }}>
   <svg role="img" aria-label={label} viewBox={`0 0 ${width} ${height}`} onPointerDown={e=>showAt(e.clientX,e.currentTarget.getBoundingClientRect())} onPointerMove={e=>showAt(e.clientX,e.currentTarget.getBoundingClientRect())}>
    <title>{label}，{points[0].date}至{points.at(-1)!.date}</title>
-   {[0,.25,.5,.75,1].map(t=><g key={t}><line x1={left} x2={right} y1={top+t*(bottom-top)} y2={top+t*(bottom-top)} stroke="var(--line)"/><text x={left-9} y={top+t*(bottom-top)+4} textAnchor="end">{format(String(high-t*(high-low)))}</text></g>)}
+   {[0,.25,.5,.75,1].map(t=><g key={t}><line x1={left} x2={right} y1={top+t*(bottom-top)} y2={top+t*(bottom-top)} stroke="var(--line)"/><text x={left-9} y={top+t*(bottom-top)+4} textAnchor="end">{format(String(high-t*(high-low)),unit)}</text></g>)}
    <text x={left} y={242}>{points[0].date}</text>{width>500?<text x={(left+right)/2} y={242} textAnchor="middle">{points[Math.floor(points.length/2)].date}</text>:null}<text x={right} y={242} textAnchor="end">{points.at(-1)!.date}</text>
    {references.filter(r=>number(r.value)!==null).map(r=><line key={r.label} aria-label={r.label} x1={left} x2={right} y1={y(Number(r.value))} y2={y(Number(r.value))} stroke={r.color} strokeDasharray="5 5" opacity=".7"/>)}
    {lines.map(line=>{let connected=false;const d=sampled.map(p=>{const value=number(p[line.key]);if(value===null){connected=false;return ''; }const command=connected?'L':'M';connected=true;return `${command}${x(p.date).toFixed(2)},${y(value).toFixed(2)}`;}).join(' ');
@@ -51,7 +51,7 @@ export function HistoryChart({label,points,lines,references=[]}:{label:string;po
    })}
    {active?<line x1={x(active.date)} x2={x(active.date)} y1={top} y2={bottom} stroke="var(--text-muted)" strokeDasharray="3 3"/>:null}
   </svg>
-  <div className={styles.chartReadout} aria-live="polite">{active?`${active.date} · ${lines.map(l=>`${l.label} ${format(active[l.key])}`).join(' · ')}`:'移动指针、触摸图表或使用左右方向键查看历史值'}</div>
+  <div className={styles.chartReadout} aria-live="polite">{active?`${active.date} · ${lines.map(l=>`${l.label} ${format(active[l.key],unit)}`).join(' · ')}`:'移动指针、触摸图表或使用左右方向键查看历史值'}</div>
   <div className={styles.legend}>{lines.map(l=><span key={l.key}><i style={{background:l.color}}/>{l.label}</span>)}{references.map(r=><span key={r.label}><i style={{background:r.color}}/>{r.label}</span>)}</div>
  </div>;
 }

@@ -1,10 +1,10 @@
 import type { Metric, SeriesDefinition, ValuationProduct } from "./types";
 
 function series(subject: string, metric: Metric, source: SeriesDefinition["source"], symbol: string): SeriesDefinition {
-  const frequency = source === "legu" ? "monthly" : "daily";
-  const method = metric === "price" ? "不复权收盘价" : source === "csi" ? "滚动PE（中证peg字段）" : metric === "pb" ? "整体法PB（addPb）" : "供方历史PE";
+  const frequency = source === "legu" ? "monthly" : source === "eastmoney_disclosures" ? "event" : "daily";
+  const method = metric === "distribution" ? "基金管理人分红公告：每份税前现金分派，场内除息日" : metric === "price" ? "不复权收盘价" : source === "csi" ? "滚动PE（中证peg字段）" : metric === "pb" ? "整体法PB（addPb）" : "供方历史PE";
   return { key: `${subject}:${metric}:${source}:${frequency}:v1:raw`, subject, metric, source, symbol, method, frequency,
-    sourceLabel: { tencent: "腾讯行情", yahoo: "Yahoo Finance", csi: "中证指数", legu: "乐咕乐股" }[source] };
+    sourceLabel: { tencent: "腾讯行情", yahoo: "Yahoo Finance", csi: "中证指数", legu: "乐咕乐股", eastmoney_disclosures: "基金管理人分红公告（东方财富转载）" }[source] };
 }
 const definitions: Array<[string,string,string|null,string|null,ValuationProduct["kind"]?]> = [
   ["512980","传媒ETF","399971","中证传媒"],["159920","恒生指数ETF","HSI","恒生指数"],
@@ -32,11 +32,13 @@ export const PRODUCTS: ValuationProduct[] = definitions.map(([code,name,index,in
   const pb = index !== null && ["000015","000300","000905"].includes(index);
   return { code: canonical, name, market, currency: market === "us" ? "USD" : "CNY", kind,
     benchmark: index && indexName ? {id:index,name:indexName}:null,
+    listedAt: kind === "reit" ? "2021-06-21" : null,
     mappingSince: code === "159638" ? "2026-08-28" : null,
     note: code === "588680" ? "增强策略基金：指数仅为参考基准，不代表实际组合估值。" : code === "159638" ? "指数方法于2026-08-28变更，变更前历史不拼接到现行方法。" : kind === "lof" ? "场内价格为本基金LOF价格，指数估值仅供参考。" : null,
     series: { price: series(canonical,"price",market === "us" ? "yahoo" : "tencent",market === "us" ? code : `${exchange.toLowerCase()}${code}`),
       pe: domestic ? series(index!,"pe","csi",index!) : global ? series(index!,"pe","legu",index!):null,
-      pb: pb ? series(index!,"pb","legu",`${index}.SH`):null } };
+      pb: pb ? series(index!,"pb","legu",`${index}.SH`):null,
+      distribution: kind === "reit" ? series(canonical,"distribution","eastmoney_disclosures",code) : null } };
 });
 export function resolveValuationProduct(code: string): ValuationProduct | null {
   const value=code.trim().toUpperCase();

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { PriceDecimal as Decimal } from "@/server/price-alerts/decimal";
 import { dateInZone, segments, ZONES } from "@/server/price-alerts/calendar";
 import { knownSeries } from "./catalog";
+import { fetchDistributionBatch } from "./distributions";
 import type { Observation, SeriesDefinition, SeriesRequest, SeriesBatch } from "./types";
 
 const MAX_BYTES=8*1024*1024;
@@ -72,6 +73,7 @@ export function requestFor(s:SeriesDefinition,from:string,to:string):{url:string
   const known=knownSeries(s.key);
   if(!known || known.symbol!==s.symbol || known.source!==s.source || known.metric!==s.metric) throw new Error("未允许的数据序列");
   date(from);date(to);
+  if(s.source==="eastmoney_disclosures") return {url:`https://fundf10.eastmoney.com/fhsp_${s.symbol}.html`};
   if(s.source==="tencent") return {url:`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${s.symbol},day,${from},${to},640,`};
   if(s.source==="yahoo") return {url:`https://query1.finance.yahoo.com/v8/finance/chart/${s.symbol}?interval=1d&period1=${Date.parse(from)/1000}&period2=${Date.parse(to)/1000+86400}&includePrePost=false`};
   if(s.source==="csi") return {url:`https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=${s.symbol}&startDate=${from.replaceAll("-","")}&endDate=${to.replaceAll("-","")}`};
@@ -90,6 +92,9 @@ async function readResponse(r:Response):Promise<string> {
 }
 export async function fetchSeriesBatch(request:SeriesRequest, options:{signal:AbortSignal;fetcher?:typeof fetch}):Promise<SeriesBatch> {
   const {series:s,from,to}=request, spec=requestFor(s,from,to), fetcher=options.fetcher??fetch;
+  if(s.metric==="distribution") return fetchDistributionBatch(request,async url=>readResponse(await fetcher(url,{
+    signal:AbortSignal.any([options.signal,AbortSignal.timeout(5000)]),cache:"no-store",redirect:"error",headers:{Accept:"application/json, text/html",Referer:"https://fundf10.eastmoney.com/"},
+  })));
   const signal=AbortSignal.any([options.signal,AbortSignal.timeout(5000)]);
   const r=await fetcher(spec.url,{...spec.init,signal,cache:"no-store",redirect:"error",headers:{Accept:"application/json, text/html"}});
   let text=await readResponse(r);

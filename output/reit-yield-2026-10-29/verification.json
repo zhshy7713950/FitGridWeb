@@ -1,0 +1,25 @@
+{
+  "suite": {
+    "filesPassed": 121,
+    "testsPassed": 1269,
+    "specializedTestsSkipped": 4,
+    "specializedTestsPassedSeparately": 4
+  },
+  "databaseTestsPassed": 9,
+  "browserViewportWidths": [
+    1440,
+    390
+  ],
+  "browserThemes": [
+    "light",
+    "dark"
+  ],
+  "screenshots": 12,
+  "typecheck": "passed",
+  "lint": "passed",
+  "build": "passed",
+  "diffCheck": "passed",
+  "review": "1 exact-unit validation finding fixed and regression tested",
+  "liveEvidence": "live-acceptance.json",
+  "backupEvidence": "backup-acceptance.json"
+}

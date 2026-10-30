@@ -12,7 +12,7 @@
 .cardHeading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .card h2 { font-size: 18px; margin: 6px 0 0; }
 .badge { font-size: 11px; color: var(--text-muted); border: 1px solid var(--line); padding: 5px 9px; border-radius: 4px; white-space: nowrap; }
-.stats { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); margin: 24px 0 16px; gap: 16px; }
+.stats { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); margin: 24px 0 16px; gap: 16px; }
 .priceStats { grid-template-columns: repeat(3,minmax(0,1fr)); }
 .stats dt { font-size: 11px; color: var(--text-muted); margin-bottom: 7px; }
 .stats dd { font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 20px; letter-spacing: -.025em; margin: 0; overflow-wrap: anywhere; }
@@ -30,3 +30,5 @@
 .empty { display: grid; place-items: center; min-height: 170px; color: var(--text-muted); font-size: 13px; }
 .skeleton { padding: 35px 24px; min-height: 230px; margin: 18px 0; background: var(--surface); border: 1px solid var(--line); color: var(--text-muted); border-radius: var(--panel-radius); }
 @media (max-width: 680px) { .page { padding: 20px 16px 30px; } .heading { gap: 12px; align-items: flex-start; flex-wrap: wrap; } .heading h1 { font-size: 23px; } .heading h1 span { font-size: 14px; margin-left: 8px; } .card { padding: 18px 14px; } .stats { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px 12px; } .stats dd { font-size: 18px; } .priceStats dd { font-size: 16px; } .back { margin-bottom: 18px; } }
+
+@media (min-width: 681px) and (max-width: 1000px) { .stats:not(.priceStats) { grid-template-columns: repeat(4,minmax(0,1fr)); } }
