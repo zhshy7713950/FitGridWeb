@@ -9,6 +9,16 @@ vi.mock('./valuation-api',()=>api);
 afterEach(()=>{cleanup();vi.useRealTimers();});
 beforeEach(()=>{vi.clearAllMocks();api.getValuation.mockResolvedValue(demoValuation('grid'));api.refreshValuation.mockResolvedValue(demoValuation('grid'));});
 describe('valuation page lifecycle',()=>{
+ it('shares an explicit budget across independent panels and only shows a REIT yield scenario',async()=>{
+  const user=userEvent.setup(),view=render(<ValuationPage id="grid"/>);await screen.findByRole('heading',{name:'PE走势'});
+  expect(screen.getByLabelText('最大投资本金（CNY）')).toHaveValue('');
+  expect(screen.getByRole('button',{name:'计算PE参考参数'})).toBeDisabled();
+  await user.type(screen.getByLabelText('最大投资本金（CNY）'),'100000');await user.click(screen.getByRole('button',{name:'计算PE参考参数'}));await screen.findByText('实际首笔金额');
+  expect(within(screen.getByRole('region',{name:'PB走势'})).queryByText('实际首笔金额')).not.toBeInTheDocument();
+  await user.clear(screen.getByLabelText('最大投资本金（CNY）'));expect(screen.queryByText('实际首笔金额')).not.toBeInTheDocument();
+  api.getValuation.mockResolvedValue(demoValuation('demo-reit-508000'));view.rerender(<ValuationPage id="demo-reit-508000"/>);
+  await screen.findByRole('heading',{name:'股息率（近12个月现金分派率）'});expect(screen.queryByRole('button',{name:'计算PE参考参数'})).not.toBeInTheDocument();expect(screen.getByRole('button',{name:'计算现金分派率参考参数'})).toBeDisabled();
+ });
  it('disables manual refresh while another page is collecting and stops polling within 120 seconds',async()=>{
   vi.useFakeTimers();const cached=demoValuation('grid');cached.refresh={busy:true,hasMore:false,retryAfter:3};
   api.getValuation.mockResolvedValue(cached);render(<ValuationPage id="grid"/>);
@@ -51,7 +61,7 @@ describe('valuation page lifecycle',()=>{
  });
  it('keeps null data empty and handles unknown/REIT objects without fake zero values',async()=>{
   const data=demoValuation('grid');data.pe.availability='not_applicable';data.pe.points=[];data.pe.stats.currentValue=null;data.pe.stats.currentPercentile=null;data.pe.message='REIT的PE/PB不适用';
-  api.getValuation.mockResolvedValue(data);render(<ValuationPage id="grid"/>);await screen.findByText('REIT的PE/PB不适用');expect(screen.queryByText('0%')).not.toBeInTheDocument();
+  api.getValuation.mockResolvedValue(data);render(<ValuationPage id="grid"/>);await screen.findByText('REIT的PE/PB不适用');expect(within(screen.getByRole('region',{name:'PE走势'})).queryByText('0%')).not.toBeInTheDocument();
  });
  it('aborts unfinished requests on navigation and does not update the unmounted page',async()=>{
   api.getValuation.mockImplementation((_id,signal)=>new Promise((_r,reject)=>signal.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError')))));

@@ -2137,6 +2137,42 @@ components:
               close: *a1
               ma250: *a1
               ma500: *a1
+    ValuationReferenceBasis:
+      type: object
+      additionalProperties: false
+      required: [metric, status, reason, target, current, metricDate, anchorPrice, anchorDate, latestPrice, latestPriceDate, conditionPrice, startPrice, changePercent, months, years, windowStart, windowEnd, warnings]
+      properties:
+        metric: {enum: [pe, pb, dividendYield]}
+        status: {enum: [conditional, unavailable]}
+        reason: *a1
+        target: *a1
+        current: *a1
+        metricDate: {type: [string, "null"], format: date}
+        anchorPrice: *a1
+        anchorDate: {type: [string, "null"], format: date}
+        latestPrice: *a1
+        latestPriceDate: {type: [string, "null"], format: date}
+        conditionPrice: *a1
+        startPrice: *a1
+        changePercent: *a1
+        months: {type: integer, minimum: 0}
+        years: {enum: [5, 10, null]}
+        windowStart: {type: [string, "null"], format: date}
+        windowEnd: {type: [string, "null"], format: date}
+        warnings: {type: array, items: {type: string}}
+    ValuationReferenceData:
+      description: 仅基于当前账号已授权的缓存数据提供条件换算。预算计算在本页完成，不增加写操作。分析窗口与图表全历史分位独立，参数未完成3/5年历史回测。兼容没有reference的旧响应。
+      type: object
+      additionalProperties: false
+      required: [gridInput, pe, pb, dividendYield]
+      properties:
+        gridInput:
+          anyOf:
+            - type: "null"
+            - $ref: '#/components/schemas/GridTradeStoredInput'
+        pe: {$ref: '#/components/schemas/ValuationReferenceBasis'}
+        pb: {$ref: '#/components/schemas/ValuationReferenceBasis'}
+        dividendYield: {$ref: '#/components/schemas/ValuationReferenceBasis'}
     ValuationPageData:
       type: object
       additionalProperties: false
@@ -2182,6 +2218,8 @@ components:
             name:
               type: string
         note: *a1
+        reference:
+          $ref: '#/components/schemas/ValuationReferenceData'
         price:
           $ref: "#/components/schemas/ValuationMetricCard"
         pe:

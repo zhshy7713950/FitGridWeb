@@ -17,6 +17,14 @@ const ready=async()=>{for(const s of Object.values(product.series)){if(!s)contin
 const service=()=>new ValuationService({grid:{get},store,fetch:fetcher,clock:()=>clock,beforeRequest:guard});
 beforeEach(()=>{vi.resetAllMocks();store=new MemoryHistory();clock=new Date('2026-10-28T08:00:00Z');get.mockResolvedValue({id:'grid',productCode:'510880',productName:'红利'});fetcher.mockResolvedValue({observations:[{date:'2026-10-28',value:'10',quality:'valid'}],reachedStart:true});});
 describe('cached valuation observation service',()=>{
+ it('adds independent reference evidence and saved settings only after owner lookup, without collection',async()=>{
+  const input={maxPrice:'3',perShare:'1000',isShort:false};get.mockResolvedValue({id:'grid',productCode:'510880',input});
+  const data=await service().read('owner','grid');
+  expect(data.reference?.gridInput).toEqual(input);
+  expect(data.reference?.pe).toMatchObject({metric:'pe',status:'unavailable'});
+  expect(data.reference?.pb.metric).toBe('pb');expect(data.reference?.dividendYield.metric).toBe('dividendYield');
+  expect(get).toHaveBeenCalledWith('owner','grid');expect(fetcher).not.toHaveBeenCalled();
+ });
  it('always reads local records and makes zero upstream calls on GET, even when empty',async()=>{expect((await service().read('owner','grid')).price.availability).toBe('empty');await ready();expect((await service().read('owner','grid')).price.stats.currentValue).toBe('10');expect(fetcher).not.toHaveBeenCalled();});
  it('makes no due refresh requests for fresh data, then refreshes valuations exactly at seven days',async()=>{
   await ready();await service().refresh('owner','grid','due');expect(fetcher).not.toHaveBeenCalled();

@@ -5,6 +5,8 @@ import {archivedObservations} from './archive';
 import {summarizeValuation,buildPriceHistory} from './statistics';
 import {fetchSeriesBatch} from './sources';
 import {buildDividendYield} from './dividend-yield';
+import {buildReferenceBasis} from './reference';
+import type {GridTradeInput} from '@/server/grid-domain/types';
 import type {HistoryStore} from './repository';
 import type {Metric,MetricCard,SeriesDefinition,SeriesSnapshot,ValuationPageData,ValuationProduct,SeriesRequest,SeriesBatch,DividendYieldCard} from './types';
 
@@ -52,7 +54,7 @@ function dividendCard(product:ValuationProduct,snapshot:SeriesSnapshot|null,pric
 }
 
 interface Dependencies {
- grid:{get(ownerId:string,id:string):Promise<{id:string;productCode:string;productName?:string|null}>};
+ grid:{get(ownerId:string,id:string):Promise<{id:string;productCode:string;productName?:string|null;input?:GridTradeInput}>};
  store:HistoryStore;fetch?: (request:SeriesRequest,options:{signal:AbortSignal})=>Promise<SeriesBatch>;
  clock?:()=>Date;beforeRequest:()=>Promise<void>;
 }
@@ -69,6 +71,7 @@ export class ValuationService {
   const retries=retryTimes.filter((r):r is string=>!!r&&Date.parse(r)>+now).map(r=>Math.ceil((Date.parse(r)-+now)/1000));
   return {product:{id:grid.id,code:p?.code??grid.productCode,name:grid.productName||p?.name||grid.productCode,currency:p?.currency??null,kind:p?.kind??null},
    benchmark:p?.benchmark??null,note:p?.note??null,price:cards[0],pe:cards[1],pb:cards[2],dividendYield,
+   reference:{gridInput:grid.input??null,pe:buildReferenceBasis('pe',cards[1],cards[0],p?.kind??null,now),pb:buildReferenceBasis('pb',cards[2],cards[0],p?.kind??null,now),dividendYield:buildReferenceBasis('dividendYield',dividendYield,cards[0],p?.kind??null,now)},
    refresh:{busy:cards.some(c=>c.refreshing),hasMore:cards.some(c=>c.due&&!c.refreshing),retryAfter:cards.some(c=>c.refreshing)?3:retries.length?Math.min(...retries):null}};
  }
  async refresh(ownerId:string,id:string,mode:'due'|'manual',signal?:AbortSignal):Promise<ValuationPageData>{

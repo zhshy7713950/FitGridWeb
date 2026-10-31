@@ -1,5 +1,6 @@
 import type {MetricCard,Observation,ValuationPageData} from '@/server/valuation/types';
 import {summarizeValuation,buildPriceHistory} from '@/server/valuation/statistics';
+import {buildReferenceBasis} from '@/server/valuation/reference';
 /** Deterministic demonstration values, never used by production collection or persisted as market data. */
 export function demoValuation(id:string):ValuationPageData {
  const observations:Observation[]=[];
@@ -9,5 +10,6 @@ export function demoValuation(id:string):ValuationPageData {
  const result:ValuationPageData={product:{id,code:'510880.SH',name:'上证红利ETF',currency:'CNY',kind:'etf'},benchmark:{id:'000015',name:'上证红利'},note:'演示模式：图表使用示例数据。',price:make(observations,true),pe:make(month.map((p,i)=>({...p,value:(7+Math.sin(i/4)*1.5+i*.035).toFixed(2)}))),pb:make(month.map((p,i)=>({...p,value:(.8+Math.sin(i/6)*.14+i*.002).toFixed(2)}))),dividendYield:null,refresh:{busy:false,hasMore:false,retryAfter:null}};
  result.dividendYield={...make(month.map((p,i)=>({...p,value:(4+Math.sin(i/6)*.8).toFixed(4)}))),method:'对应指数股息率（演示，非基金分派率）',trailingDistribution:null,distributionAsOf:null};
  if(id.startsWith('demo-reit-')){result.product={id,code:id.endsWith('508056')?'508056.SH':'508000.SH',name:id.endsWith('508056')?'普洛斯REIT':'张江产业园REIT',currency:'CNY',kind:'reit'};result.benchmark=null;const yieldPoints=observations.map((p,i)=>({...p,value:(4+Math.sin(i/130)*.7+i*.001).toFixed(6)}));result.dividendYield={...make(yieldPoints),method:'近12个月每份税前现金分派合计 ÷ 当日不复权收盘价 × 100%（演示）',frequency:'daily',trailingDistribution:'0.16831',distributionAsOf:'2026-10-28'};}
+ result.reference={gridInput:{productName:result.product.name,productCode:result.product.code,maxPrice:'3.16',minTradeQuantity:'100',gearAmplitude:'3',perShare:'8000',keepShare:10,increaseAmplitude:8,mediumAmplitude:10,bigAmplitude:20,maxAmplitude:40,isShort:false,category:null,sortOrder:0,algorithmVersion:'android-v2.1.0'},pe:buildReferenceBasis('pe',result.pe,result.price,result.product.kind,new Date('2026-10-29T08:00:00Z')),pb:buildReferenceBasis('pb',result.pb,result.price,result.product.kind,new Date('2026-10-29T08:00:00Z')),dividendYield:buildReferenceBasis('dividendYield',result.dividendYield,result.price,result.product.kind,new Date('2026-10-29T08:00:00Z'))};
  return result;
 }

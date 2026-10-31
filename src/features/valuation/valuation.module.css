@@ -29,6 +29,26 @@
 .cardFooter { display: grid; gap: 5px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--text-muted); font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
 .empty { display: grid; place-items: center; min-height: 170px; color: var(--text-muted); font-size: 13px; }
 .skeleton { padding: 35px 24px; min-height: 230px; margin: 18px 0; background: var(--surface); border: 1px solid var(--line); color: var(--text-muted); border-radius: var(--panel-radius); }
+.referenceControls { padding: 22px 24px; border: 1px solid var(--line); border-radius: var(--panel-radius); background: var(--surface); }
+.referenceControls h2 { margin: 0; font-size: 18px; }
+.referenceFields { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 16px; margin: 16px 0; }
+.referenceFields label { display: grid; align-content: start; gap: 8px; font-size: 12px; color: var(--text-muted); min-width: 0; }
+.referenceFields input, .referenceFields select { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--text); font: inherit; font-size: 14px; }
+.cardBody { display: grid; grid-template-columns: minmax(0,1fr) minmax(300px,.65fr); gap: 24px; margin-top: 20px; align-items: start; }
+.referencePanel { min-width: 0; padding: 18px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: 5px; }
+.referencePanel h3 { font-size: 16px; margin: 6px 0 16px; }
+.referenceStats { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin: 16px 0; }
+.referenceStats dt { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+.referenceStats dd { margin: 0; font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 14px; overflow-wrap: anywhere; }
+.referenceButton { background: var(--action); border: 1px solid var(--action); color: var(--on-action); padding: 10px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.referenceButton:disabled { opacity: .6; cursor: default; }
+.referenceDetails { font-size: 12px; line-height: 1.7; }
+.referenceDetails summary { cursor: pointer; color: var(--action-text); margin: 16px 0; }
+.pressureList { display: grid; gap: 12px; }
+.pressureRow { display: grid; gap: 5px; padding-top: 12px; border-top: 1px solid var(--line); overflow-wrap: anywhere; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pressureRow span { color: var(--text-muted); }
+@media (max-width: 1000px) { .cardBody { grid-template-columns: minmax(0,1fr); } }
+@media (max-width: 680px) { .referenceControls { padding: 18px 14px; } .referenceFields { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; } .referencePanel { padding: 14px; } }
 @media (max-width: 680px) { .page { padding: 20px 16px 30px; } .heading { gap: 12px; align-items: flex-start; flex-wrap: wrap; } .heading h1 { font-size: 23px; } .heading h1 span { font-size: 14px; margin-left: 8px; } .card { padding: 18px 14px; } .stats { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px 12px; } .stats dd { font-size: 18px; } .priceStats dd { font-size: 16px; } .back { margin-bottom: 18px; } }
 
 @media (min-width: 681px) and (max-width: 1000px) { .stats:not(.priceStats) { grid-template-columns: repeat(4,minmax(0,1fr)); } }

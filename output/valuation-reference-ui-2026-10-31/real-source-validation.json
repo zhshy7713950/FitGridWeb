@@ -1,0 +1,505 @@
+[
+  {
+    "code": "510880",
+    "metric": "pe",
+    "basis": {
+      "metric": "pe",
+      "status": "conditional",
+      "reason": null,
+      "target": "6.527",
+      "current": "9.6",
+      "metricDate": "2026-10-29",
+      "anchorPrice": "3.42",
+      "anchorDate": "2026-10-29",
+      "latestPrice": "3.46",
+      "latestPriceDate": "2026-10-30",
+      "conditionPrice": "2.32524375",
+      "startPrice": "2.325",
+      "changePercent": "-32.8",
+      "months": 120,
+      "years": 10,
+      "windowStart": "2016-10-01",
+      "windowEnd": "2026-09-30",
+      "warnings": [
+        "条件换算假设盈利、净资产或每份分红不变；未核验跟踪差异、汇率及折溢价，不能据此判断当前可以买入。",
+        "依据包含已保存缓存，来源更新状态与日期见图表。"
+      ]
+    },
+    "plan": {
+      "baseAmount": "8324.74",
+      "firstAmount": "8370",
+      "firstCount": "3600",
+      "buyAmount": "99778.9",
+      "fees": "50",
+      "remaining": "171.1",
+      "orderCount": 10,
+      "lowestPrice": "1.86",
+      "pressure": [
+        {
+          "drop": 20,
+          "price": "1.86",
+          "quantity": "49000",
+          "buyAmount": "99778.9",
+          "fees": "50",
+          "cash": "171.1",
+          "averageCost": "2.037324",
+          "loss": "8688.9"
+        },
+        {
+          "drop": 40,
+          "price": "1.395",
+          "quantity": "49000",
+          "buyAmount": "99778.9",
+          "fees": "50",
+          "cash": "171.1",
+          "averageCost": "2.037324",
+          "loss": "31473.9"
+        },
+        {
+          "drop": 60,
+          "price": "0.93",
+          "quantity": "49000",
+          "buyAmount": "99778.9",
+          "fees": "50",
+          "cash": "171.1",
+          "averageCost": "2.037324",
+          "loss": "54258.9"
+        },
+        {
+          "drop": 80,
+          "price": "0.465",
+          "quantity": "49000",
+          "buyAmount": "99778.9",
+          "fees": "50",
+          "cash": "171.1",
+          "averageCost": "2.037324",
+          "loss": "77043.9"
+        }
+      ]
+    }
+  },
+  {
+    "code": "510880",
+    "metric": "pb",
+    "basis": {
+      "metric": "pb",
+      "status": "conditional",
+      "reason": null,
+      "target": "0.69",
+      "current": "0.87",
+      "metricDate": "2026-09-30",
+      "anchorPrice": "3.368",
+      "anchorDate": "2026-09-30",
+      "latestPrice": "3.46",
+      "latestPriceDate": "2026-10-30",
+      "conditionPrice": "2.67117241",
+      "startPrice": "2.671",
+      "changePercent": "-22.8",
+      "months": 120,
+      "years": 10,
+      "windowStart": "2016-10-01",
+      "windowEnd": "2026-09-30",
+      "warnings": [
+        "条件换算假设盈利、净资产或每份分红不变；未核验跟踪差异、汇率及折溢价，不能据此判断当前可以买入。",
+        "依据包含已保存缓存，来源更新状态与日期见图表。"
+      ]
+    },
+    "plan": {
+      "baseAmount": "8371.97",
+      "firstAmount": "8280.1",
+      "firstCount": "3100",
+      "buyAmount": "99888",
+      "fees": "50",
+      "remaining": "62",
+      "orderCount": 10,
+      "lowestPrice": "2.137",
+      "pressure": [
+        {
+          "drop": 20,
+          "price": "2.1368",
+          "quantity": "42700",
+          "buyAmount": "99888",
+          "fees": "50",
+          "cash": "62",
+          "averageCost": "2.340468",
+          "loss": "8696.64"
+        },
+        {
+          "drop": 40,
+          "price": "1.6026",
+          "quantity": "42700",
+          "buyAmount": "99888",
+          "fees": "50",
+          "cash": "62",
+          "averageCost": "2.340468",
+          "loss": "31506.98"
+        },
+        {
+          "drop": 60,
+          "price": "1.0684",
+          "quantity": "42700",
+          "buyAmount": "99888",
+          "fees": "50",
+          "cash": "62",
+          "averageCost": "2.340468",
+          "loss": "54317.32"
+        },
+        {
+          "drop": 80,
+          "price": "0.5342",
+          "quantity": "42700",
+          "buyAmount": "99888",
+          "fees": "50",
+          "cash": "62",
+          "averageCost": "2.340468",
+          "loss": "77127.66"
+        }
+      ]
+    }
+  },
+  {
+    "code": "510880",
+    "metric": "dividendYield",
+    "basis": {
+      "metric": "dividendYield",
+      "status": "conditional",
+      "reason": null,
+      "target": "6.523",
+      "current": "5.33",
+      "metricDate": "2026-10-23",
+      "anchorPrice": "3.31",
+      "anchorDate": "2026-10-23",
+      "latestPrice": "3.46",
+      "latestPriceDate": "2026-10-30",
+      "conditionPrice": "2.70462977",
+      "startPrice": "2.704",
+      "changePercent": "-21.85",
+      "months": 60,
+      "years": 5,
+      "windowStart": "2021-10-01",
+      "windowEnd": "2026-09-30",
+      "warnings": [
+        "条件换算假设盈利、净资产或每份分红不变；未核验跟踪差异、汇率及折溢价，不能据此判断当前可以买入。",
+        "依据包含已保存缓存，来源更新状态与日期见图表。",
+        "十年历史不足，使用五年窗口；短历史可能显著影响结果。"
+      ]
+    },
+    "plan": {
+      "baseAmount": "8354.51",
+      "firstAmount": "8382.4",
+      "firstCount": "3100",
+      "buyAmount": "99908.4",
+      "fees": "50",
+      "remaining": "41.6",
+      "orderCount": 10,
+      "lowestPrice": "2.163",
+      "pressure": [
+        {
+          "drop": 20,
+          "price": "2.1632",
+          "quantity": "31800",
+          "buyAmount": "77413.2",
+          "fees": "40",
+          "cash": "22546.8",
+          "averageCost": "2.435635",
+          "loss": "8663.44"
+        },
+        {
+          "drop": 40,
+          "price": "1.6224",
+          "quantity": "42200",
+          "buyAmount": "99908.4",
+          "fees": "50",
+          "cash": "41.6",
+          "averageCost": "2.368682",
+          "loss": "31493.12"
+        },
+        {
+          "drop": 60,
+          "price": "1.0816",
+          "quantity": "42200",
+          "buyAmount": "99908.4",
+          "fees": "50",
+          "cash": "41.6",
+          "averageCost": "2.368682",
+          "loss": "54314.88"
+        },
+        {
+          "drop": 80,
+          "price": "0.5408",
+          "quantity": "42200",
+          "buyAmount": "99908.4",
+          "fees": "50",
+          "cash": "41.6",
+          "averageCost": "2.368682",
+          "loss": "77136.64"
+        }
+      ]
+    }
+  },
+  {
+    "code": "159920",
+    "metric": "pe",
+    "basis": {
+      "metric": "pe",
+      "status": "conditional",
+      "reason": null,
+      "target": "11.074",
+      "current": "13.79",
+      "metricDate": "2026-09-30",
+      "anchorPrice": "1.445",
+      "anchorDate": "2026-09-30",
+      "latestPrice": "1.358",
+      "latestPriceDate": "2026-10-30",
+      "conditionPrice": "1.16040102",
+      "startPrice": "1.16",
+      "changePercent": "-14.58",
+      "months": 120,
+      "years": 10,
+      "windowStart": "2016-10-01",
+      "windowEnd": "2026-09-30",
+      "warnings": [
+        "条件换算假设盈利、净资产或每份分红不变；未核验跟踪差异、汇率及折溢价，不能据此判断当前可以买入。",
+        "依据包含已保存缓存，来源更新状态与日期见图表。"
+      ]
+    },
+    "plan": {
+      "baseAmount": "3738.73",
+      "firstAmount": "3712",
+      "firstCount": "3200",
+      "buyAmount": "99893.4",
+      "fees": "95",
+      "remaining": "11.6",
+      "orderCount": 19,
+      "lowestPrice": "0.464",
+      "pressure": [
+        {
+          "drop": 20,
+          "price": "0.928",
+          "quantity": "24400",
+          "buyAmount": "24974.8",
+          "fees": "30",
+          "cash": "74995.2",
+          "averageCost": "1.024787",
+          "loss": "2361.6"
+        },
+        {
+          "drop": 40,
+          "price": "0.696",
+          "quantity": "63400",
+          "buyAmount": "55639.4",
+          "fees": "60",
+          "cash": "44300.6",
+          "averageCost": "0.878539",
+          "loss": "11573"
+        },
+        {
+          "drop": 60,
+          "price": "0.464",
+          "quantity": "147800",
+          "buyAmount": "99893.4",
+          "fees": "95",
+          "cash": "11.6",
+          "averageCost": "0.676512",
+          "loss": "31409.2"
+        },
+        {
+          "drop": 80,
+          "price": "0.232",
+          "quantity": "147800",
+          "buyAmount": "99893.4",
+          "fees": "95",
+          "cash": "11.6",
+          "averageCost": "0.676512",
+          "loss": "65698.8"
+        }
+      ]
+    }
+  },
+  {
+    "code": "159920",
+    "metric": "pb",
+    "basis": {
+      "metric": "pb",
+      "status": "unavailable",
+      "reason": "最新指标缺失、为零或未核验，不能用更早值替代。",
+      "target": null,
+      "current": null,
+      "metricDate": null,
+      "anchorPrice": null,
+      "anchorDate": null,
+      "latestPrice": null,
+      "latestPriceDate": null,
+      "conditionPrice": null,
+      "startPrice": null,
+      "changePercent": null,
+      "months": 0,
+      "years": null,
+      "windowStart": null,
+      "windowEnd": null,
+      "warnings": []
+    },
+    "plan": null
+  },
+  {
+    "code": "159920",
+    "metric": "dividendYield",
+    "basis": {
+      "metric": "dividendYield",
+      "status": "conditional",
+      "reason": null,
+      "target": "3.73",
+      "current": "2.97",
+      "metricDate": "2026-09-30",
+      "anchorPrice": "1.445",
+      "anchorDate": "2026-09-30",
+      "latestPrice": "1.358",
+      "latestPriceDate": "2026-10-30",
+      "conditionPrice": "1.15057641",
+      "startPrice": "1.15",
+      "changePercent": "-15.32",
+      "months": 120,
+      "years": 10,
+      "windowStart": "2016-10-01",
+      "windowEnd": "2026-09-30",
+      "warnings": [
+        "条件换算假设盈利、净资产或每份分红不变；未核验跟踪差异、汇率及折溢价，不能据此判断当前可以买入。",
+        "依据包含已保存缓存，来源更新状态与日期见图表。"
+      ]
+    },
+    "plan": {
+      "baseAmount": "3747.7",
+      "firstAmount": "3795",
+      "firstCount": "3300",
+      "buyAmount": "99830.7",
+      "fees": "95",
+      "remaining": "74.3",
+      "orderCount": 19,
+      "lowestPrice": "0.46",
+      "pressure": [
+        {
+          "drop": 20,
+          "price": "0.92",
+          "quantity": "24700",
+          "buyAmount": "25072.6",
+          "fees": "30",
+          "cash": "74897.4",
+          "averageCost": "1.0163",
+          "loss": "2378.6"
+        },
+        {
+          "drop": 40,
+          "price": "0.69",
+          "quantity": "63800",
+          "buyAmount": "55548.1",
+          "fees": "60",
+          "cash": "44391.9",
+          "averageCost": "0.8716",
+          "loss": "11586.1"
+        },
+        {
+          "drop": 60,
+          "price": "0.46",
+          "quantity": "149000",
+          "buyAmount": "99830.7",
+          "fees": "95",
+          "cash": "74.3",
+          "averageCost": "0.670642",
+          "loss": "31385.7"
+        },
+        {
+          "drop": 80,
+          "price": "0.23",
+          "quantity": "149000",
+          "buyAmount": "99830.7",
+          "fees": "95",
+          "cash": "74.3",
+          "averageCost": "0.670642",
+          "loss": "65655.7"
+        }
+      ]
+    }
+  },
+  {
+    "code": "508056",
+    "metric": "dividendYield",
+    "basis": {
+      "metric": "dividendYield",
+      "status": "conditional",
+      "reason": null,
+      "target": "5.47281735",
+      "current": "8.82291666666666666666666666666666666666666666666666666666667",
+      "metricDate": "2026-10-30",
+      "anchorPrice": "2.304",
+      "anchorDate": "2026-10-30",
+      "latestPrice": "2.304",
+      "latestPriceDate": "2026-10-30",
+      "conditionPrice": "3.71435747",
+      "startPrice": "2.304",
+      "changePercent": "0",
+      "months": 52,
+      "years": 5,
+      "windowStart": "2021-10-01",
+      "windowEnd": "2026-09-30",
+      "warnings": [
+        "条件换算假设盈利、净资产或每份分红不变；未核验跟踪差异、汇率及折溢价，不能据此判断当前可以买入。",
+        "依据包含已保存缓存，来源更新状态与日期见图表。",
+        "十年历史不足，使用五年窗口；短历史可能显著影响结果。",
+        "分派不变仅为情景假设；尚未评估出租率、资产经营及未来分派可持续性。",
+        "条件价高于最新收盘价，启动演算价取最新收盘价后向下取整，不抬高买入价格。"
+      ]
+    },
+    "plan": {
+      "baseAmount": "5343.82",
+      "firstAmount": "5299.2",
+      "firstCount": "2300",
+      "buyAmount": "99903.9",
+      "fees": "70",
+      "remaining": "26.1",
+      "orderCount": 14,
+      "lowestPrice": "1.613",
+      "pressure": [
+        {
+          "drop": 20,
+          "price": "1.8432",
+          "quantity": "24400",
+          "buyAmount": "50190",
+          "fees": "40",
+          "cash": "49770",
+          "averageCost": "2.058607",
+          "loss": "5255.92"
+        },
+        {
+          "drop": 40,
+          "price": "1.3824",
+          "quantity": "54100",
+          "buyAmount": "99903.9",
+          "fees": "70",
+          "cash": "26.1",
+          "averageCost": "1.847946",
+          "loss": "25186.06"
+        },
+        {
+          "drop": 60,
+          "price": "0.9216",
+          "quantity": "54100",
+          "buyAmount": "99903.9",
+          "fees": "70",
+          "cash": "26.1",
+          "averageCost": "1.847946",
+          "loss": "50115.34"
+        },
+        {
+          "drop": 80,
+          "price": "0.4608",
+          "quantity": "54100",
+          "buyAmount": "99903.9",
+          "fees": "70",
+          "cash": "26.1",
+          "averageCost": "1.847946",
+          "loss": "75044.62"
+        }
+      ]
+    }
+  }
+]

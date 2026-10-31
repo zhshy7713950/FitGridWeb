@@ -35,9 +35,22 @@ export interface MetricCard {
   points: Observation[]; stats: MetricSummary; prices?: PricePoint[];
 }
 export interface DividendYieldCard extends MetricCard { trailingDistribution: string | null; distributionAsOf: string | null }
+export type ReferenceMetric = 'pe' | 'pb' | 'dividendYield';
+export interface ReferenceBasis {
+  metric: ReferenceMetric; status: 'conditional' | 'unavailable'; reason: string | null;
+  target: string | null; current: string | null; metricDate: string | null;
+  anchorPrice: string | null; anchorDate: string | null; latestPrice: string | null; latestPriceDate: string | null;
+  conditionPrice: string | null; startPrice: string | null; changePercent: string | null;
+  months: number; years: number | null; windowStart: string | null; windowEnd: string | null; warnings: string[];
+}
+export interface ValuationReferenceData {
+  gridInput: import('@/server/grid-domain/types').GridTradeInput | null;
+  pe: ReferenceBasis; pb: ReferenceBasis; dividendYield: ReferenceBasis;
+}
 export interface ValuationPageData {
   product: { id: string; code: string; name: string; currency: string | null; kind: ValuationProduct["kind"] | null };
   benchmark: ValuationProduct["benchmark"]; note: string | null;
   price: MetricCard; pe: MetricCard; pb: MetricCard; dividendYield: DividendYieldCard | null;
   refresh: { busy: boolean; hasMore: boolean; retryAfter: number | null };
+  reference?: ValuationReferenceData;
 }
