@@ -20,4 +20,8 @@ describe('valuation response contract',()=>{
   const {distributionAsOf:missing,...yieldWithoutProvenance}=reit.dividendYield!;void missing;
   expect(validate({...reit,dividendYield:yieldWithoutProvenance})).toBe(false);
  });
+ it('accepts weekly index yields with null fund distribution provenance',()=>{
+  const data=demoValuation('grid');data.product.id='00000000-0000-4000-8000-000000000001';data.dividendYield!.frequency='weekly';
+  expect(validate(data),JSON.stringify(validate.errors)).toBe(true);
+ });
 });

@@ -1,8 +1,8 @@
-export type Metric = "price" | "pe" | "pb" | "distribution";
-export type Source = "tencent" | "yahoo" | "csi" | "legu" | "eastmoney_disclosures";
+export type Metric = "price" | "pe" | "pb" | "distribution" | "dividend_yield";
+export type Source = "tencent" | "yahoo" | "csi" | "legu" | "eastmoney_disclosures" | "multpl";
 export interface SeriesDefinition {
   key: string; subject: string; metric: Metric; source: Source; symbol: string;
-  method: string; frequency: "daily" | "monthly" | "event"; sourceLabel: string;
+  method: string; frequency: "daily" | "weekly" | "monthly" | "event"; sourceLabel: string;
 }
 export interface DistributionEvidence {
   verified: boolean; recordDate: string; exDate: string | null; announcedAt: string;
@@ -30,7 +30,7 @@ export interface SeriesSnapshot {
 export interface MetricCard {
   availability: "ready" | "empty" | "unsupported" | "not_applicable" | "error";
   stale: boolean; refreshing: boolean; due: boolean; source: string | null; method: string | null;
-  frequency: "daily" | "monthly" | null; asOf: string | null; checkedAt: string | null;
+  frequency: "daily" | "weekly" | "monthly" | null; asOf: string | null; checkedAt: string | null;
   coverage: "none" | "partial" | "source_history"; message: string | null;
   points: Observation[]; stats: MetricSummary; prices?: PricePoint[];
 }

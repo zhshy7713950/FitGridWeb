@@ -34,10 +34,10 @@ describe('valuation page lifecycle',()=>{
   render(<ValuationPage id="grid"/>);await screen.findByRole('alert');
   expect(api.refreshValuation).toHaveBeenCalledTimes(1);expect(screen.getByRole('heading',{name:'价格走势'})).toBeInTheDocument();
  });
- it('shows three independent charts and cached stats without refreshing fresh data',async()=>{
+ it('shows four independent charts and cached stats without refreshing fresh data',async()=>{
   render(<ValuationPage id="grid"/>);await screen.findByRole('heading',{name:'价格走势'});
   expect(screen.getByRole('heading',{name:'PE走势'})).toBeInTheDocument();expect(screen.getByRole('heading',{name:'PB走势'})).toBeInTheDocument();
-  expect(screen.getAllByText('当前分位')).toHaveLength(2);expect(screen.getByText('MA250')).toBeInTheDocument();expect(api.refreshValuation).not.toHaveBeenCalled();
+  expect(screen.getAllByText('当前分位')).toHaveLength(3);expect(screen.getByText('MA250')).toBeInTheDocument();expect(api.refreshValuation).not.toHaveBeenCalled();
  });
  it('renders cached data before an expired-data refresh resolves',async()=>{
   const cached=demoValuation('grid');cached.pe.due=true;cached.pe.stale=true;cached.refresh.hasMore=true;api.getValuation.mockResolvedValue(cached);
@@ -57,6 +57,21 @@ describe('valuation page lifecycle',()=>{
   api.getValuation.mockImplementation((_id,signal)=>new Promise((_r,reject)=>signal.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError')))));
   const view=render(<ValuationPage id="grid"/>);const signal=api.getValuation.mock.calls[0][1] as AbortSignal;view.unmount();expect(signal.aborted).toBe(true);
  });
+});
+
+it('displays index yield percentages, all three reference lines and values without REIT-specific provenance',async()=>{
+ const data=demoValuation('grid');api.getValuation.mockResolvedValue(data);render(<ValuationPage id="grid"/>);
+ const card=await screen.findByRole('region',{name:'股息率走势（对应指数）'});
+ expect(within(card).getByText('当前股息率').parentElement).toHaveTextContent('%');
+ for(const [label,key] of [['30分位值','p30'],['50分位值（中位数）','p50'],['70分位值','p70']] as const)expect(within(card).getByText(label).parentElement).toHaveTextContent(Number(data.dividendYield!.stats[key]).toFixed(2)+'%');
+ expect(within(card).getByRole('img').querySelectorAll('line[aria-label]')).toHaveLength(3);
+ expect(within(card).queryByText(/近12个月每份分派合计/)).not.toBeInTheDocument();
+ expect(within(card).getByText('对应指数股息率 · 非基金分派率')).toBeInTheDocument();
+});
+it('keeps an unavailable yield chart as an explicit empty state rather than showing zero or hiding PE/PB',async()=>{
+ const data=demoValuation('grid');data.dividendYield={...data.pe,availability:'unsupported',points:[],stats:{...data.pe.stats,currentValue:null,p30:null,p50:null,p70:null,min:null,max:null,currentPercentile:null,validCount:0},message:'暂无已核验的股息率历史',trailingDistribution:null,distributionAsOf:null};
+ api.getValuation.mockResolvedValue(data);render(<ValuationPage id="grid"/>);const card=await screen.findByRole('region',{name:'股息率走势（对应指数）'});
+ expect(within(card).getByText('暂无已核验的股息率历史')).toBeInTheDocument();expect(within(card).queryByText('0.00%')).not.toBeInTheDocument();expect(screen.getByRole('heading',{name:'PE走势'})).toBeInTheDocument();
 });
 
 it('displays P50 separately from current percentile on both PE/PB charts',async()=>{

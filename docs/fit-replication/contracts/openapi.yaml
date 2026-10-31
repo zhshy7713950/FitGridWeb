@@ -2102,6 +2102,7 @@ components:
         frequency:
           enum:
             - daily
+            - weekly
             - monthly
             - null
         asOf: *a1
@@ -2188,7 +2189,7 @@ components:
         pb:
           $ref: "#/components/schemas/ValuationMetricCard"
         dividendYield:
-          description: REIT专用日频现金分派率；其他产品为null。数值单位为百分数，使用已核验的场内除息日和税前每份金额；缺失历史不按零计算。
+          description: 数值单位为百分数。REIT为日频近12个月现金分派率，使用已核验的场内除息日和税前每份金额。普通产品为对应指数股息率（日/周/月频取决于已核验来源），不代表基金实际分派率，trailingDistribution和distributionAsOf为null。无已核验来源时返回unsupported卡片；缺失、未核验零值和来源估算值留空。兼容旧版null响应。
           anyOf:
             - type: "null"
             - allOf:

@@ -31,7 +31,7 @@ function card(s:SeriesDefinition|null,r:SeriesSnapshot|null,product:ValuationPro
  const points=r?.observations??[],stats=summarizeValuation(points);
  if(!s)return {availability:product?.kind==='reit'&&metric!=='price'?'not_applicable':'unsupported',stale:false,refreshing:false,due:false,
    source:null,method:null,frequency:null,asOf:null,checkedAt:null,coverage:'none',message:product?.kind==='reit'?'REIT的PE/PB不适用，价格数据可单独查看。':product?'暂无已核验的免费历史数据，指标留空。':'暂未匹配到该产品的数据。',points:[],stats};
- const old=!!stats.latestDate && stats.latestDate<shift(completedDate(s,now),s.frequency==='monthly'?-93:s.metric==='price'?0:-14);
+ const old=!!stats.latestValidDate && stats.latestValidDate<shift(completedDate(s,now),s.frequency==='monthly'?-93:s.metric==='price'?0:-14);
  const message=r?.error?(points.length?'更新失败，正在展示已保存数据。':'更新失败，暂无已保存数据，请稍后重试。'):!points.length?'尚无本地数据，正在等待首次获取。':!r?.checkedAt?'已保存的研究归档，数据日期见下方；尚未完成在线更新。':old?'来源暂未提供较新的观测，正在展示已保存数据。':!r.complete?'正在补充更早历史；统计基于当前已保存范围。':null;
  return {availability:points.length?'ready':r?.error?'error':'empty',stale:old||!r?.checkedAt||+now-Date.parse(r.checkedAt)>=WEEK,refreshing:!!r?.leaseUntil&&Date.parse(r.leaseUntil)>+now,
    due:due(s,r,now),source:s.sourceLabel,method:s.method,frequency:s.frequency==='event'?null:s.frequency,asOf:stats.latestDate,checkedAt:r?.checkedAt??null,
@@ -61,9 +61,9 @@ export class ValuationService {
  constructor(private readonly deps:Dependencies){this.clock=deps.clock??(()=>new Date());}
  async read(ownerId:string,id:string):Promise<ValuationPageData>{
   const grid=await this.deps.grid.get(ownerId,id),p=resolveValuationProduct(grid.productCode),now=this.clock();
-  const snapshots=await Promise.all([...metrics.map(metric=>p?.series[metric]??null),p?.series.distribution??null].map(s=>s?this.deps.store.readSeries(s):null));
+  const snapshots=await Promise.all([...metrics.map(metric=>p?.series[metric]??null),p?.series.distribution??null,p?.series.dividend_yield??null].map(s=>s?this.deps.store.readSeries(s):null));
   const cards=metrics.map((metric,i)=>card(p?.series[metric]??null,snapshots[i],p,metric,now));
-  const dividendYield=p?.kind==='reit'?dividendCard(p,snapshots[3],cards[0],now):null;
+  const dividendYield=p?.kind==='reit'?dividendCard(p,snapshots[3],cards[0],now):{...card(p?.series.dividend_yield??null,snapshots[4],p,'dividend_yield',now),trailingDistribution:null,distributionAsOf:null};
   if(dividendYield)cards.push(dividendYield);
   const retryTimes=snapshots.map(s=>s?.retryAt);
   const retries=retryTimes.filter((r):r is string=>!!r&&Date.parse(r)>+now).map(r=>Math.ceil((Date.parse(r)-+now)/1000));
@@ -100,12 +100,12 @@ export class ValuationService {
     const backfill=s.frequency==='daily'&&!latest?.complete&&!refreshRecent;
     const end=backfill?(latest?.cursor??to):to;
     const floor=p.mappingSince&&s.metric!=='price'?p.mappingSince:'1990-01-01';
-    const from=s.frequency==='monthly'?'1900-01-01':backfill?([floor,shift(end,-365)].sort().at(-1)!):shift(current??to,-30);
+    const from=s.source==='multpl'?'1800-01-01':s.frequency==='monthly'||s.frequency==='weekly'?'1900-01-01':backfill?([floor,shift(end,-365)].sort().at(-1)!):shift(current??to,-30);
     await this.deps.beforeRequest();requests++;httpRequests+=cost;attempted.add(s.key);
     let batch:SeriesBatch;
     try {batch=await (this.deps.fetch??fetchSeriesBatch)({series:s,from,to:end,allowEmpty:backfill&&!!current,...(s.metric==='distribution'?{knownObservations:latest?.observations,requestBudget:cost,verifyRecent:latest?.complete??false}:{})},{signal:AbortSignal.any([AbortSignal.timeout(Math.max(1,45000-(+this.clock()-+start))),...(signal?[signal]:[])])});}
     catch(error){const raw=error instanceof Error?error.message:'';const message=/^(HTTP|数据源|公开估值|估值|腾讯|Yahoo|中证|同日|同月|缺少|分派)/.test(raw)?raw:'数据源暂不可用或请求超时';await this.deps.store.failBatch(claim,message,this.clock(),seeds);continue;}
-    const complete=s.metric==='distribution'?batch.reachedStart:backfill?(batch.reachedStart||from<=floor):s.frequency==='monthly'||(latest?.complete??false);
+    const complete=s.metric==='distribution'?batch.reachedStart:backfill?(batch.reachedStart||from<=floor):s.frequency==='monthly'||s.frequency==='weekly'||(latest?.complete??false);
     const cursor=complete?null:backfill?shift(from,-1):(latest?.cursor??null);
     await this.deps.store.commitBatch(claim,{...batch,observations:[...seeds,...batch.observations]},this.clock(),{cursor,complete});
    }

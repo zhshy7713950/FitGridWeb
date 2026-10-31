@@ -1,10 +1,10 @@
 import type { Metric, SeriesDefinition, ValuationProduct } from "./types";
 
 function series(subject: string, metric: Metric, source: SeriesDefinition["source"], symbol: string): SeriesDefinition {
-  const frequency = source === "legu" ? "monthly" : source === "eastmoney_disclosures" ? "event" : "daily";
-  const method = metric === "distribution" ? "基金管理人分红公告：每份税前现金分派，场内除息日" : metric === "price" ? "不复权收盘价" : source === "csi" ? "滚动PE（中证peg字段）" : metric === "pb" ? "整体法PB（addPb）" : "供方历史PE";
+  const frequency = metric === "dividend_yield" && source === "legu" && symbol !== "HSI" ? "weekly" : source === "legu" || source === "multpl" ? "monthly" : source === "eastmoney_disclosures" ? "event" : "daily";
+  const method = metric === "dividend_yield" ? source === "multpl" ? "标普500及前身历史股息率：12个月每股股息/指数价格；来源标记的估算值留空" : "对应指数股息率（供方历史口径，非基金分派率；未核验零值留空）" : metric === "distribution" ? "基金管理人分红公告：每份税前现金分派，场内除息日" : metric === "price" ? "不复权收盘价" : source === "csi" ? "滚动PE（中证peg字段）" : metric === "pb" ? "整体法PB（addPb）" : "供方历史PE";
   return { key: `${subject}:${metric}:${source}:${frequency}:v1:raw`, subject, metric, source, symbol, method, frequency,
-    sourceLabel: { tencent: "腾讯行情", yahoo: "Yahoo Finance", csi: "中证指数", legu: "乐咕乐股", eastmoney_disclosures: "基金管理人分红公告（东方财富转载）" }[source] };
+    sourceLabel: { tencent: "腾讯行情", yahoo: "Yahoo Finance", csi: "中证指数", legu: "乐咕乐股", eastmoney_disclosures: "基金管理人分红公告（东方财富转载）", multpl: "Multpl（S&P / Shiller历史资料）" }[source] };
 }
 const definitions: Array<[string,string,string|null,string|null,ValuationProduct["kind"]?]> = [
   ["512980","传媒ETF","399971","中证传媒"],["159920","恒生指数ETF","HSI","恒生指数"],
@@ -38,7 +38,8 @@ export const PRODUCTS: ValuationProduct[] = definitions.map(([code,name,index,in
     series: { price: series(canonical,"price",market === "us" ? "yahoo" : "tencent",market === "us" ? code : `${exchange.toLowerCase()}${code}`),
       pe: domestic ? series(index!,"pe","csi",index!) : global ? series(index!,"pe","legu",index!):null,
       pb: pb ? series(index!,"pb","legu",`${index}.SH`):null,
-      distribution: kind === "reit" ? series(canonical,"distribution","eastmoney_disclosures",code) : null } };
+      distribution: kind === "reit" ? series(canonical,"distribution","eastmoney_disclosures",code) : null,
+      dividend_yield: pb ? series(index!,"dividend_yield","legu",`${index}.SH`) : index === "HSI" ? series(index,"dividend_yield","legu",index) : index === "SP500" ? series(index,"dividend_yield","multpl",index) : null } };
 });
 export function resolveValuationProduct(code: string): ValuationProduct | null {
   const value=code.trim().toUpperCase();

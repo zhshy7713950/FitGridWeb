@@ -1,0 +1,42 @@
+[
+  {
+    "file": "legu-week-000015.json.gz",
+    "source": "https://legulegu.com/api/stockdata/index-basic?indexCode=000015.SH&freq=week",
+    "capturedAt": "2026-10-28",
+    "cutoff": "2026-10-27",
+    "liveAcceptance": "2026-10-31 HTTP403; use verified saved capture; not a fresh update",
+    "sha256": "3268136351ea6009245fdb764c7e6b2656b9c485bc666fb69708fbf0929047c8"
+  },
+  {
+    "file": "legu-week-000300.json.gz",
+    "source": "https://legulegu.com/api/stockdata/index-basic?indexCode=000300.SH&freq=week",
+    "capturedAt": "2026-10-28",
+    "cutoff": "2026-10-27",
+    "liveAcceptance": "2026-10-31 HTTP403; use verified saved capture; not a fresh update",
+    "sha256": "5ba4b94e3ed2a377fce453a872515da340927c03ec4f51dcc8694257a0dc2572"
+  },
+  {
+    "file": "legu-week-000905.json.gz",
+    "source": "https://legulegu.com/api/stockdata/index-basic?indexCode=000905.SH&freq=week",
+    "capturedAt": "2026-10-28",
+    "cutoff": "2026-10-27",
+    "liveAcceptance": "2026-10-31 HTTP403; use verified saved capture; not a fresh update",
+    "sha256": "2920a6324e104e325f20e99e76e0308e331b34eba5341746549d941bb228e8f2"
+  },
+  {
+    "file": "legu-hsi.json.gz",
+    "source": "https://legulegu.com/api/stockdata/market/hk/dv/hsi",
+    "capturedAt": "2026-10-28",
+    "cutoff": "2026-10-27",
+    "liveAcceptance": "2026-10-31 HTTP403; use verified saved capture; not a fresh update",
+    "sha256": "73c05c30453e14e3882fb8a66b2436b62e0ec77fce9184082ad1098d7ea6bd6f"
+  },
+  {
+    "file": "multpl-sp500.html.gz",
+    "source": "https://www.multpl.com/s-p-500-dividend-yield/table/by-month",
+    "capturedAt": "2026-10-31",
+    "cutoff": "2026-10-30",
+    "liveAcceptance": "HTTP200; estimated observations remain missing",
+    "sha256": "054d6c2ada1bae52bd41274e66421c3abe50714d8a9a0719da35f3ebe9eab672"
+  }
+]

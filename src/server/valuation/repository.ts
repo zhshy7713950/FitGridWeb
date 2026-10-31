@@ -1,6 +1,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import type {PrismaClient,Prisma} from '@/generated/prisma/client';
 import type {Observation,SeriesBatch,SeriesDefinition,SeriesSnapshot} from './types';
+import {weeklyObservations} from './sampling';
 export interface SeriesClaim {key:string;token:string}
 export interface CommitState {cursor:string|null;complete:boolean}
 export interface HistoryStore {
@@ -18,7 +19,7 @@ export class ValuationRepository implements HistoryStore {
     WHERE series_key=${definition.key} ORDER BY date ASC, revision DESC`;
   const observations=records.map(({raw,...p})=>({...p,value:p.value===null?null:p.value.replace(/\.?0+$/,'')||'0',...(definition.metric==='distribution'&&raw.distribution?{distribution:raw.distribution}:{})}));
   // Dates are ascending: keep the last monthly label without deleting source evidence.
-  const points=definition.frequency==='monthly'?[...new Map(observations.map(p=>[p.date.slice(0,7),p])).values()]:observations;
+  const points=definition.frequency==='monthly'?[...new Map(observations.map(p=>[p.date.slice(0,7),p])).values()]:definition.frequency==='weekly'?weeklyObservations(observations):observations;
   return {definition,observations:points,
     checkedAt:row.checkedAt?.toISOString()??null,lastAttemptAt:row.lastAttemptAt?.toISOString()??null,
     retryAt:row.retryAt?.toISOString()??null,leaseUntil:row.leaseUntil?.toISOString()??null,

@@ -13,9 +13,17 @@ describe.skipIf(!databaseUrl)('persistent valuation histories',()=>{
  const invalidMonthly={...monthly,key:`test:${randomUUID()}`};
  const daily={...s,key:`test:${randomUUID()}`};
  const distribution={...resolveValuationProduct("508000")!.series.distribution!,key:`test:${randomUUID()}`};
- const keys=[s.key,monthly.key,invalidMonthly.key,daily.key,distribution.key];
+ const weekly={...resolveValuationProduct('510880')!.series.dividend_yield!,key:`test:${randomUUID()}`};
+ const keys=[s.key,monthly.key,invalidMonthly.key,daily.key,distribution.key,weekly.key];
  const now=new Date('2026-10-29T08:00:00Z');
  afterAll(async()=>{await db.researchObservation.deleteMany({where:{seriesKey:{in:keys}}});await db.researchSeries.deleteMany({where:{key:{in:keys}}});await db.$disconnect();});
+ it('keeps one weekly observation across refreshes without deleting raw dates or revisions',async()=>{
+  for(const observations of [[{date:'2025-12-30',value:'2',quality:'valid'},{date:'2026-01-06',value:'4',quality:'valid'}],[{date:'2026-01-02',value:'3',quality:'valid'},{date:'2026-01-09',value:null,quality:'missing'}]] satisfies Observation[][]){
+   const claim=await repo.claimSeries(weekly,now);await repo.commitBatch(claim!,{observations,reachedStart:true},now,{cursor:null,complete:true});
+  }
+  expect((await new ValuationRepository(db).readSeries(weekly))!.observations).toEqual([{date:'2026-01-02',value:'3',quality:'valid'},{date:'2026-01-09',value:null,quality:'missing'}]);
+  expect(await db.researchObservation.count({where:{seriesKey:weekly.key}})).toBe(4);
+ });
  it('grants exactly one lease across independent repository instances',async()=>{
   const results=await Promise.all([repo.claimSeries(s,now),new ValuationRepository(db).claimSeries(s,now)]);
   expect(results.filter(Boolean)).toHaveLength(1);

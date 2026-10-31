@@ -76,7 +76,7 @@ describe('REIT derived yield cards',()=>{
   expect(data.dividendYield?.stats.currentValue).toBe('2.5'); // daily price recomputes against the seven-day event cache
   clock=new Date('2026-11-04T08:00:00Z');fetcher.mockImplementation(async(r)=>({observations:r.series.metric==='distribution'?[distribution]:[{date:r.to,value:'4',quality:'valid'}],reachedStart:true}));
   const fresh=await service().refresh('owner','grid','due');expect(fresh.dividendYield?.stats.currentValue).toBe('2.5');
-  get.mockResolvedValue({id:'grid',productCode:'VOO'});expect((await service().read('owner','grid')).dividendYield).toBeNull();
+  get.mockResolvedValue({id:'grid',productCode:'SCHD'});expect((await service().read('owner','grid')).dividendYield?.availability).toBe('unsupported');
  });
  it('retains the price card and cached verified-yield history on distribution failure',async()=>{
   await cacheReit();clock=new Date(+clock+8*86400000);fetcher.mockImplementation(async(r)=>{if(r.series.metric==='distribution')throw new Error('分派公告金额与汇总表冲突');return {observations:[{date:r.to,value:'2',quality:'valid'}],reachedStart:true};});
@@ -89,5 +89,25 @@ describe('REIT derived yield cards',()=>{
   const next=await service().refresh('owner','grid','due');expect(next.dividendYield?.stats.currentValue).toBe('5');
   const events=fetcher.mock.calls.filter(c=>c[0].series.metric==='distribution');expect(events[1][0].knownObservations[0].distribution.verified).toBe(false);
   expect(events.every(c=>c[0].requestBudget<=7)).toBe(true);
+ });
+});
+
+describe('cached index dividend yield cards',()=>{
+ it('returns an independent index card from local history without fund distribution metadata or upstream requests',async()=>{
+  await ready();const s=product.series.dividend_yield!;store.rows.delete(s.key);const claim=await store.claimSeries(s,clock);
+  await store.commitBatch(claim!,{observations:[{date:'2026-10-16',value:'4',quality:'valid'},{date:'2026-10-23',value:'6',quality:'valid'}],reachedStart:true},clock,{cursor:null,complete:true});
+  const data=await service().read('owner','grid');
+  expect(data.dividendYield).toMatchObject({availability:'ready',frequency:'weekly',trailingDistribution:null,distributionAsOf:null,stats:{currentValue:'6',p30:'4.6',p50:'5',p70:'5.4'}});
+  expect(data.pe.availability).toBe('ready');expect(fetcher).not.toHaveBeenCalled();
+ });
+ it('loads real index archives on upstream failure without claiming a fresh check and keeps request budgets bounded',async()=>{
+  fetcher.mockRejectedValue(new Error('HTTP 403'));const data=await service().refresh('owner','grid','due');
+  expect(data.dividendYield).toMatchObject({availability:'ready',checkedAt:null,stale:true,frequency:'weekly'});
+  expect(data.dividendYield!.stats.validCount).toBe(255);expect(data.dividendYield!.stats.latestDate).toBe('2026-10-23');
+  expect(fetcher.mock.calls.length).toBeLessThanOrEqual(4);
+ });
+ it('finishes weekly histories in one batch and does not continuously refetch fresh source history',async()=>{
+  await service().refresh('owner','grid','due');fetcher.mockClear();await service().refresh('owner','grid','due');
+  expect(fetcher.mock.calls.some(c=>c[0].series.metric==='dividend_yield')).toBe(false);
  });
 });

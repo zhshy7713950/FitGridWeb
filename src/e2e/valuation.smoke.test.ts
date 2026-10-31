@@ -12,7 +12,7 @@ describe.skipIf(!baseUrl)('valuation browser acceptance',()=>{
   const executablePath=[process.env.FITGRID_CHROME_PATH,'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/usr/bin/google-chrome','/usr/bin/chromium'].find(p=>p&&existsSync(p));
   if(!executablePath)throw new Error('Set FITGRID_CHROME_PATH to run valuation browser acceptance');
   browser=await chromium.launch({executablePath,headless:true,args:['--no-sandbox']});
-  await mkdir('output/reit-yield-2026-10-29/screenshots',{recursive:true});
+  await mkdir('output/dividend-yield-2026-10-31/screenshots',{recursive:true});
  });
  afterAll(async()=>{await browser?.close();});
  it.each(['light','dark'] as const)('renders desktop and mobile charts in the %s theme',async theme=>{
@@ -25,9 +25,13 @@ describe.skipIf(!baseUrl)('valuation browser acceptance',()=>{
     page.on('request',r=>{if(!new URL(r.url()).hostname.match(/^(127\.0\.0\.1|localhost)$/))requests.push(r.url());});
     await page.goto(`${baseUrl}/grids/demo-grid-05/valuation`);
     await page.getByRole('heading',{name:'PE走势',exact:true}).waitFor();
-    expect(await page.getByRole('img',{name:/历史图$/}).count()).toBe(3);
-    expect(await page.getByText('50分位值（中位数）',{exact:true}).count()).toBe(2);
-    expect(await page.locator('line[aria-label="P50（中位数）"]').count()).toBe(2);
+    expect(await page.getByRole('img',{name:/历史图$/}).count()).toBe(4);
+    expect(await page.getByText('50分位值（中位数）',{exact:true}).count()).toBe(3);
+    expect(await page.locator('line[aria-label="P50（中位数）"]').count()).toBe(3);
+    const yieldCard=page.getByRole('region',{name:'股息率走势（对应指数）'});
+    expect(await yieldCard.getByText('当前股息率',{exact:true}).locator('..').textContent()).toMatch(/\d+\.\d{2}%/);
+    for(const label of ['30分位值','50分位值（中位数）','70分位值'])expect(await yieldCard.getByText(label,{exact:true}).locator('..').textContent()).toMatch(/\d+\.\d{2}%/);
+    const yieldChart=page.getByRole('group',{name:/股息率走势.*方向键/});await yieldChart.focus();await page.keyboard.press('End');expect(await yieldChart.textContent()).toMatch(/2026-10-28.*%/);
     expect(await page.locator('html').getAttribute('data-theme')).toBe(theme);
     const chart=page.getByRole('group',{name:/价格走势历史图/});await chart.focus();await page.keyboard.press('End');
     expect(await chart.textContent()).toContain('2026-10-28');
@@ -35,7 +39,7 @@ describe.skipIf(!baseUrl)('valuation browser acceptance',()=>{
     await page.getByRole('button',{name:'刷新数据'}).click();await page.getByRole('button',{name:'刷新数据'}).waitFor();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
     await page.addStyleTag({content:'nextjs-portal { display: none !important; }'});
-    await page.screenshot({path:`output/reit-yield-2026-10-29/screenshots/valuation-${theme}-${width}.png`,fullPage:true});
+    await page.screenshot({path:`output/dividend-yield-2026-10-31/screenshots/valuation-${theme}-${width}.png`,fullPage:true});
     await page.getByRole('link',{name:'← 返回产品详情'}).click();
     await page.getByRole('heading',{name:'红利 ETF',exact:true}).waitFor();
     if(width===390)await page.getByRole('button',{name:'更多操作',exact:true}).click();
@@ -59,10 +63,10 @@ describe.skipIf(!baseUrl)('valuation browser acceptance',()=>{
     expect(await card.getByText('当前分派率',{exact:true}).locator('..').textContent()).toMatch(/\d+\.\d{2}%/);
     const chart=page.getByRole('group',{name:/股息率.*方向键/});await chart.focus();await page.keyboard.press('End');expect(await chart.textContent()).toMatch(/2026-10-28.*%/);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
-    await page.addStyleTag({content:'nextjs-portal { display: none !important; }'});await page.screenshot({path:`output/reit-yield-2026-10-29/screenshots/reit-${theme}-${width}.png`,fullPage:true});
+    await page.addStyleTag({content:'nextjs-portal { display: none !important; }'});await page.screenshot({path:`output/dividend-yield-2026-10-31/screenshots/reit-${theme}-${width}.png`,fullPage:true});
     await page.goto(`${baseUrl}/price-alerts/demo-alert-3`);const condition=page.getByRole('group',{name:'提醒条件'});await condition.waitFor();expect(await condition.textContent()).toContain('触发价 ¥4.211');
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
-    await page.addStyleTag({content:'nextjs-portal { display: none !important; }'});await page.screenshot({path:`output/reit-yield-2026-10-29/screenshots/alert-${theme}-${width}.png`,fullPage:true});
+    await page.addStyleTag({content:'nextjs-portal { display: none !important; }'});await page.screenshot({path:`output/dividend-yield-2026-10-31/screenshots/alert-${theme}-${width}.png`,fullPage:true});
     expect(errors).toEqual([]);expect(external).toEqual([]);
    }finally{await context.close();}
   }

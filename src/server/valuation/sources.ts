@@ -3,6 +3,8 @@ import { PriceDecimal as Decimal } from "@/server/price-alerts/decimal";
 import { dateInZone, segments, ZONES } from "@/server/price-alerts/calendar";
 import { knownSeries } from "./catalog";
 import { fetchDistributionBatch } from "./distributions";
+import { parseMultplYield } from "./index-yield";
+import { weeklyObservations } from "./sampling";
 import type { Observation, SeriesDefinition, SeriesRequest, SeriesBatch } from "./types";
 
 const MAX_BYTES=8*1024*1024;
@@ -27,7 +29,10 @@ function closed(d:string) {
 }
 export function parseSeries(s:SeriesDefinition,body:unknown,to:string,allowEmpty=false):Observation[] {
   let rows:Observation[];
-  if(s.source==="tencent") {
+  if(s.source==="multpl") {
+    if(typeof body!=="string")throw new Error("股息率页面格式异常");
+    rows=parseMultplYield(body);
+  } else if(s.source==="tencent") {
     const root=record(body); if(root.code!==0) throw new Error("腾讯返回业务错误");
     rows=list(record(record(root.data)[s.symbol]).day).map(v=>{const a=list(v);return point(a[0],a[2]);});
   } else if(s.source==="yahoo") {
@@ -40,6 +45,11 @@ export function parseSeries(s:SeriesDefinition,body:unknown,to:string,allowEmpty
   } else if(s.source==="csi") {
     const root=record(body); if(String(root.code)!=="200") throw new Error("中证返回业务错误");
     rows=list(root.data).flatMap(v=>{const r=record(v);if(r.indexCode!==s.symbol || !("peg" in r)) throw new Error("中证指数或估值字段不匹配");const d=date(r.tradeDate);return closed(d)?[]:[point(d,r.peg)];});
+  } else if(s.metric==="dividend_yield") {
+    rows=(s.symbol==="HSI"?list(body):list(record(body).data)).map(v=>{
+      const r=record(v);if(!("dvRatio" in r))throw new Error("缺少股息率字段");
+      const p=point(r.date,r.dvRatio);return p.quality==="valid"?p:{...p,value:null,quality:"missing"};
+    });
   } else if(s.symbol==="HSI") rows=list(body).map(v=>{const r=record(v);if(!("pe" in r))throw new Error("缺少PE字段");return point(r.date,r.pe);});
   else if(s.metric==="pb") rows=list(record(body).data).map(v=>{const r=record(v);if(!("addPb" in r))throw new Error("缺少PB字段");return point(r.date,r.addPb);});
   else {
@@ -57,12 +67,13 @@ export function parseSeries(s:SeriesDefinition,body:unknown,to:string,allowEmpty
     byDate.set(row.date,row);
   }
   rows=[...byDate.values()].sort((a,b)=>a.date.localeCompare(b.date));
+  if(s.frequency==="weekly")rows=weeklyObservations(rows);
   if(s.frequency==="monthly") {
     const months=new Map<string,Observation[]>();
     for(const row of rows){const m=row.date.slice(0,7);months.set(m,[...(months.get(m)??[]),row]);}
     rows=[...months.values()].map(group=>{
       if(group.length>2) throw new Error("估值采样频率改变");
-      if(group.length===2 && group[0].value!==group[1].value) throw new Error("同月估值冲突");
+      if(s.metric!=="dividend_yield" && group.length===2 && group[0].value!==group[1].value) throw new Error("同月估值冲突");
       return group.at(-1)!;
     });
   }
@@ -74,10 +85,12 @@ export function requestFor(s:SeriesDefinition,from:string,to:string):{url:string
   if(!known || known.symbol!==s.symbol || known.source!==s.source || known.metric!==s.metric) throw new Error("未允许的数据序列");
   date(from);date(to);
   if(s.source==="eastmoney_disclosures") return {url:`https://fundf10.eastmoney.com/fhsp_${s.symbol}.html`};
+  if(s.source==="multpl") return {url:"https://www.multpl.com/s-p-500-dividend-yield/table/by-month"};
   if(s.source==="tencent") return {url:`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${s.symbol},day,${from},${to},640,`};
   if(s.source==="yahoo") return {url:`https://query1.finance.yahoo.com/v8/finance/chart/${s.symbol}?interval=1d&period1=${Date.parse(from)/1000}&period2=${Date.parse(to)/1000+86400}&includePrePost=false`};
   if(s.source==="csi") return {url:`https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=${s.symbol}&startDate=${from.replaceAll("-","")}&endDate=${to.replaceAll("-","")}`};
   const token=createHash("md5").update(dateInZone(Date.now(),ZONES.cn)).digest("hex");
+  if(s.metric==="dividend_yield"&&s.symbol!=="HSI")return {url:`https://legulegu.com/api/stockdata/index-basic?indexCode=${s.symbol}&freq=week&token=${token}`};
   if(s.metric==="pb")return {url:`https://legulegu.com/api/stockdata/index-basic-pb?indexCode=${s.symbol}&freq=month&token=${token}`};
   if(s.symbol==="HSI") return {url:`https://legulegu.com/api/stockdata/market/hk/dv/hsi?token=${token}`};
   return {url:`https://legulegu.com/stockdata/market/${s.symbol==="SP500"?"sandp":"nasdaq100"}`};
@@ -106,7 +119,7 @@ export async function fetchSeriesBatch(request:SeriesRequest, options:{signal:Ab
     const body={requestedDataKeys:[s.symbol==="SP500"?"sp500Index":"nasdaq100Index",s.symbol==="SP500"?"sp500Pe":"nasdaq100Pe"],types:["line","line"],requestedDataColors:["#e74c3c","#1f97c4"],splitLines:[false,true]};
     text=await readResponse(await fetcher(`https://legulegu.com/api/get-aggregation-data/${s.symbol==="SP500"?"exp":"preview"}?token=${token}`,{method:"POST",signal,cache:"no-store",redirect:"error",headers:{"Content-Type":"application/json","X-CSRF-Token":csrf,Cookie:cookie},body:JSON.stringify(body)}));
   }
-  const parsed:unknown=JSON.parse(text);
+  const parsed:unknown=s.source==="multpl"?text:JSON.parse(text);
   const observations=parseSeries(s,parsed,to,request.allowEmpty);
-  return {observations:observations.filter(p=>p.date>=from),reachedStart:observations.length===0 || s.frequency==="monthly"};
+  return {observations:observations.filter(p=>p.date>=from),reachedStart:observations.length===0 || s.frequency==="monthly" || s.frequency==="weekly"};
 }
