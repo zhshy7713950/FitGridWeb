@@ -349,6 +349,8 @@ describe.sequential("database-free UI demo", () => {
   it("covers security navigation, validation, and successful password change on mobile", async () => {
     const { page, consoleErrors } = await newPage();
     await page.goto(`${baseUrl}/grids`, { waitUntil: "domcontentloaded" });
+    // The navigation is server rendered; wait for the client workspace to hydrate.
+    await page.getByRole("link", { name: "黄金 ETF", exact: true }).waitFor();
     const securityLink = page.getByRole("link", { name: "安全设置" });
     const adminLink = page.getByRole("link", { name: "账号管理" });
     const dataLink = page.getByRole("link", { name: "数据管理" });
@@ -718,7 +720,7 @@ describe.sequential("database-free UI demo", () => {
     await page.getByRole("link", { name: "黄金 ETF" }).click();
     await page.waitForURL(`${baseUrl}/grids/demo-grid-01`);
     expect(await page.getByRole("button", { name: "更多操作" }).isVisible()).toBe(false);
-    expect(await page.getByRole("button", { name: "重新计算" }).isVisible()).toBe(true);
+    await expect.poll(() => page.getByRole("button", { name: "重新计算" }).isVisible()).toBe(true);
     const desktopParametersBox = await page.locator('[aria-label="产品参数摘要"]').boundingBox();
     const desktopTableBox = await page.getByRole("region", { name: "网格计算结果" }).boundingBox();
     expect(desktopParametersBox).not.toBeNull();
