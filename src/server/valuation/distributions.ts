@@ -8,7 +8,7 @@ function record(value:unknown):Record<string,unknown>{if(!value||typeof value!==
 function validDate(value:string):string{if(!/^\d{4}-\d{2}-\d{2}$/.test(value)||!Number.isFinite(Date.parse(value))||new Date(value).toISOString().slice(0,10)!==value)throw new Error('分派公告日期异常');return value;}
 const strip=(s:string)=>s.replace(/<[^>]*>/g,'').replace(/&nbsp;|&#160;/g,' ').trim();
 export function parseDistributionTable(code:string,html:string):Candidate[]{
- if(!['508000','508056'].includes(code)||!html.includes(`(${code})`)&&!html.includes(`（${code}）`))throw new Error('分派产品不匹配');
+ if(!/^(?:508|180)\d{3}$/.test(code)||!html.includes(`(${code})`)&&!html.includes(`（${code}）`))throw new Error('分派产品不匹配');
  const section=html.split('分红送配详情')[1]?.split('拆分详情');
  if(!section||section.length<2||!section[1].split('分红送配公告')[0].includes('暂无拆分信息'))throw new Error('分派份额拆分或口径变化，需重新核验');
  const table=section[0].match(/<tbody>([\s\S]*?)<\/tbody>/)?.[1];if(!table)throw new Error('分派历史缺少表格');

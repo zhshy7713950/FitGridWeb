@@ -98,6 +98,11 @@ export type PriceAlertOutbox = Prisma.PriceAlertOutboxModel
  */
 export type ResearchSeries = Prisma.ResearchSeriesModel
 /**
+ * Model ResearchProduct
+ *
+ */
+export type ResearchProduct = Prisma.ResearchProductModel
+/**
  * Model ResearchObservation
  * 
  */

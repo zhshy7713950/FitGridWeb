@@ -18,7 +18,7 @@ function percent(value:string|null){return value===null?'—':Number(value).toLo
 function format(value:string|null|undefined,digits=4){return value===null||value===undefined?'—':Number(value).toLocaleString('zh-CN',{maximumFractionDigits:digits});}
 function checked(value:string|null){return value?new Date(value).toLocaleString('zh-CN',{hour12:false}):'尚未在线更新';}
 function wait(ms:number,signal:AbortSignal){return new Promise<void>((resolve,reject)=>{const abort=()=>{clearTimeout(timer);reject(new DOMException('已取消','AbortError'));};const timer=setTimeout(()=>{signal.removeEventListener('abort',abort);resolve();},ms);signal.addEventListener('abort',abort,{once:true});});}
-function ChartCard({title,card,price=false,cash=false,yieldMetric=false,currency,reference}:{title:string;card:MetricCard;price?:boolean;cash?:boolean;yieldMetric?:boolean;currency?:string|null;reference?:ReactNode}){
+function ChartCard({title,card,price=false,cash=false,yieldMetric=false,stock=false,currency,reference}:{title:string;card:MetricCard;price?:boolean;cash?:boolean;yieldMetric?:boolean;stock?:boolean;currency?:string|null;reference?:ReactNode}){
  const distribution=cash?card as DividendYieldCard:null;
  const percentage=cash||yieldMetric;
  const value=(v:string|null)=>percentage?percent(v):format(v,2);
@@ -27,7 +27,7 @@ function ChartCard({title,card,price=false,cash=false,yieldMetric=false,currency
  const references=useMemo(()=>price?[]:[{label:'P30',value:card.stats.p30,color:'var(--positive)'},{label:'P50（中位数）',value:card.stats.p50,color:'var(--text-muted)'},{label:'P70',value:card.stats.p70,color:'var(--warning)'}],[price,card.stats.p30,card.stats.p50,card.stats.p70]);
  const stats=price?[['最新收盘价',`${format(last?.close)}${currency?' '+currency:''}`],['MA250',format(last?.ma250)],['MA500',format(last?.ma500)]]:[[cash?'当前分派率':yieldMetric?'当前股息率':'当前'+title.slice(0,2),value(card.stats.currentValue)],['最低值',value(card.stats.min)],['最高值',value(card.stats.max)],['30分位值',value(card.stats.p30)],['50分位值（中位数）',value(card.stats.p50)],['70分位值',value(card.stats.p70)],['当前分位',card.stats.currentPercentile===null?'—':format(card.stats.currentPercentile,2)+'%']];
  return <section className={styles.card} aria-label={title}>
-  <header className={styles.cardHeading}><div><p className={styles.eyebrow}>{price?'基金交易价格':cash?'基金现金分派':yieldMetric?'对应指数股息率 · 非基金分派率':'对应指数估值'}</p><h2>{title}</h2></div><span className={styles.badge}>{card.stale?'已保存 · 待更新':card.availability==='ready'?'已缓存':'暂无数据'}</span></header>
+  <header className={styles.cardHeading}><div><p className={styles.eyebrow}>{price?(stock?'股票交易价格':'基金交易价格'):cash?'基金现金分派':stock?'公司自身估值':yieldMetric?'对应指数股息率 · 非基金分派率':'对应指数估值'}</p><h2>{title}</h2></div><span className={styles.badge}>{card.stale?'已保存 · 待更新':card.availability==='ready'?'已缓存':'暂无数据'}</span></header>
   <dl className={`${styles.stats} ${price?styles.priceStats:''}`}>{stats.map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
   {card.message?<p className={styles.notice}>{card.message}</p>:null}
   {price&&card.points.length&&(!last?.ma250||!last?.ma500)?<p className={styles.meta}>{!last?.ma250?'历史不足250个连续有效收盘记录，MA250留空。 ':''}{!last?.ma500?'历史不足500个连续有效收盘记录，MA500留空。':''}</p>:null}
@@ -59,17 +59,18 @@ export function ValuationPage({id}:{id:string}){
   void load();return()=>{active=false;controller.abort();};
  },[id,request]);
  const visible=data?.product.id===id?data:null;
+ const stock=visible?.product.kind==='stock';
  const referenceOptions=referenceDraft?.id===id?referenceDraft.options:{budget:'',feeRate:'0.03',minimumFee:visible?.product.currency==='USD'?'1':'5',increase:5};
  const reference=(metric:'pe'|'pb'|'dividendYield')=>visible?.reference?<ReferencePanel basis={visible.reference[metric]} grid={visible.reference.gridInput} options={referenceOptions} currency={visible.product.currency??'CNY'} snapshot={visible} cash={visible.product.kind==='reit'}/>:null;
  if(!visible&&!error)return <ValuationLoading/>;
  return <div className={styles.page}>
   <Link className={styles.back} href={`/grids/${id}`}>← 返回产品详情</Link>
-  <header className={styles.heading}><div><p className={styles.eyebrow}>全部可用历史 · 参考观察</p><h1>{visible?.product.name??'产品'}<span>估值观察</span></h1><p className={styles.meta}>{visible?.product.code} {visible?.benchmark?` · 参考指数：${visible.benchmark.name}（${visible.benchmark.id}）`:visible?.product.kind==='reit'?' · REIT现金分派观察':' · 暂无已确认的参考指数'}</p></div><button className={styles.refresh} disabled={pending} onClick={()=>{setError(null);setRequest(r=>({sequence:r.sequence+1,mode:visible?'manual':'due'}));}}>{pending?'正在更新…':'刷新数据'}</button></header>
+  <header className={styles.heading}><div><p className={styles.eyebrow}>全部可用历史 · 参考观察</p><h1>{visible?.product.name??'产品'}<span>估值观察</span></h1><p className={styles.meta}>{visible?.product.code} {visible?.benchmark?` · 参考指数：${visible.benchmark.name}（${visible.benchmark.id}）`:visible?.product.kind==='reit'?' · REIT现金分派观察':stock?' · 公司自身估值':' · 暂无已确认的参考指数'}</p></div><button className={styles.refresh} disabled={pending} onClick={()=>{setError(null);setRequest(r=>({sequence:r.sequence+1,mode:visible?'manual':'due'}));}}>{pending?'正在更新…':'刷新数据'}</button></header>
   {error?<p className={styles.error} role="alert">{error}</p>:null}
-  {visible?<><p className={styles.intro}>基金价格使用不复权收盘价，均线按250/500个已完成交易日计算；分红、拆分可能产生价格跳变。{visible.product.kind==='reit'?'REIT展示实际现金分派率；使用近12个月每份税前分派与当日价格计算，缺少完整分派历史时留空。':'PE/PB与股息率使用对应指数的固定来源序列；指数股息率不代表基金实际分派率，缺少的指标留空。'}</p>{visible.note?<p className={styles.notice}>{visible.note}</p>:null}
-   <ChartCard title="价格走势" card={visible.price} price currency={visible.product.currency}/>
+  {visible?<><p className={styles.intro}>产品价格使用不复权收盘价，均线按250/500个已完成交易日计算；分红、拆分可能产生价格跳变。{visible.product.kind==='reit'?'REIT展示实际现金分派率；使用近12个月每份税前分派与当日价格计算，缺少完整分派历史时留空。':stock?'股票估值应使用公司自身的财务指标；当前尚未接入公司历史PE/PB与股息率，缺少的指标留空。':'PE/PB与股息率使用对应指数的固定来源序列；指数股息率不代表基金实际分派率，缺少的指标留空。'}</p>{visible.note?<p className={styles.notice}>{visible.note}</p>:null}
+   <ChartCard title="价格走势" card={visible.price} price stock={stock} currency={visible.product.currency}/>
    {visible.reference?<ReferenceControls value={referenceOptions} onChange={options=>setReferenceDraft({id,options})} currency={visible.product.currency??'CNY'} existingIncrease={visible.reference.gridInput?.increaseAmplitude}/>:null}
-   {visible.product.kind==='reit'?(visible.dividendYield?<ChartCard title="股息率（近12个月现金分派率）" card={visible.dividendYield} cash currency={visible.product.currency} reference={reference('dividendYield')}/>:null):<><ChartCard title="PE走势" card={visible.pe} reference={reference('pe')}/><ChartCard title="PB走势" card={visible.pb} reference={reference('pb')}/>{visible.dividendYield?<ChartCard title="股息率走势（对应指数）" card={visible.dividendYield} yieldMetric reference={reference('dividendYield')}/>:null}</>}
+   {visible.product.kind==='reit'?(visible.dividendYield?<ChartCard title="股息率（近12个月现金分派率）" card={visible.dividendYield} cash currency={visible.product.currency} reference={reference('dividendYield')}/>:null):<><ChartCard title="PE走势" card={visible.pe} stock={stock} reference={reference('pe')}/><ChartCard title="PB走势" card={visible.pb} stock={stock} reference={reference('pb')}/>{visible.dividendYield?<ChartCard title={stock?'股息率走势（公司）':'股息率走势（对应指数）'} card={visible.dividendYield} stock={stock} yieldMetric reference={reference('dividendYield')}/>:null}</>}
    <p className={styles.footnote}>价格按交易日检查，估值每七天按需检查；历史长期保存。分位使用各指标全部有效观测，当前分位与此前观测比较；不同指标的日期和频率可能不同，仅供参考。</p>
   </>:null}
  </div>;

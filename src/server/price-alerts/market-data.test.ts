@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { assessWindow, fetchJson, fetchSource, historySum, parseDaily, parseMinutes, selectSources, sourceUrl } from "./market-data";
+import { assessWindow, fetchJson, fetchSource, historySum, parseDaily, parseMinutes, resolveInstrument, selectSources, sourceUrl } from "./market-data";
 import type { Instrument, ScanWindow, SourceResult } from "./types";
 
 const cn: Instrument = { id: "cn", code: "600519.SH", name: "贵州茅台", market: "cn", currency: "CNY", kind: "stock", tencent: "sh600519", yahoo: null, eastmoney: "1.600519" };
@@ -85,6 +85,19 @@ describe("real minute samples", () => {
 });
 
 describe("HTTP and primary/fallback selection", () => {
+  it("verifies LOF and REIT identities without accepting bonds or the wrong exchange", async () => {
+    const names: Record<string, string> = { "161130": "纳指LOF", "180101": "平安广州交投REIT", "508001": "浙商沪杭甬REIT" };
+    vi.stubGlobal("fetch", async (url: string) => {
+      const code = url.slice(-6);
+      return new Response(`v_quote="1~${names[code] ?? '债券'}~${code}~3.100";`);
+    });
+    expect(await resolveInstrument("cn", "161130.SZ")).toMatchObject({code: "161130.SZ", kind: "lof", tencent: "sz161130"});
+    expect(await resolveInstrument("cn", "180101.SZ")).toMatchObject({kind: "reit", tencent: "sz180101"});
+    expect(await resolveInstrument("cn", "508001.SH")).toMatchObject({kind: "reit", tencent: "sh508001"});
+    await expect(resolveInstrument("cn", "161130.SH")).rejects.toThrow();
+    await expect(resolveInstrument("cn", "110001.SH")).rejects.toThrow();
+  });
+
   it("refreshes a valid same-session 249-close cache for a new 500-day rule", async () => {
     const dates = Array.from({ length: 1000 }, (_, i) => new Date(Date.parse("2026-10-26T12:00:00Z") - i * 86400000)).filter((d) => ![0, 6].includes(d.getUTCDay())).slice(0, 640).reverse();
     const qfqday = dates.map((d) => [d.toISOString().slice(0, 10), "100", "100", "100", "100"]);

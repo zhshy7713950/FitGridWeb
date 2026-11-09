@@ -7,6 +7,14 @@ const fixture=(name:string)=>readFileSync(new URL('./fixtures/reit/'+name,import
 const json=(name:string)=>JSON.parse(fixture(name));
 const source=(code:string)=>resolveValuationProduct(code)!.series.distribution!;
 describe('publisher-verified REIT distributions',()=>{
+ it('accepts new verified REIT codes on either exchange without weakening identity checks',()=>{
+  for(const code of ['508001','180101']){
+   const html=fixture('508056-table.txt').replaceAll('508056',code);
+   expect(parseDistributionTable(code,html)).toHaveLength(17);
+   expect(()=>parseDistributionTable(code,fixture('508056-table.txt'))).toThrow();
+  }
+  expect(()=>parseDistributionTable('510300',fixture('508056-table.txt').replaceAll('508056','510300'))).toThrow();
+ });
  it.each(['508000','508056'])('verifies all actual %s announcements, per-share amounts and in-exchange dates',(code)=>{
   const candidates=parseDistributionTable(code,fixture(code+'-table.txt'));
   const notices=json(code+'-notices.txt').Data;

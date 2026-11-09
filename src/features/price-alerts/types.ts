@@ -4,7 +4,7 @@ export type AlertCondition =
   | { kind: "ma_deviation"; direction: "up" | "down"; days: number; percent: string };
 export interface Instrument {
   id: string; code: string; name: string; market: "cn" | "us";
-  currency: "CNY" | "USD"; kind: "stock" | "etf";
+  currency: "CNY" | "USD"; kind: "stock" | "etf" | "lof" | "reit";
   tencent: string | null; yahoo: string | null; eastmoney: string | null;
 }
 export interface Quote {
@@ -35,5 +35,5 @@ export interface ChannelStatus {
 export interface AlertInput { condition: AlertCondition; enabled: boolean }
 
 export interface InstrumentCandidate {
-  code: string; name: string; market: "cn" | "us"; currency: "CNY" | "USD"; kind: "stock" | "etf"; exchange: string;
+  code: string; name: string; market: "cn" | "us"; currency: "CNY" | "USD"; kind: "stock" | "etf" | "lof" | "reit"; exchange: string;
 }

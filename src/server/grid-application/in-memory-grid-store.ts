@@ -89,7 +89,7 @@ export class InMemoryGridDatabase {
         return found?.ownerId === ownerId ? clone(found) : null;
       },
       findByProductCode: async (code) => {
-        const found = owned().find((item) => item.productCode === code);
+        const found = owned().find((item) => item.productCode.toUpperCase() === code.toUpperCase());
         return found ? clone(found) : null;
       },
       create: async (input) => {

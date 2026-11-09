@@ -99,3 +99,12 @@ it('shows REIT price and percentage yield with provenance instead of PE/PB cards
  expect(screen.getByRole('heading',{name:'价格走势'})).toBeInTheDocument();expect(within(yieldCard).getByText('当前分派率').parentElement).toHaveTextContent('5.00%');
  expect(within(yieldCard).getByText(/近12个月每份分派合计/)).toHaveTextContent('0.1 CNY');expect(within(yieldCard).getByText(/分派数据截至/)).toHaveTextContent('2026-10-28');
 });
+it('describes a stock as company valuation without implying an index or fund distribution',async()=>{
+ const data=demoValuation('grid');data.product.kind='stock';data.product.code='AAPL.US';data.benchmark=null;data.dividendYield=null;
+ api.getValuation.mockResolvedValue(data);render(<ValuationPage id="grid"/>);
+ await screen.findByRole('heading',{name:'价格走势'});
+ expect(screen.getByText('股票交易价格')).toBeInTheDocument();
+ expect(screen.getByText(/股票估值应使用公司自身的财务指标/)).toBeInTheDocument();
+ expect(screen.queryByText('对应指数估值')).not.toBeInTheDocument();
+ expect(screen.queryByText(/暂无已确认的参考指数/)).not.toBeInTheDocument();
+});

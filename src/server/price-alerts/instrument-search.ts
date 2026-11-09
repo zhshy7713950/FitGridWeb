@@ -1,4 +1,4 @@
-import { fetchJson, fetchText } from "./market-data";
+import { fetchJson, fetchText, domesticKind } from "./market-data";
 import type { InstrumentCandidate, Market } from "./types";
 
 type Options = Parameters<typeof fetchText>[1];
@@ -14,11 +14,11 @@ export async function searchInstruments(market: Market, query: string, options: 
     const hints = (JSON.parse(match[1]) as string).replace(/\\u([a-f0-9]{4})/gi, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)));
     for (const hint of hints.split("^")) {
       const [exchange, code, name, , kind] = hint.split("~");
-      if (!["sh", "sz"].includes(exchange) || !/^\d{6}$/.test(code) || !name || !["GP", "ETF"].includes(kind)) continue;
-      if (exchange === "sh" ? !/^[65]/.test(code) : !/^(?:0|3|15)/.test(code)) continue;
+      if (!["sh", "sz"].includes(exchange) || !/^\d{6}$/.test(code) || !name || !["GP", "ETF", "FD"].includes(kind)) continue;
+      if (exchange === "sh" ? !/^[65]/.test(code) : !/^(?:0|3|15|16|18)/.test(code)) continue;
       const canonical = `${code}.${exchange.toUpperCase()}`;
       if (explicit && canonical !== explicit) continue;
-      rows.push({ code: canonical, name: name.slice(0, 160), market, currency: "CNY", kind: kind === "ETF" ? "etf" : "stock", exchange: exchange === "sh" ? "上海证券交易所" : "深圳证券交易所" });
+      rows.push({ code: canonical, name: name.slice(0, 160), market, currency: "CNY", kind: domesticKind(canonical, name), exchange: exchange === "sh" ? "上海证券交易所" : "深圳证券交易所" });
     }
   } else {
     const body = await fetchJson(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(input.replace(/\.US$/i, ""))}&quotesCount=10&newsCount=0`, options);

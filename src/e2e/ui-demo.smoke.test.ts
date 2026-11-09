@@ -681,8 +681,11 @@ describe.sequential("database-free UI demo", () => {
     await page.waitForURL(`${baseUrl}/grids/new`);
     expect(await page.getByRole("link", { name: "返回网格产品" }).getAttribute("href"))
       .toBe(`${appBasePath}/grids`);
+    await page.getByLabel("搜索产品代码或名称").fill("510300");
+    await page.getByRole("button",{name:"搜索产品",exact:true}).click();
+    await page.getByRole("button",{name:"确认选择 沪深 300 ETF 510300.SH"}).click();
+    await expect.poll(()=>page.getByText(/已确认/).isVisible()).toBe(true);
     await page.getByLabel("产品名称").fill("Smoke 新建产品");
-    await page.getByLabel("产品代码").fill("SMOKE-NEW-01");
     await Promise.all([
       page.waitForURL(`${baseUrl}/grids/demo-grid-created-01`),
       page.getByRole("button", { name: "创建产品" }).click(),
@@ -705,7 +708,7 @@ describe.sequential("database-free UI demo", () => {
     )).toBe(true);
 
     await page.getByRole("button", { name: "删除产品" }).click();
-    await page.getByLabel("输入产品代码确认").fill("SMOKE-NEW-01");
+    await page.getByLabel("输入产品代码确认").fill("510300.SH");
     await Promise.all([
       page.waitForURL(`${baseUrl}/grids`),
       page.getByRole("button", { name: "确认永久删除" }).click(),

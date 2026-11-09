@@ -193,25 +193,30 @@ export async function fetchSource(provider: Provider, product: Instrument, windo
   return { provider, bars, basis: basis?.sessionDate === window.sessionDate ? basis : null, fetchedAt: new Date().toISOString(), durationMs: Math.round(performance.now() - started), error, missingMinutes, ...(dailyError ? { dailyError } : {}) };
 }
 
+export function domesticKind(code:string,name:string):Instrument['kind'] {
+  if (/^(?:508\d{3}\.SH|180\d{3}\.SZ)$/.test(code)) return 'reit';
+  if (/^16\d{4}\.SZ$/.test(code)) return 'lof';
+  return /ETF/i.test(name) ? 'etf' : 'stock';
+}
 export async function resolveInstrument(market: Market, rawCode: string, options: RequestOptions = {}): Promise<Omit<Instrument, "id">> {
   const code = rawCode.trim().toUpperCase();
   let tencent: string | null = null; let yahoo: string | null = null; let canonical: string;
   if (market === "cn") {
     const match = /^(\d{6})\.(SH|SZ)$/.exec(code);
-    if (!match || !(match[2] === "SH" ? /^[65]/ : /^(?:0|3|15)/).test(match[1])) throw new Error("请输入沪深股票或 ETF 代码，例如 600519.SH、159919.SZ");
+    if (!match || !(match[2] === "SH" ? /^[65]/ : /^(?:0|3|15|16|18)/).test(match[1])) throw new Error("请输入沪深股票或场内基金代码，例如 600519.SH、159919.SZ");
     canonical = code; tencent = `${match[2].toLowerCase()}${match[1]}`;
   } else {
     yahoo = code.replace(/\.US$/, "");
     if (!/^[A-Z][A-Z0-9.-]{0,14}$/.test(yahoo)) throw new Error("美股代码格式无效");
     canonical = `${yahoo}.US`;
   }
-  let name: string; let kind: "stock" | "etf";
+  let name: string; let kind: Instrument["kind"];
   if (market === "cn") {
     const quote = await fetchText(`https://qt.gtimg.cn/q=${tencent}`, options, "gb18030");
     const fields = quote.match(/="([^"]+)"/)?.[1].split("~");
     if (!fields || fields[2] !== code.slice(0, 6) || !fields[1]) throw new Error("腾讯未找到对应沪深产品");
-    name = fields[1]; kind = /ETF/i.test(name) ? "etf" : "stock";
-    if (/^(?:5|15)/.test(code) && kind !== "etf") throw new Error("首版仅支持股票和场内 ETF");
+    name = fields[1]; kind = domesticKind(canonical, name);
+    if (/^(?:5|15|16|18)/.test(code) && kind === "stock") throw new Error("仅支持股票、ETF、LOF 和 REIT");
     price(fields[3]);
   } else {
     const d = yahooData(await fetchJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahoo!)}?interval=1d&range=5d&includePrePost=false`, options), { yahoo, currency: "USD" } as Instrument, "1d");

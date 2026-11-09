@@ -12,7 +12,7 @@ export interface Instrument {
   name: string;
   market: Market;
   currency: "CNY" | "USD";
-  kind: "stock" | "etf";
+  kind: "stock" | "etf" | "lof" | "reit";
   tencent: string | null;
   yahoo: string | null;
   eastmoney: string | null;
@@ -29,5 +29,5 @@ export interface Trigger { minuteStart: number; minuteEnd: number; price: string
 export interface SourceResult { provider: Provider; bars: MinuteBar[]; basis: DailyBasis | null; fetchedAt: string; durationMs: number; error: string | null; dailyError?: string | null; missingMinutes?: string[] }
 
 export interface InstrumentCandidate {
-  code: string; name: string; market: "cn" | "us"; currency: "CNY" | "USD"; kind: "stock" | "etf"; exchange: string;
+  code: string; name: string; market: "cn" | "us"; currency: "CNY" | "USD"; kind: "stock" | "etf" | "lof" | "reit"; exchange: string;
 }

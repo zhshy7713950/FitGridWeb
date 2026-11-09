@@ -34,7 +34,7 @@ export const demoApi = {
   resolve(market: "cn" | "us", code: string): Instrument {
     const instrument = instruments.find((item) => item.market === market && item.code === code.toUpperCase().replace(/\.(SH|SZ|US)$/, ""));
     if (!instrument) throw new ClientApiError(404, "NOT_FOUND", "演示中可使用 518880、510300 或 AAPL");
-    return structuredClone(instrument);
+    return {...structuredClone(instrument),code:`${instrument.code}.${market==='cn'?'SH':'US'}`};
   },
   create(input: AlertInput & { instrumentId: string }) {
     const instrument = instruments.find((item) => item.id === input.instrumentId)!;

@@ -63,7 +63,23 @@ function detail(record: GridTradeRecord) {
 }
 
 export class GridService {
-  constructor(private readonly withOwnerScope: OwnerScope) {}
+  constructor(private readonly withOwnerScope: OwnerScope,private readonly findInstrument?:(id:string)=>Promise<{code:string;name:string}|null>) {}
+
+  private async checkInstrument(id:string|undefined,code:string){
+    if(!id)return;
+    const identity=await this.findInstrument?.(id);
+    if(!identity||identity.code!==code)throw new ApiError(422,'INSTRUMENT_MISMATCH','产品选择已失效，请重新搜索并确认产品',{productCode:['请选择已核验的产品']});
+  }
+
+  private async duplicate(store:OwnerScopedGridTradeStore,code:string,exceptId?:string){
+    const normalized=code.toUpperCase(),aliases=new Set([normalized]);
+    if(/\.(?:US|SH|SZ)$/.test(normalized))aliases.add(normalized.replace(/\.(?:US|SH|SZ)$/,''));
+    else if(/^[A-Z][A-Z0-9.-]{0,14}$/.test(normalized))aliases.add(`${normalized}.US`);
+    else if(/^[56]\d{5}$/.test(normalized))aliases.add(`${normalized}.SH`);
+    else if(/^[013]\d{5}$/.test(normalized))aliases.add(`${normalized}.SZ`);
+    for(const alias of aliases){const found=await store.findByProductCode(alias);if(found&&found.id!==exceptId)return true;}
+    return false;
+  }
 
   async list(ownerId: string, query: Partial<GridTradeListQuery> = {}) {
     const limit = query.limit ?? 20;
@@ -85,9 +101,10 @@ export class GridService {
   }
 
   async create(ownerId: string, body: unknown) {
-    const input = parseGridCreate(body);
+    const {instrumentId,...input} = parseGridCreate(body);
+    await this.checkInstrument(instrumentId,input.productCode);
     return this.withOwnerScope(ownerId, async (store) => {
-      if (await store.findByProductCode(input.productCode)) {
+      if (await this.duplicate(store,input.productCode)) {
         throw new ApiError(409, "PRODUCT_CODE_CONFLICT", "产品代码已存在", {
           productCode: ["当前账号已存在相同产品代码"],
         });
@@ -97,13 +114,13 @@ export class GridService {
   }
 
   async update(ownerId: string, id: string, body: unknown) {
-    const { expectedUpdatedAt, ...patch } = parseGridUpdate(body);
+    const { expectedUpdatedAt, instrumentId, ...patch } = parseGridUpdate(body);
     return this.withOwnerScope(ownerId, async (store) => {
       const existing = await store.findById(id);
       if (!existing) throw notFound();
       const input = validateGridInput({ ...storedInput(existing), ...patch });
-      const sameCode = await store.findByProductCode(input.productCode);
-      if (sameCode && sameCode.id !== id) {
+      await this.checkInstrument(instrumentId,input.productCode);
+      if (input.productCode!==existing.productCode && await this.duplicate(store,input.productCode,id)) {
         throw new ApiError(409, "PRODUCT_CODE_CONFLICT", "产品代码已存在", {
           productCode: ["当前账号已存在相同产品代码"],
         });

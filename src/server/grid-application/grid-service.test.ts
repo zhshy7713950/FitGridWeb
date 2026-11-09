@@ -25,6 +25,33 @@ function setup() {
 }
 
 describe("GridService", () => {
+  it.each([['aaPl','AAPL.US'],['aapl.us','AAPL.US'],['brk.b','BRK.B.US'],['brk.b.us','BRK.B.US']])("rejects legacy alias %s as the same identity as %s", async (raw,canonical) => {
+    const {service}=setup();
+    await service.create('owner-a',{...createBody,productCode:raw});
+    await expect(service.create('owner-a',{...createBody,productCode:canonical})).rejects.toMatchObject({code:'PRODUCT_CODE_CONFLICT'});
+    await service.create('owner-b',{...createBody,productCode:canonical});
+    await expect(service.create('owner-b',{...createBody,productCode:raw})).rejects.toMatchObject({code:'PRODUCT_CODE_CONFLICT'});
+  });
+  it("preserves parameter edits for pre-existing raw and canonical alias grids", async () => {
+    const {database,service}=setup();
+    const raw=await service.create('owner-a',{...createBody,productCode:'QQQ'});
+    const canonical=await database.scope('owner-a',store=>store.create({...createBody,productCode:'QQQ.US',category:null,sortOrder:0,algorithmVersion:'android-v2.1.0'}));
+    for(const record of [raw,canonical]){
+      const expectedUpdatedAt=typeof record.updatedAt==='string'?record.updatedAt:record.updatedAt.toISOString();
+      await expect(service.update('owner-a',record.id,{expectedUpdatedAt,maxPrice:'2'})).resolves.toMatchObject({productCode:record.productCode,maxPrice:'2'});
+    }
+  });
+  it("checks the selected verified instrument and prevents canonical duplicates of legacy codes", async () => {
+    const {database}=setup();
+    const instrumentId='00000000-0000-4000-8000-000000000001';
+    const service=new GridService(database.scope,async id=>id===instrumentId?{code:'QQQ.US',name:'Invesco QQQ Trust'}:null);
+    const created=await service.create('owner-a',{...createBody,productCode:'QQQ.US',instrumentId});
+    expect(created.productCode).toBe('QQQ.US');
+    await expect(service.create('owner-b',{...createBody,productCode:'SPY.US',instrumentId})).rejects.toMatchObject({code:'INSTRUMENT_MISMATCH'});
+    await service.create('owner-c',{...createBody,productCode:'QQQ'});
+    await expect(service.create('owner-c',{...createBody,productCode:'QQQ.US',instrumentId})).rejects.toMatchObject({code:'PRODUCT_CODE_CONFLICT'});
+    await expect(service.create('owner-a',{...createBody,productCode:'QQQ'})).rejects.toMatchObject({code:'PRODUCT_CODE_CONFLICT'});
+  });
   it("creates calculated records and isolates same-code products by owner", async () => {
     const { service } = setup();
     const createdA = await service.create("owner-a", createBody);

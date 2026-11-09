@@ -1239,7 +1239,7 @@ components:
         name: {type: string, minLength: 1, maxLength: 160}
         market: {type: string, enum: [cn, us]}
         currency: {type: string, enum: [CNY, USD]}
-        kind: {type: string, enum: [stock, etf]}
+        kind: {type: string, enum: [stock, etf, lof, reit]}
         exchange: {type: string, minLength: 1, maxLength: 64}
     MarketInstrumentSearchResponse:
       type: object
@@ -1270,7 +1270,7 @@ components:
         name: {type: string, maxLength: 160}
         market: {type: string, enum: [cn, us]}
         currency: {type: string, enum: [CNY, USD]}
-        kind: {type: string, enum: [stock, etf]}
+        kind: {type: string, enum: [stock, etf, lof, reit]}
         tencent: {type: [string, 'null'], maxLength: 32}
         yahoo: {type: [string, 'null'], maxLength: 32}
         eastmoney: {type: [string, 'null'], maxLength: 40}
@@ -1678,6 +1678,7 @@ components:
       additionalProperties: false
       required: [expectedUpdatedAt]
       properties:
+        instrumentId: {type: string, format: uuid, description: 搜索核验后选择的产品ID，与标准产品代码一致}
         expectedUpdatedAt: {type: string, format: date-time}
         productName: {type: [string, 'null'], maxLength: 120}
         productCode: {type: string, minLength: 1, maxLength: 64}
@@ -1707,6 +1708,7 @@ components:
         - maxAmplitude
         - isShort
       properties:
+        instrumentId: {type: string, format: uuid, description: 搜索核验后选择的产品ID，与标准产品代码一致}
         productName: {type: [string, 'null'], maxLength: 120, default: null}
         productCode: {type: string, minLength: 1, maxLength: 64}
         maxPrice: {$ref: '#/components/schemas/PositiveDecimalString'}
@@ -2204,7 +2206,7 @@ components:
               type: string
             currency: *a1
             kind:
-              enum: [etf, lof, reit, null]
+              enum: [etf, lof, reit, stock, null]
         benchmark:
           type:
             - object
