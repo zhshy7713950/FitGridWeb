@@ -79,7 +79,7 @@ export function createProductRegistry(db:PrismaClient,beforeRequest:()=>Promise<
     try{return {...parseDomesticFundProfile(identity.code,await fetchJson(url,{beforeRequest,timeoutMs:6000})),evidenceUrl:url};}
     catch{/* The public HTML profile remains useful when the mobile endpoint is unavailable. */}
    }
-   const url=identity.market==='cn'?`https://fundf10.eastmoney.com/jbgk_${identity.code.slice(0,6)}.html`:`https://finance.yahoo.com/quote/${encodeURIComponent(identity.code.slice(0,-3))}/profile/`;
-   return parseFundProfile(identity.market,identity.code,await fetchText(url,{beforeRequest,timeoutMs:6000}));
+   const url=identity.market==='cn'?`https://fundf10.eastmoney.com/jbgk_${identity.code.slice(0,6)}.html`:`https://finance.yahoo.com/quote/${encodeURIComponent(identity.code.slice(0,-3))}/`;
+   return {...parseFundProfile(identity.market,identity.code,await fetchText(url,{beforeRequest,timeoutMs:6000})),evidenceUrl:url};
   }});
 }
