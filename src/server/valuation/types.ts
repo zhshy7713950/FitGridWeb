@@ -11,7 +11,7 @@ export interface DistributionEvidence {
 export interface Observation { date: string; value: string | null; quality: "valid" | "non_positive" | "missing" | "gap"; distribution?: DistributionEvidence }
 export interface ValuationProduct {
   code: string; name: string; market: "cn" | "us"; currency: "CNY" | "USD";
-  kind: "etf" | "lof" | "reit"; benchmark: { id: string; name: string } | null;
+  kind: "etf" | "lof" | "reit" | "stock"; benchmark: { id: string; name: string } | null;
   listedAt: string | null; mappingSince: string | null; note: string | null; series: Record<Metric, SeriesDefinition | null>;
 }
 export interface SeriesRequest { series: SeriesDefinition; from: string; to: string; allowEmpty?: boolean; knownObservations?: Observation[]; requestBudget?: number; verifyRecent?: boolean }

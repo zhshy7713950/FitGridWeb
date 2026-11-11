@@ -25,6 +25,7 @@ const mutationFields = {
 
 const createSchema = z
   .strictObject({
+    instrumentId: z.uuid().optional(),
     productName: mutationFields.productName.optional().default(null),
     productCode: mutationFields.productCode,
     maxPrice: mutationFields.maxPrice,
@@ -42,6 +43,7 @@ const createSchema = z
   });
 
 const updateSchema = z.strictObject({
+  instrumentId: z.uuid().optional(),
   expectedUpdatedAt: z.string().datetime({ offset: true }),
   productName: mutationFields.productName.optional(),
   productCode: mutationFields.productCode.optional(),
@@ -61,11 +63,12 @@ const updateSchema = z.strictObject({
 
 export type GridUpdateDto = z.output<typeof updateSchema>;
 
-export function parseGridCreate(value: unknown): GridTradeInput {
-  return validateGridInput({
-    ...createSchema.parse(value),
+export function parseGridCreate(value: unknown): GridTradeInput & {instrumentId?:string} {
+  const {instrumentId,...parsed}=createSchema.parse(value);
+  return {...validateGridInput({
+    ...parsed,
     algorithmVersion: "android-v2.1.0",
-  });
+  }),...(instrumentId?{instrumentId}:{})};
 }
 
 export function parseGridUpdate(value: unknown): GridUpdateDto {

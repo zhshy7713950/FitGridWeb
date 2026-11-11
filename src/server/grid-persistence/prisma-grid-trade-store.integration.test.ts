@@ -55,6 +55,9 @@ integration("Prisma owner-scoped grid store", () => {
     const rowA = await withOwnerScope(ownerA, (store) => store.create(input), prisma);
     await withOwnerScope(ownerB, (store) => store.create(input), prisma);
 
+    await expect(withOwnerScope(ownerA, (store) => store.findByProductCode('same-code'), prisma)).resolves.toMatchObject({id:rowA.id});
+    await expect(withOwnerScope(ownerB, (store) => store.findByProductCode('same-code'), prisma)).resolves.not.toMatchObject({id:rowA.id});
+
     await expect(withOwnerScope(ownerB, (store) => store.findById(rowA.id), prisma)).resolves.toBeNull();
     await expect(
       withOwnerScope(ownerA, (store) => store.list({ limit: 20 }), prisma),

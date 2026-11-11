@@ -16,6 +16,7 @@ export interface GridTradePage {
 }
 
 export interface GridTradeMutationInput {
+  instrumentId?: string;
   productName: string | null;
   productCode: string;
   maxPrice: string;

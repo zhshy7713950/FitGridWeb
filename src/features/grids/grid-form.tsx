@@ -10,8 +10,11 @@ import {
 import type { GridTradeMutationInput } from "./types";
 import { useUnsavedChangesGuard } from "./use-unsaved-changes-guard";
 import styles from "./grid-form.module.css";
+import { ProductPicker } from "./product-picker";
+import type { Instrument } from "@/features/price-alerts/types";
 
 export type GridFormProps = {
+  requireProductSelection?: boolean;
   initialValues: GridFormValues;
   submitLabel: string;
   onSubmit(input: GridTradeMutationInput): Promise<void>;
@@ -65,10 +68,13 @@ export function GridForm({
   formError,
   requestId,
   onFieldEdit,
+  requireProductSelection = false,
 }: GridFormProps) {
   const [values, setValues] = useState<GridFormValues>(initialValues);
   const [clientFieldErrors, setClientFieldErrors] = useState<Record<string, string[]>>({});
   const [saving, setSaving] = useState(false);
+  const [selecting, setSelecting] = useState(requireProductSelection);
+  const [instrument, setInstrument] = useState<Instrument|null>(null);
   const [initialSnapshot] = useState(() => JSON.stringify(initialValues));
   const productCodeInput = useRef<HTMLInputElement>(null);
   const productCodeServerErrors = serverFieldErrors.productCode;
@@ -109,6 +115,7 @@ export function GridForm({
             id={`grid-${field.name}`}
             name={field.name}
             type="text"
+            readOnly={selecting && field.name === 'productCode'}
             inputMode={field.inputMode}
             autoComplete="off"
             ref={field.name === "productCode" ? productCodeInput : undefined}
@@ -133,13 +140,18 @@ export function GridForm({
     event.preventDefault();
     if (saving) return;
 
+    if (selecting && !instrument) {
+      setClientFieldErrors({productCode:['请先搜索并确认产品']});
+      return;
+    }
+
     const result = validateGridForm(values);
     setClientFieldErrors(result.fieldErrors);
     if (!result.input) return;
 
     setSaving(true);
     try {
-      await onSubmit(result.input);
+      await onSubmit({...result.input,...(instrument?{instrumentId:instrument.id}:{})});
     } catch {
       setSaving(false);
     }
@@ -174,6 +186,11 @@ export function GridForm({
         <fieldset className={styles.fieldset} aria-labelledby="grid-identity-legend">
           <legend id="grid-identity-legend">产品标识</legend>
           <p>用于搜索、识别与排序，不参与网格计算。</p>
+          {selecting?<ProductPicker disabled={saving} onSelect={selected=>{
+            setInstrument(selected);
+            updateField('productCode',selected?.code??'');
+            updateField('productName',selected?.name.slice(0,120)??'');
+          }}/>:<button type="button" className={styles.changeProduct} onClick={()=>setSelecting(true)}>重新选择市场和产品</button>}
           <div className={styles.fields}>{identityFields.map(renderField)}</div>
         </fieldset>
 

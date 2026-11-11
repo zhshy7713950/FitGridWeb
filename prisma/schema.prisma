@@ -312,6 +312,16 @@ model ResearchSeries {
   @@map("research_series")
 }
 
+model ResearchProduct {
+  code String @id @db.VarChar(32)
+  product Json
+  evidence String
+  evidenceUrl String? @map("evidence_url")
+  checkedAt DateTime @map("checked_at")
+  retryAt DateTime? @map("retry_at")
+  @@map("research_products")
+}
+
 model ResearchObservation {
   seriesKey String @map("series_key") @db.VarChar(160)
   date String @db.VarChar(10)

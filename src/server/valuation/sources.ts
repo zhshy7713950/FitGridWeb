@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { PriceDecimal as Decimal } from "@/server/price-alerts/decimal";
 import { dateInZone, segments, ZONES } from "@/server/price-alerts/calendar";
-import { knownSeries } from "./catalog";
+import { allowedSeries } from "./catalog";
 import { fetchDistributionBatch } from "./distributions";
 import { parseMultplYield } from "./index-yield";
 import { weeklyObservations } from "./sampling";
@@ -81,8 +81,7 @@ export function parseSeries(s:SeriesDefinition,body:unknown,to:string,allowEmpty
   return rows;
 }
 export function requestFor(s:SeriesDefinition,from:string,to:string):{url:string;init?:RequestInit} {
-  const known=knownSeries(s.key);
-  if(!known || known.symbol!==s.symbol || known.source!==s.source || known.metric!==s.metric) throw new Error("未允许的数据序列");
+  if(!allowedSeries(s)) throw new Error("未允许的数据序列");
   date(from);date(to);
   if(s.source==="eastmoney_disclosures") return {url:`https://fundf10.eastmoney.com/fhsp_${s.symbol}.html`};
   if(s.source==="multpl") return {url:"https://www.multpl.com/s-p-500-dividend-yield/table/by-month"};

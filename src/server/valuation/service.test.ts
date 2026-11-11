@@ -3,6 +3,7 @@ import {ValuationService} from './service';
 import type {HistoryStore,SeriesClaim,CommitState} from './repository';
 import {resolveValuationProduct} from './catalog';
 import type {Observation,SeriesDefinition,SeriesSnapshot,SeriesBatch} from './types';
+import {buildValuationProduct} from './product-discovery';
 class MemoryHistory implements HistoryStore {
  rows=new Map<string,SeriesSnapshot>();
  async readSeries(s:SeriesDefinition){return structuredClone(this.rows.get(s.key)??null);}
@@ -17,6 +18,24 @@ const ready=async()=>{for(const s of Object.values(product.series)){if(!s)contin
 const service=()=>new ValuationService({grid:{get},store,fetch:fetcher,clock:()=>clock,beforeRequest:guard});
 beforeEach(()=>{vi.resetAllMocks();store=new MemoryHistory();clock=new Date('2026-10-28T08:00:00Z');get.mockResolvedValue({id:'grid',productCode:'510880',productName:'红利'});fetcher.mockResolvedValue({observations:[{date:'2026-10-28',value:'10',quality:'valid'}],reachedStart:true});});
 describe('cached valuation observation service',()=>{
+ it('reads uncatalogued verified products through the local registry and refreshes identity before collection',async()=>{
+  get.mockResolvedValue({id:'grid',productCode:'QQQ'});
+  const identity={code:'QQQ.US',name:'QQQ',market:'us' as const,currency:'USD' as const,kind:'etf' as const,tencent:null,yahoo:'QQQ',eastmoney:null};
+  let resolved=buildValuationProduct(identity,null);
+  const products={read:vi.fn(async()=>resolved),refresh:vi.fn(async()=>{resolved=buildValuationProduct(identity,{benchmark:{id:'NDX',name:'纳斯达克100'},evidence:'Fund profile',note:null});return resolved;})};
+  const svc=new ValuationService({grid:{get},store,fetch:fetcher,clock:()=>clock,beforeRequest:guard,products});
+  expect((await svc.read('owner','grid')).price.availability).toBe('empty');
+  expect(products.refresh).not.toHaveBeenCalled();expect(fetcher).not.toHaveBeenCalled();
+  const data=await svc.refresh('owner','grid','due');
+  expect(data.product.code).toBe('QQQ.US');expect(data.benchmark?.id).toBe('NDX');
+  expect(data.price.stats.currentValue).toBe('10');expect(data.pe.stats.currentValue).toBe('10');expect(data.pb.availability).toBe('unsupported');
+ });
+ it('does not discover product metadata before checking owner and maintenance',async()=>{
+  const products={read:vi.fn(),refresh:vi.fn()};
+  const svc=new ValuationService({grid:{get},store,beforeRequest:guard,products});
+  get.mockRejectedValue(new Error('not found'));await expect(svc.refresh('other','grid','due')).rejects.toThrow();expect(products.refresh).not.toHaveBeenCalled();
+  get.mockResolvedValue({id:'grid',productCode:'QQQ'});guard.mockRejectedValue(new Error('maintenance'));await expect(svc.refresh('owner','grid','due')).rejects.toThrow();expect(products.refresh).not.toHaveBeenCalled();
+ });
  it('adds independent reference evidence and saved settings only after owner lookup, without collection',async()=>{
   const input={maxPrice:'3',perShare:'1000',isShort:false};get.mockResolvedValue({id:'grid',productCode:'510880',input});
   const data=await service().read('owner','grid');
@@ -64,6 +83,19 @@ describe('cached valuation observation service',()=>{
 });
 
 describe('REIT derived yield cards',()=>{
+ it('uses the fully collected price-history start conservatively when a new REIT has no listing date',async()=>{
+  const p=buildValuationProduct({code:'508001.SH',name:'REIT',market:'cn',currency:'CNY',kind:'reit',tencent:'sh508001',yahoo:null,eastmoney:null},null);
+  get.mockResolvedValue({id:'grid',productCode:p.code});
+  const products={read:async()=>p,refresh:async()=>p};
+  const svc=new ValuationService({grid:{get},store,beforeRequest:guard,products,clock:()=>clock});
+  for(const s of [p.series.price!,p.series.distribution!]){
+   const c=await store.claimSeries(s,clock);
+   await store.commitBatch(c!,{observations:s.metric==='price'?[{date:'2024-01-02',value:'2',quality:'valid'},{date:'2026-10-28',value:'2',quality:'valid'}]:[],reachedStart:true},clock,{cursor:null,complete:true});
+  }
+  expect((await svc.read('owner','grid')).dividendYield?.stats.currentValue).toBe('0');
+  store.rows.get(p.series.price!.key)!.complete=false;
+  expect((await svc.read('owner','grid')).dividendYield?.stats.currentValue).toBeNull();
+ });
  const code='508000',reit=resolveValuationProduct(code)!;
  const distribution:Observation={date:'2026-04-03',value:'0.1',quality:'valid',distribution:{verified:true,recordDate:'2026-04-03',exDate:'2026-04-07',announcedAt:'2026-04-01',noticeId:'AN202603311820912934',evidenceUrl:'https://data.eastmoney.com/notices/detail/508000/AN202603311820912934.html',contentHash:'a'.repeat(64)}};
  const cacheReit=async()=>{

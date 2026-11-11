@@ -17,6 +17,8 @@ const api = vi.hoisted(() => ({
   getGridTrade: vi.fn(),
   updateGridTrade: vi.fn(),
 }));
+const marketApi = vi.hoisted(() => ({ search: vi.fn(), resolve: vi.fn() }));
+vi.mock("@/features/price-alerts/price-alert-api", () => ({ alertApi: marketApi }));
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
@@ -80,9 +82,19 @@ beforeEach(() => {
   api.getGridTrade.mockReset();
   api.updateGridTrade.mockReset();
   navigation.push.mockReset();
+  marketApi.search.mockResolvedValue({items:[{code:'518880.SH',name:'黄金 ETF',market:'cn',currency:'CNY',kind:'etf',exchange:'上海证券交易所'}]});
+  marketApi.resolve.mockResolvedValue({id:'00000000-0000-4000-8000-000000000001',code:'518880.SH',name:'黄金 ETF',market:'cn',currency:'CNY',kind:'etf',tencent:'sh518880',yahoo:null,eastmoney:'1.518880'});
 });
 
 describe("GridForm", () => {
+  it("requires a verified selection for a new grid even with otherwise valid parameters", async () => {
+    const submit = vi.fn();
+    render(<GridForm initialValues={validFormValues} submitLabel="创建产品" requireProductSelection onSubmit={submit}/>);
+    await userEvent.click(screen.getByRole("button", {name: "创建产品"}));
+    expect(await screen.findByText("请先搜索并确认产品")).toBeInTheDocument();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
   it("renders three semantic parameter groups without exposing the algorithm version", () => {
     render(
       <GridForm
@@ -289,15 +301,23 @@ describe("GridForm", () => {
   });
 });
 
+async function chooseProduct(){
+  await userEvent.type(screen.getByLabelText('搜索产品代码或名称'),'518880');
+  await userEvent.click(screen.getByRole('button',{name:'搜索产品'}));
+  await userEvent.click(await screen.findByRole('button',{name:'确认选择 黄金 ETF 518880.SH'}));
+  await screen.findByText(/已确认/);
+}
+
 describe("grid form page controllers", () => {
   it("creates a product and routes to its detail", async () => {
     api.createGridTrade.mockResolvedValue(detail);
     render(<NewGridFormPage />);
 
-    await userEvent.type(screen.getByLabelText("产品代码"), "518880");
+    await chooseProduct();
     await userEvent.click(screen.getByRole("button", { name: "创建产品" }));
 
     await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/grids/grid-1"));
+    expect(api.createGridTrade).toHaveBeenCalledWith(expect.objectContaining({productCode:'518880.SH',instrumentId:'00000000-0000-4000-8000-000000000001'}));
   });
 
   it("maps create field errors and the public request id to accessible form feedback", async () => {
@@ -310,7 +330,7 @@ describe("grid form page controllers", () => {
     ));
     render(<NewGridFormPage />);
 
-    await userEvent.type(screen.getByLabelText("产品代码"), "518880");
+    await chooseProduct();
     await userEvent.click(screen.getByRole("button", { name: "创建产品" }));
 
     expect(await screen.findByText("产品代码已存在")).toHaveAttribute("role", "alert");
@@ -332,11 +352,11 @@ describe("grid form page controllers", () => {
       },
     ));
     render(<NewGridFormPage />);
-    await userEvent.type(screen.getByLabelText("产品代码"), "518880");
+    await chooseProduct();
     await userEvent.click(screen.getByRole("button", { name: "创建产品" }));
     await screen.findByText("产品代码已存在");
 
-    await userEvent.type(screen.getByLabelText("产品代码"), "A");
+    await userEvent.type(screen.getByLabelText("搜索产品代码或名称"), "A");
 
     expect(screen.queryByText("产品代码已存在")).not.toBeInTheDocument();
     expect(screen.getByText("最高价格无效")).toBeInTheDocument();
@@ -356,7 +376,7 @@ describe("grid form page controllers", () => {
       ))
       .mockResolvedValueOnce(detail);
     render(<NewGridFormPage />);
-    await userEvent.type(screen.getByLabelText("产品代码"), "518880");
+    await chooseProduct();
 
     await userEvent.click(screen.getByRole("button", { name: "创建产品" }));
     await screen.findByText("产品代码已存在");
@@ -378,7 +398,7 @@ describe("grid form page controllers", () => {
     ));
     render(<NewGridFormPage />);
     const productCode = screen.getByLabelText("产品代码");
-    await userEvent.type(productCode, "518880");
+    await chooseProduct();
 
     await userEvent.click(screen.getByRole("button", { name: "创建产品" }));
     await waitFor(() => expect(productCode).toHaveFocus());
@@ -429,7 +449,7 @@ describe("grid form page controllers", () => {
   ) => {
     api.createGridTrade.mockRejectedValue(new ClientApiError(status, code, message, requestId));
     render(<NewGridFormPage />);
-    await userEvent.type(screen.getByLabelText("产品代码"), "518880");
+    await chooseProduct();
 
     await userEvent.click(screen.getByRole("button", { name: "创建产品" }));
 

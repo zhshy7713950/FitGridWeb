@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import Decimal from "decimal.js";
 
 import fixture from "../../../docs/fit-replication/fixtures/grid-algorithm-v2.1.0.json";
 import { calculateGrid } from "@/server/grid-domain/calculate-grid";
@@ -71,5 +72,29 @@ describe("calculateGrid android-v2.1.0", () => {
     expect(() => calculateGrid(input)).toThrowError(
       expect.objectContaining({ code: "ALGORITHM_VERSION_UNSUPPORTED" }),
     );
+  });
+
+  it("subtracts fractional retained shares without binary32 sell-quantity tails", () => {
+    const result = calculateGrid({
+      ...toInput(fixture.cases[0].androidResult),
+      productCode: "SCHD.US",
+      maxPrice: "31.16",
+      minTradeQuantity: "0.1",
+      gearAmplitude: "5",
+      perShare: "1500",
+      keepShare: 10,
+      increaseAmplitude: 20,
+      mediumAmplitude: 15,
+      bigAmplitude: 30,
+      maxAmplitude: 30,
+    });
+
+    expect(result.items[0]).toMatchObject({ buyCount: "48.1", keepCount: "22.9", sellCount: "25.2" });
+    expect(result.items[6].sellCount).toBe("59.9");
+    expect(result.items[7].sellCount).toBe("68.4");
+    for (const item of result.items) {
+      expect(new Decimal(item.sellCount).mod("0.1").isZero()).toBe(true);
+      expect(new Decimal(item.sellCount).add(item.keepCount).eq(item.buyCount)).toBe(true);
+    }
   });
 });

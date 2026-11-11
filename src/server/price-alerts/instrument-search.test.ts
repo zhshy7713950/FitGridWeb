@@ -8,6 +8,10 @@ const servers: ReturnType<typeof createServer>[] = [];
 afterEach(async () => { vi.unstubAllGlobals(); await Promise.all(servers.splice(0).map((s) => new Promise<void>((resolve) => { s.closeAllConnections(); s.close(() => resolve()); }))); });
 const fixture = (name: string) => readFile(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 describe("real instrument candidates", () => {
+  it("includes listed LOF and REIT candidates without admitting bonds or index symbols", async () => {
+    vi.stubGlobal("fetch", async () => new Response('v_hint="sz~161130~纳斯达克100LOF~nsdk~FD^sh~508000~张江REIT~zj~FD^sz~180101~蛇口产园REIT~sk~FD^sh~000015~上证红利~hz~ZS^sh~110001~债券~zq~ZQ"'));
+    expect((await searchInstruments("cn", "基金", {})).map(p=>[p.code,p.kind])).toEqual([['161130.SZ','lof'],['508000.SH','reit'],['180101.SZ','reit']]);
+  });
   it("decodes captured domestic code/name results, excludes indices and respects explicit exchange suffixes", async () => {
     const code = await fixture("tencent-search-code.txt"), name = await fixture("tencent-search-name.txt");
     vi.stubGlobal("fetch", async (url: string) => new Response(new URL(url).searchParams.get("q") === "红利" ? name : code));

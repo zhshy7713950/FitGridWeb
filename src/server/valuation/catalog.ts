@@ -1,6 +1,6 @@
 import type { Metric, SeriesDefinition, ValuationProduct } from "./types";
 
-function series(subject: string, metric: Metric, source: SeriesDefinition["source"], symbol: string): SeriesDefinition {
+export function series(subject: string, metric: Metric, source: SeriesDefinition["source"], symbol: string): SeriesDefinition {
   const frequency = metric === "dividend_yield" && source === "legu" && symbol !== "HSI" ? "weekly" : source === "legu" || source === "multpl" ? "monthly" : source === "eastmoney_disclosures" ? "event" : "daily";
   const method = metric === "dividend_yield" ? source === "multpl" ? "标普500及前身历史股息率：12个月每股股息/指数价格；来源标记的估算值留空" : "对应指数股息率（供方历史口径，非基金分派率；未核验零值留空）" : metric === "distribution" ? "基金管理人分红公告：每份税前现金分派，场内除息日" : metric === "price" ? "不复权收盘价" : source === "csi" ? "滚动PE（中证peg字段）" : metric === "pb" ? "整体法PB（addPb）" : "供方历史PE";
   return { key: `${subject}:${metric}:${source}:${frequency}:v1:raw`, subject, metric, source, symbol, method, frequency,
@@ -47,4 +47,17 @@ export function resolveValuationProduct(code: string): ValuationProduct | null {
 }
 export function knownSeries(key: string): SeriesDefinition | undefined {
   return PRODUCTS.flatMap(p=>Object.values(p.series)).find((s): s is SeriesDefinition=>s?.key===key);
+}
+
+/** Capabilities are constrained by provider and identity, rather than a product whitelist. */
+export function allowedSeries(s: SeriesDefinition): boolean {
+  const known = knownSeries(s.key);
+  if (known) return known.symbol === s.symbol && known.source === s.source && known.metric === s.metric && known.subject === s.subject && known.frequency === s.frequency;
+  if (s.metric === 'price' && s.frequency === 'daily') {
+    if (s.source === 'yahoo' && /^[A-Z][A-Z0-9.-]{0,14}\.US$/.test(s.subject)) return s.symbol === s.subject.slice(0,-3) && s.key === series(s.subject,'price','yahoo',s.symbol).key;
+    if (s.source === 'tencent' && /^(?:[56]\d{5}\.SH|[013]\d{5}\.SZ)$/.test(s.subject)) return s.symbol === s.subject.slice(-2).toLowerCase()+s.subject.slice(0,6) && s.key === series(s.subject,'price','tencent',s.symbol).key;
+  }
+  if (s.source === 'csi' && s.metric === 'pe' && /^(?:\d{6}|H\d{5})$/.test(s.subject)) return s.symbol === s.subject && s.key === series(s.subject,'pe','csi',s.symbol).key && s.frequency === 'daily';
+  if (s.source === 'eastmoney_disclosures' && s.metric === 'distribution' && /^(?:508\d{3}\.SH|180\d{3}\.SZ)$/.test(s.subject)) return s.symbol === s.subject.slice(0,6) && s.key === series(s.subject,'distribution',s.source,s.symbol).key && s.frequency === 'event';
+  return false;
 }

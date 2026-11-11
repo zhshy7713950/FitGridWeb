@@ -44,9 +44,11 @@ function dividendCard(product:ValuationProduct,snapshot:SeriesSnapshot|null,pric
  const distributionAsOf=snapshot?.checkedAt?dateInZone(Date.parse(snapshot.checkedAt),ZONES.cn):null;
  // Recompute daily prices against the verified event cache during its seven-day freshness period.
  const through=distributionAsOf?(snapshot?.checkedAt&&+now-Date.parse(snapshot.checkedAt)<WEEK?completedDate(product.series.price!,now):distributionAsOf):null;
- const history=buildDividendYield(price.points,snapshot?.observations??[],product.listedAt&&through?{from:product.listedAt,through}:null);
+ // A fully collected price history gives a conservative coverage start for newly discovered REITs.
+ const coverageStart=product.listedAt??(price.coverage==='source_history'?price.points[0]?.date:null);
+ const history=buildDividendYield(price.points,snapshot?.observations??[],coverageStart&&through?{from:coverageStart,through}:null);
  const stats=summarizeValuation(history.points,{allowZero:true});
- const message=snapshot?.error?base.message:!snapshot?.checkedAt?'尚无已核验的分派缓存，正在等待首次获取。':!snapshot.complete?'正在逐条核验分派公告，受影响的分派率窗口留空。':stats.currentValue===null?'完整分派历史不足12个月，或窗口内有尚未核验的分派记录；分派率留空。':null;
+ const message=snapshot?.error?base.message:!snapshot?.checkedAt?'尚无已核验的分派缓存，正在等待首次获取。':!snapshot.complete?'正在逐条核验分派公告，受影响的分派率窗口留空。':!coverageStart?'尚未确认分派覆盖起点，待价格历史补齐后计算分派率。':stats.currentValue===null?'完整分派历史不足12个月，或窗口内有尚未核验的分派记录；分派率留空。':null;
  return {...base,availability:stats.validCount?'ready':snapshot?.error?'error':'empty',stale:!!snapshot?.error||!snapshot?.checkedAt||+now-Date.parse(snapshot.checkedAt)>=WEEK||price.stale,
   method:'近12个自然月每份税前现金分派合计 ÷ 当日不复权收盘价 × 100%；按场内除息日计入',frequency:'daily',asOf:price.asOf,
   points:history.points,stats,coverage:stats.validCount?(snapshot?.complete&&price.coverage==='source_history'?'source_history':'partial'):'none',message,
@@ -57,12 +59,13 @@ interface Dependencies {
  grid:{get(ownerId:string,id:string):Promise<{id:string;productCode:string;productName?:string|null;input?:GridTradeInput}>};
  store:HistoryStore;fetch?: (request:SeriesRequest,options:{signal:AbortSignal})=>Promise<SeriesBatch>;
  clock?:()=>Date;beforeRequest:()=>Promise<void>;
+ products?:{read(code:string):Promise<ValuationProduct|null>;refresh(code:string):Promise<ValuationProduct|null>};
 }
 export class ValuationService {
  private readonly clock:()=>Date;
  constructor(private readonly deps:Dependencies){this.clock=deps.clock??(()=>new Date());}
  async read(ownerId:string,id:string):Promise<ValuationPageData>{
-  const grid=await this.deps.grid.get(ownerId,id),p=resolveValuationProduct(grid.productCode),now=this.clock();
+  const grid=await this.deps.grid.get(ownerId,id),p=this.deps.products?await this.deps.products.read(grid.productCode):resolveValuationProduct(grid.productCode),now=this.clock();
   const snapshots=await Promise.all([...metrics.map(metric=>p?.series[metric]??null),p?.series.distribution??null,p?.series.dividend_yield??null].map(s=>s?this.deps.store.readSeries(s):null));
   const cards=metrics.map((metric,i)=>card(p?.series[metric]??null,snapshots[i],p,metric,now));
   const dividendYield=p?.kind==='reit'?dividendCard(p,snapshots[3],cards[0],now):{...card(p?.series.dividend_yield??null,snapshots[4],p,'dividend_yield',now),trailingDistribution:null,distributionAsOf:null};
@@ -72,11 +75,13 @@ export class ValuationService {
   return {product:{id:grid.id,code:p?.code??grid.productCode,name:grid.productName||p?.name||grid.productCode,currency:p?.currency??null,kind:p?.kind??null},
    benchmark:p?.benchmark??null,note:p?.note??null,price:cards[0],pe:cards[1],pb:cards[2],dividendYield,
    reference:{gridInput:grid.input??null,pe:buildReferenceBasis('pe',cards[1],cards[0],p?.kind??null,now),pb:buildReferenceBasis('pb',cards[2],cards[0],p?.kind??null,now),dividendYield:buildReferenceBasis('dividendYield',dividendYield,cards[0],p?.kind??null,now)},
-   refresh:{busy:cards.some(c=>c.refreshing),hasMore:cards.some(c=>c.due&&!c.refreshing),retryAfter:cards.some(c=>c.refreshing)?3:retries.length?Math.min(...retries):null}};
+   refresh:{busy:cards.some(c=>c.refreshing),hasMore:!!this.deps.products&&!p||cards.some(c=>c.due&&!c.refreshing),retryAfter:cards.some(c=>c.refreshing)?3:retries.length?Math.min(...retries):null}};
  }
  async refresh(ownerId:string,id:string,mode:'due'|'manual',signal?:AbortSignal):Promise<ValuationPageData>{
-  const grid=await this.deps.grid.get(ownerId,id),p=resolveValuationProduct(grid.productCode);
-  await this.deps.beforeRequest();if(!p)return this.read(ownerId,id);
+  const grid=await this.deps.grid.get(ownerId,id);
+  await this.deps.beforeRequest();
+  const p=this.deps.products?await this.deps.products.refresh(grid.productCode):resolveValuationProduct(grid.productCode);
+  if(!p){const data=await this.read(ownerId,id);data.note='暂时无法核验该产品身份，请稍后刷新或在编辑中重新选择产品。';data.refresh.hasMore=false;return data;}
   const start=this.clock(),definitions=Object.values(p.series).filter((s):s is SeriesDefinition=>s!==null);
   let requests=0,httpRequests=0,cooling=false;const attempted=new Set<string>();
   // At most four source batches: global monthly sources may require two HTTP requests each.

@@ -119,7 +119,8 @@
   position: relative;
 }
 
-.inputFrame input {
+.inputFrame input,
+.inputFrame select {
   width: 100%;
   min-height: 44px;
   padding: 0 40px 0 12px;
@@ -131,6 +132,23 @@
   font-variant-numeric: tabular-nums;
   transition: border-color 120ms ease, background-color 120ms ease;
 }
+
+.productPicker { clear: both; margin-bottom: 20px; }
+.searchRow { display: flex; gap: 8px; }
+.searchRow > div { flex: 1; min-width: 0; }
+.productPicker button, .changeProduct { min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--text); cursor: pointer; }
+.productPicker button:disabled { cursor: default; opacity: .6; }
+.productResults { margin: 12px 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 4px; }
+.productResults li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border-bottom: 1px solid var(--line); }
+.productResults li:last-child { border-bottom: 0; }
+.productResults li > div { min-width: 0; overflow-wrap: anywhere; }
+.productResults strong { font-size: 13px; }
+.productResults p, .pickerHint { color: var(--text-muted); font-size: 11px; line-height: 1.6; }
+.productResults p { margin: 4px 0 0; }
+.productResults button { flex-shrink: 0; }
+.confirmedProduct { padding: 10px 12px; background: var(--canvas); border-left: 2px solid var(--positive); font-size: 12px; overflow-wrap: anywhere; }
+.pickerHint { margin: 10px 0 0; }
+.changeProduct { margin-bottom: 16px; }
 
 .inputFrame input::placeholder {
   color: color-mix(in srgb, var(--text-muted) 72%, transparent);

@@ -137,7 +137,7 @@ class PrismaGridTradeStore implements OwnerScopedGridTradeStore {
   }
 
   async findByProductCode(code: string): Promise<GridTradeRecord | null> {
-    const row = await this.transaction.gridTrade.findFirst({ where: { productCode: code } });
+    const row = await this.transaction.gridTrade.findFirst({ where: { productCode: {equals: code, mode: 'insensitive'} } });
     return row ? record(row) : null;
   }
 

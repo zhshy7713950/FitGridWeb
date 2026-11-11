@@ -81,6 +81,7 @@ export function NewGridFormPage() {
 
   return (
     <GridForm
+      requireProductSelection
       initialValues={defaultGridFormValues}
       submitLabel="创建产品"
       onSubmit={create}

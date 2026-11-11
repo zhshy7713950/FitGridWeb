@@ -214,7 +214,8 @@ function createLongItem(
   const retainedAmount = fmul(profitAmount, inputFloat(row.gridType === 1 ? keepShare : 0));
   const keepCount = quantity(retainedAmount, row.sellPrice, minimum);
   const keepProfit = androidRound(fmul(keepCount, row.sellPrice), 2);
-  const sellCount = Decimal.max(ZERO, fsub(buyCount, keepCount));
+  // Subtract quantized shares in decimal arithmetic to preserve fractional lots.
+  const sellCount = Decimal.max(ZERO, new Decimal(floatText(buyCount)).sub(floatText(keepCount)));
   const sellAmount = androidRound(fmul(sellCount, row.sellPrice), 2);
 
   return {

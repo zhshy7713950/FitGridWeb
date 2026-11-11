@@ -67,6 +67,7 @@ export const ModelName = {
   PriceAlertEvent: 'PriceAlertEvent',
   PriceAlertOutbox: 'PriceAlertOutbox',
   ResearchSeries: 'ResearchSeries',
+  ResearchProduct: 'ResearchProduct',
   ResearchObservation: 'ResearchObservation'
 } as const
 
@@ -345,6 +346,18 @@ export const ResearchSeriesScalarFieldEnum = {
 } as const
 
 export type ResearchSeriesScalarFieldEnum = (typeof ResearchSeriesScalarFieldEnum)[keyof typeof ResearchSeriesScalarFieldEnum]
+
+
+export const ResearchProductScalarFieldEnum = {
+  code: 'code',
+  product: 'product',
+  evidence: 'evidence',
+  evidenceUrl: 'evidenceUrl',
+  checkedAt: 'checkedAt',
+  retryAt: 'retryAt'
+} as const
+
+export type ResearchProductScalarFieldEnum = (typeof ResearchProductScalarFieldEnum)[keyof typeof ResearchProductScalarFieldEnum]
 
 
 export const ResearchObservationScalarFieldEnum = {
