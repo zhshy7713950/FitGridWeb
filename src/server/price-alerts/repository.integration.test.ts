@@ -29,7 +29,7 @@ describe.skipIf(!databaseUrl)("persistent owner-scoped alerts", () => {
     expect((await repo.list(owners[0])).some((r) => r.id === rule.id)).toBe(true);
   });
   it("requires tested channel to enable and rejects stale editing versions", async () => {
-    const rule = await repo.create(owners[0], { instrumentId, condition: { kind: "price", direction: "up", targetPrice: "100" }, enabled: false });
+    const rule = await repo.create(owners[0], { instrumentId, condition: { kind: "price", direction: "up", targetPrice: "101" }, enabled: false });
     await expect(repo.update(owners[0], rule.id, { expectedVersion: 1, enabled: true })).rejects.toMatchObject({ code: "CHANNEL_NOT_READY" });
     await repo.saveChannel(owners[0], "test-cipher");
     const channel = await repo.channel(owners[0]);

@@ -32,7 +32,7 @@ it("supports a coherent development preview without requesting any server or fee
   vi.stubEnv("NODE_ENV", "development"); vi.stubEnv("NEXT_PUBLIC_UI_DEMO_MODE", "1");
   const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
   const instrument = await alertApi.resolve("us", "AAPL");
-  const created = await alertApi.create({ instrumentId: instrument.id, enabled: false, condition: { kind: "ma_touch", days: 20, direction: "down" } });
+  const created = await alertApi.create({ instrumentId: instrument.id, enabled: false, condition: { kind: "ma_touch", days: 21, direction: "down" } });
   expect((await alertApi.get(created.id)).instrument.code).toBe("AAPL");
   const updated = await alertApi.update(created.id, { expectedVersion: created.version, enabled: true });
   expect(updated.version).toBe(created.version + 1);

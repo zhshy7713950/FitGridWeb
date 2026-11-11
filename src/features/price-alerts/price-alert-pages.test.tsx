@@ -71,7 +71,7 @@ it("requires a fresh instrument confirmation when the new-rule code changes", as
   render(<AlertEditorPage prefill={{ code: "518880", market: "cn" }} />);
   await user.click(screen.getByRole("button", { name: "搜索产品" }));
   await user.click(await screen.findByRole("button", { name: /确认选择/ }));
-  await screen.findByText("黄金 ETF");
+  await screen.findByRole("article", { name: "黄金 ETF的提醒" });
   await user.type(screen.getByLabelText("产品代码或名称"), "1");
   expect(screen.queryByRole("button", { name: "保存提醒" })).not.toBeInTheDocument();
 });
@@ -132,7 +132,7 @@ it("tests the channel and requires acknowledgement before removal", async () => 
   expect(await screen.findByText("未配置")).toBeInTheDocument();
 });
 it("shows cached minute close, currency, source and quote time on each list card", async () => {
-  const usd = { ...rule, id: "us-rule", instrument: { ...rule.instrument, name: "Apple", code: "AAPL.US", market: "us" as const, currency: "USD" as const, quote: { ...rule.instrument.quote!, price: "236.48", provider: "yahoo" } } };
+  const usd = { ...rule, id: "us-rule", instrument: { ...rule.instrument, id: "inst-us", name: "Apple", code: "AAPL.US", market: "us" as const, currency: "USD" as const, quote: { ...rule.instrument.quote!, price: "236.48", provider: "yahoo" } } };
   api.list.mockResolvedValue({ items: [rule, usd], status: { calendarWarnings: [], nextRunAt: null } });
   render(<AlertListPage />); await screen.findByRole("link", { name: "黄金 ETF" });
   const cnCard = screen.getByRole("link", { name: "黄金 ETF" }).closest("article")!;
@@ -283,4 +283,100 @@ it("formats a dollar-denominated trigger with the instrument precision", async (
   api.get.mockResolvedValue({ ...rule, instrument: { ...rule.instrument, market: "us", currency: "USD", kind: "stock" }, condition: { kind: "price", direction: "down", targetPrice: "123.456" } });
   render(<AlertDetailPage id="rule-1" />);
   expect(await screen.findByLabelText("触发价格")).toHaveTextContent("触发价 $123.46");
+});
+
+it("groups all conditions for a product under one identity and cached quote", async () => {
+  const down = { ...rule, id: "rule-down", condition: { kind: "price", direction: "down", targetPrice: "6" } };
+  const ma = { ...rule, id: "rule-ma", condition: { kind: "ma_touch", direction: "up", days: 20 } };
+  api.list.mockResolvedValue({ items: [ma, down, rule], status: { calendarWarnings: [], nextRunAt: null } });
+  render(<AlertListPage />);
+  const product = await screen.findByRole("article", { name: "黄金 ETF的提醒" });
+  expect(screen.getAllByRole("article")).toHaveLength(1);
+  expect(within(product).getAllByText("缓存分钟收盘价")).toHaveLength(1);
+  expect(within(product).getByText("3 条提醒")).toBeInTheDocument();
+  expect(within(product).getAllByRole("group", { name: /^提醒：/ }).map((row) => row.getAttribute("aria-label")))
+    .toEqual(["提醒：向上触及 MA20", "提醒：向下触及 6", "提醒：向上触及 6.92"]);
+  expect(within(product).getByRole("group", { name: "提醒：向下触及 6" })).toHaveTextContent("向下触及 6");
+});
+
+it("adds a reminder in its product card without searching and keeps failed input for retry", async () => {
+  const user = userEvent.setup();
+  const created: AlertDTO = { ...rule, id: "rule-2", condition: { kind: "price", direction: "down", targetPrice: "6" }, enabled: false };
+  api.create.mockRejectedValueOnce(new ClientApiError(409, "ALERT_DUPLICATE", "该产品已存在相同提醒"))
+    .mockResolvedValueOnce(created);
+  render(<AlertListPage />);
+  await user.click(await screen.findByRole("button", { name: "增加更多提醒" }));
+  await user.type(screen.getByLabelText("目标价格"), "6");
+  await user.selectOptions(screen.getByLabelText("触发方向"), "down");
+  await user.click(screen.getByRole("button", { name: "保存提醒" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("已存在相同提醒");
+  expect(screen.getByLabelText("目标价格")).toHaveValue("6");
+  expect(screen.getByLabelText("触发方向")).toHaveValue("down");
+  await user.click(screen.getByRole("button", { name: "保存提醒" }));
+  expect(await screen.findByText("2 条提醒")).toBeInTheDocument();
+  expect(screen.queryByLabelText("目标价格")).not.toBeInTheDocument();
+  expect(api.create).toHaveBeenLastCalledWith({ instrumentId: "inst-1", condition: created.condition, enabled: false });
+  expect(api.search).not.toHaveBeenCalled(); expect(api.resolve).not.toHaveBeenCalled(); expect(push).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "增加更多提醒" }));
+  expect(screen.getByLabelText("目标价格")).toHaveValue("");
+  expect(screen.getByLabelText("保存后启用")).not.toBeChecked();
+});
+
+it("saves successive conditions on the new page without navigating or changing products", async () => {
+  const user = userEvent.setup(); api.list.mockResolvedValue({ items: [], status: { calendarWarnings: [], nextRunAt: null } });
+  api.resolve.mockResolvedValue(rule.instrument);
+  api.create.mockResolvedValueOnce(rule).mockResolvedValueOnce({ ...rule, id: "rule-2", enabled: false, condition: { kind: "ma_deviation", direction: "down", days: 20, percent: "5" } });
+  render(<AlertEditorPage prefill={{ code: "518880" }} />);
+  await user.click(screen.getByRole("button", { name: "搜索产品" }));
+  await user.click(await screen.findByRole("button", { name: /确认选择/ }));
+  await user.type(await screen.findByLabelText("目标价格"), "6.92");
+  await user.click(screen.getByRole("button", { name: "保存提醒" }));
+  expect(await screen.findByText("1 条提醒")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "保存提醒" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "增加更多提醒" }));
+  await user.selectOptions(screen.getByLabelText("提醒条件"), "ma_deviation");
+  await user.selectOptions(screen.getByLabelText("触发方向"), "down");
+  await user.type(screen.getByLabelText("偏离幅度（%）"), "5");
+  await user.click(screen.getByRole("button", { name: "保存提醒" }));
+  expect(await screen.findByText("2 条提醒")).toBeInTheDocument();
+  expect(screen.getByText("低于 MA20 5%")).toBeInTheDocument();
+  expect(screen.getByLabelText("产品代码或名称")).toHaveValue("518880");
+  expect(api.resolve).toHaveBeenCalledTimes(1); expect(push).not.toHaveBeenCalled();
+});
+
+it("locks product selection while saving and sends only one creation for repeated clicks", async () => {
+  const user = userEvent.setup(); api.resolve.mockResolvedValue(rule.instrument);
+  let finish!: (value: AlertDTO) => void;
+  api.create.mockReturnValue(new Promise<AlertDTO>((resolve) => { finish = resolve; }));
+  render(<AlertEditorPage prefill={{ code: "518880" }} />);
+  await user.click(screen.getByRole("button", { name: "搜索产品" }));
+  await user.click(await screen.findByRole("button", { name: /确认选择/ }));
+  await user.type(await screen.findByLabelText("目标价格"), "7");
+  await user.dblClick(screen.getByRole("button", { name: "保存提醒" }));
+  expect(api.create).toHaveBeenCalledTimes(1);
+  expect(screen.getByLabelText("产品代码或名称")).toBeDisabled(); expect(screen.getByLabelText("市场")).toBeDisabled();
+  expect(screen.getByRole("button", { name: "取消新增" })).toBeDisabled();
+  await act(async () => finish({ ...rule, id: "new-rule", condition: { kind: "price", direction: "up", targetPrice: "7" } }));
+  expect(await screen.findByText("2 条提醒")).toBeInTheDocument();
+  expect(screen.getByLabelText("产品代码或名称")).not.toBeDisabled();
+});
+
+it("pauses and deletes only the chosen reminder and removes the group after its final deletion", async () => {
+  const user = userEvent.setup(); const other = { ...rule, id: "rule-2", condition: { kind: "price", direction: "down", targetPrice: "5" } };
+  api.list.mockResolvedValue({ items: [other, rule], status: { calendarWarnings: [], nextRunAt: null } });
+  api.update.mockResolvedValue({ ...rule, enabled: false, version: 5 }); api.remove.mockResolvedValue(undefined);
+  render(<AlertListPage />);
+  const up = await screen.findByRole("group", { name: "提醒：向上触及 6.92" });
+  await user.click(within(up).getByRole("button", { name: "暂停" }));
+  expect(within(up).getByRole("button", { name: "恢复" })).toBeInTheDocument();
+  expect(within(screen.getByRole("group", { name: "提醒：向下触及 5" })).getByRole("button", { name: "暂停" })).toBeInTheDocument();
+  await user.click(within(up).getByRole("button", { name: "删除" }));
+  await user.click(within(up).getByRole("button", { name: "确认删除" }));
+  expect(api.remove).toHaveBeenCalledWith("rule-1", 5);
+  expect(screen.getByText("1 条提醒")).toBeInTheDocument();
+  const down = screen.getByRole("group", { name: "提醒：向下触及 5" });
+  await user.click(within(down).getByRole("button", { name: "删除" }));
+  await user.click(within(down).getByRole("button", { name: "确认删除" }));
+  expect(await screen.findByText("还没有股价提醒")).toBeInTheDocument();
+  expect(screen.queryByRole("article")).not.toBeInTheDocument();
 });

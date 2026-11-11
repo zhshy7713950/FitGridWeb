@@ -734,7 +734,7 @@ paths:
           description: CROSS_SITE_REQUEST，同源 Origin 缺失或不匹配
         '409':
           $ref: '#/components/responses/Conflict'
-          description: CHANNEL_NOT_READY 或 ALERT_CAPACITY（当前账号最多 250 条未删除预警）
+          description: CHANNEL_NOT_READY、ALERT_CAPACITY（当前账号最多 250 条未删除预警）或 ALERT_DUPLICATE（同产品存在相同类型、方向和参数的未删除提醒，含暂停项；价格和百分比按数值比较）
         '413': {$ref: '#/components/responses/PayloadTooLarge'}
         '422':
           $ref: '#/components/responses/ValidationError'
@@ -787,7 +787,7 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409':
           $ref: '#/components/responses/Conflict'
-          description: EDIT_CONFLICT（请重新读取版本）或 CHANNEL_NOT_READY
+          description: EDIT_CONFLICT（请重新读取版本）、CHANNEL_NOT_READY 或 ALERT_DUPLICATE（修改条件后与同产品其他未删除提醒重复；原样保存、等价数值修改及仅启停不阻止旧重复规则）
         '413': {$ref: '#/components/responses/PayloadTooLarge'}
         '422': {$ref: '#/components/responses/ValidationError'}
         '429': {$ref: '#/components/responses/RateLimited'}

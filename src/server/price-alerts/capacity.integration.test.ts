@@ -21,7 +21,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("native capacity acceptance (syn
     await prisma.user.create({ data: { id: owner, name: "Load fixture", username: owner, email: `${owner}@test.invalid` } });
     await repo.saveChannel(owner, encryptKey("load-device-fixture", secret)); await repo.markChannelTested(owner, 1);
     for (let n = 0; n < 50; n++) instrumentIds.push((await repo.saveInstrument({ code: `L${owner.slice(0, 8)}-${n}.SH`, name: `Fixture ${n}`, market: "cn", currency: "CNY", kind: "stock", tencent: "sh600519", yahoo: null, eastmoney: "1.600519" })).id);
-    for (const instrumentId of instrumentIds) for (let n = 0; n < 5; n++) await repo.create(owner, { instrumentId, condition: { kind: "ma_touch", direction: "up", days: 500 }, enabled: true });
+    for (const instrumentId of instrumentIds) for (let n = 0; n < 5; n++) await repo.create(owner, { instrumentId, condition: { kind: "ma_touch", direction: "up", days: 500 - n }, enabled: true });
   }, 60000);
   afterAll(async () => {
     await repo.scope(owner, async (tx) => { await tx.priceAlert.deleteMany(); await tx.priceAlertChannel.deleteMany(); });

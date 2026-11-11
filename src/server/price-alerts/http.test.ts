@@ -6,14 +6,14 @@ import * as channelRoute from "@/app/api/v1/settings/notifications/route";
 import { PriceAlertService } from "./service";
 import type { AlertRepository } from "./repository";
 
-const context = vi.hoisted(() => ({ authenticated: true, maintenance: false }));
+const context = vi.hoisted(() => ({ authenticated: true, maintenance: false, duplicate: false }));
 vi.mock("@/server/runtime/services", () => ({ getRuntimeServices: () => ({
   auth: { api: { getSession: async () => context.authenticated ? { user: { id: "d8011707-1a97-4c0a-94f4-49cac040261e", name: "tester", role: "member", status: "active" } } : null } },
   maintenance: { getMaintenanceMode: async () => ({ active: context.maintenance }) },
-  alerts: { search: async (market: string, query: string) => ({ items: [{ code: "510880.SH", name: query, market, currency: "CNY", kind: "etf", exchange: "上海证券交易所" }] }), create: async () => { throw new ApiError(503, "HISTORY_UNAVAILABLE", "暂时无法验证均线历史"); }, list: async () => ({ items: [], status: {} }), channelStatus: async () => ({ configured: false, tested: false, encryptionReady: false }), repository: { create: async () => { throw new Error("invalid input must not reach persistence"); } } },
+  alerts: { search: async (market: string, query: string) => ({ items: [{ code: "510880.SH", name: query, market, currency: "CNY", kind: "etf", exchange: "上海证券交易所" }] }), create: async () => { if (context.duplicate) throw new ApiError(409, "ALERT_DUPLICATE", "该产品已存在相同提醒", { condition: ["已存在相同提醒"] }); throw new ApiError(503, "HISTORY_UNAVAILABLE", "暂时无法验证均线历史"); }, list: async () => ({ items: [], status: {} }), channelStatus: async () => ({ configured: false, tested: false, encryptionReady: false }), repository: { create: async () => { throw new Error("invalid input must not reach persistence"); } } },
 }) }));
 function request(path: string, method = "GET", body?: unknown) { return new Request(`https://test.invalid${path}`, { method, headers: { host: "test.invalid", origin: "https://test.invalid", "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }); }
-beforeEach(() => { context.authenticated = true; context.maintenance = false; });
+beforeEach(() => { context.authenticated = true; context.maintenance = false; context.duplicate = false; });
 describe("price alert HTTP boundaries", () => {
   it("requires a session and validated input for real product searches", async () => {
     context.authenticated = false;
@@ -61,4 +61,11 @@ describe("price alert HTTP boundaries", () => {
     const result = await listRoute.POST(request("/api/v1/price-alerts", "POST", { padding: "x".repeat(20000) }));
     expect(result.status).toBe(413);
   });
+});
+
+it("returns a structured duplicate conflict to the existing single-create client", async () => {
+  context.duplicate = true;
+  const response = await listRoute.POST(request("/api/v1/price-alerts", "POST", { instrumentId: "00000000-0000-4000-8000-000000000001", condition: { kind: "price", direction: "up", targetPrice: "10.00" }, enabled: false }));
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ code: "ALERT_DUPLICATE", fieldErrors: { condition: ["已存在相同提醒"] }, requestId: expect.any(String) });
 });

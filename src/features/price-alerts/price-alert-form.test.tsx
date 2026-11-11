@@ -49,3 +49,14 @@ it.each([["2", "0.01"], ["500", "99.99"]])("accepts MA deviation boundaries %s d
   await user.click(screen.getByRole("button", { name: "保存提醒" }));
   expect(submit).toHaveBeenCalledWith({ enabled: false, condition: { kind: "ma_deviation", direction: "up", days: Number(days), percent } });
 });
+
+it("keeps labels and validation hints unique across product forms", async () => {
+  const user = userEvent.setup();
+  render(<><PriceAlertForm onSubmit={vi.fn()} /><PriceAlertForm onSubmit={vi.fn()} /></>);
+  const kinds = screen.getAllByLabelText("提醒条件");
+  expect(new Set(kinds.map((input) => input.id)).size).toBe(2);
+  await user.selectOptions(kinds[0], "ma_touch"); await user.selectOptions(kinds[1], "ma_touch");
+  const days = screen.getAllByLabelText("均线天数");
+  expect(new Set(days.map((input) => input.getAttribute("aria-describedby"))).size).toBe(2);
+  for (const input of days) expect(document.getElementById(input.getAttribute("aria-describedby")!)).toHaveTextContent("2–500 天");
+});

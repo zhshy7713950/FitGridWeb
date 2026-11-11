@@ -1,4 +1,5 @@
 import { ClientApiError } from "@/lib/api-client";
+import { conditionsEqual } from "./condition-equality";
 import type { AlertDTO, AlertInput, AlertPage, ChannelStatus, EventPage, Instrument, InstrumentCandidate } from "./types";
 
 const stamp = "2026-10-27T03:00:00.000Z";
@@ -19,8 +20,13 @@ function get(id: string) {
   if (!rule) throw new ClientApiError(404, "NOT_FOUND", "提醒不存在");
   return structuredClone(rule);
 }
+function rejectDuplicate(instrumentId: string, condition: AlertInput["condition"], excludeId?: string) {
+  if (rules.some((rule) => !rule.deletedAt && rule.instrument.id === instrumentId && rule.id !== excludeId && conditionsEqual(rule.condition, condition))) {
+    throw new ClientApiError(409, "ALERT_DUPLICATE", "该产品已存在相同提醒，请修改条件或管理已有提醒");
+  }
+}
 export const demoApi = {
-  list(): AlertPage { return { items: structuredClone(rules.filter((rule) => !rule.deletedAt)), status: { calendarWarnings: [], nextRunAt: "2026-10-27T03:10:15Z", lastScan: null } }; },
+  list(): AlertPage { return { items: structuredClone(rules.filter((rule) => !rule.deletedAt).sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id))), status: { calendarWarnings: [], nextRunAt: "2026-10-27T03:10:15Z", lastScan: null } }; },
   get,
   events(id: string, before?: string): EventPage {
     const rule = get(id);
@@ -38,11 +44,14 @@ export const demoApi = {
   },
   create(input: AlertInput & { instrumentId: string }) {
     const instrument = instruments.find((item) => item.id === input.instrumentId)!;
-    const rule = makeRule(instrument, rules.length + 1, input); rules.push(rule); return structuredClone(rule);
+    rejectDuplicate(input.instrumentId, input.condition);
+    const now = new Date().toISOString();
+    const rule = { ...makeRule(instrument, rules.length + 1, input), createdAt: now, updatedAt: now }; rules.push(rule); return structuredClone(rule);
   },
   update(id: string, input: Partial<AlertInput> & { expectedVersion: number }) {
     const current = get(id);
     if (current.version !== input.expectedVersion) throw new ClientApiError(409, "EDIT_CONFLICT", "提醒已更新");
+    if (input.condition && !conditionsEqual(current.condition, input.condition)) rejectDuplicate(current.instrument.id, input.condition, id);
     const next = { ...current, ...input, version: current.version + 1 };
     rules = rules.map((rule) => rule.id === id ? next : rule); return structuredClone(next);
   },

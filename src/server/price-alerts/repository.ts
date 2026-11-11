@@ -3,6 +3,7 @@ import { z } from "zod";
 import { PriceDecimal as Decimal } from "./decimal";
 import { Prisma, type PrismaClient, type PriceAlert } from "@/generated/prisma/client";
 import { ApiError } from "@/server/http/api-error";
+import { conditionsEqual } from "@/features/price-alerts/condition-equality";
 import { evaluateBars, ruleSchema, triggerThreshold } from "./engine";
 import { historySum } from "./market-data";
 import type { AlertCondition, DailyBasis, Instrument, ScanWindow, SourceResult } from "./types";
@@ -57,10 +58,17 @@ export class AlertRepository {
     const channel = await tx.priceAlertChannel.findUnique({ where: { ownerId } });
     if (!channel?.testedAt) throw new ApiError(409, "CHANNEL_NOT_READY", "请先配置 Bark 并成功发送测试通知");
   }
+  private async rejectDuplicate(tx: Prisma.TransactionClient, ownerId: string, instrumentId: string, condition: AlertCondition, excludeId?: string) {
+    const rules = await tx.priceAlert.findMany({ where: { ownerId, instrumentId, deletedAt: null, ...(excludeId ? { id: { not: excludeId } } : {}) }, select: { condition: true } });
+    if (rules.some((rule) => conditionsEqual(ruleSchema.parse(rule.condition), condition))) {
+      throw new ApiError(409, "ALERT_DUPLICATE", "该产品已存在相同提醒，请修改条件或管理已有提醒", { condition: ["已存在相同提醒"] });
+    }
+  }
   create(ownerId: string, input: { instrumentId: string; condition: AlertCondition; enabled: boolean }) {
     const condition = ruleSchema.parse(input.condition);
     return this.write(ownerId, async (tx) => {
       if (!await tx.marketInstrument.findUnique({ where: { id: input.instrumentId } })) throw new ApiError(422, "INSTRUMENT_INVALID", "请先核对产品代码");
+      await this.rejectDuplicate(tx, ownerId, input.instrumentId, condition);
       if (await tx.priceAlert.count({ where: { deletedAt: null } }) >= 250) throw new ApiError(409, "ALERT_CAPACITY", "每个账号最多保存 250 条预警");
       if (input.enabled) await this.ready(tx, ownerId);
       return tx.priceAlert.create({ data: { ownerId, instrumentId: input.instrumentId, condition: jsonValue(condition), enabled: input.enabled, activeFrom: new Date(Math.ceil(this.clock() / 60000) * 60000) }, include: { instrument: true } });
@@ -71,10 +79,14 @@ export class AlertRepository {
       const current = await tx.priceAlert.findUnique({ where: { id } });
       if (!current || current.deletedAt) throw missing();
       if (current.version !== input.expectedVersion) throw conflict();
+      const condition = input.condition ? ruleSchema.parse(input.condition) : undefined;
+      if (!input.deleted && condition && !conditionsEqual(ruleSchema.parse(current.condition), condition)) {
+        await this.rejectDuplicate(tx, ownerId, current.instrumentId, condition, id);
+      }
       const enabled = input.deleted ? false : input.enabled ?? current.enabled;
       if (enabled) await this.ready(tx, ownerId);
       await cancelOutbox(tx, id);
-      return tx.priceAlert.update({ where: { id }, data: { condition: input.condition ? jsonValue(ruleSchema.parse(input.condition)) : undefined, enabled, version: { increment: 1 }, armed: true, cursor: null,
+      return tx.priceAlert.update({ where: { id }, data: { condition: condition ? jsonValue(condition) : undefined, enabled, version: { increment: 1 }, armed: true, cursor: null,
         activeFrom: new Date(Math.ceil(this.clock() / 60000) * 60000), continuityDegraded: false, lastError: null, lastEvaluation: Prisma.DbNull, deletedAt: input.deleted ? new Date(this.clock()) : undefined }, include: { instrument: true } });
     });
   }

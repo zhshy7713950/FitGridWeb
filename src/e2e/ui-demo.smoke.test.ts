@@ -753,7 +753,7 @@ describe.sequential("database-free UI demo", () => {
     expect(await page.getByLabel("密码").inputValue()).toBe("");
     expect(consoleErrors).toEqual([]);
   }, 60_000);
-  it("searches and explicitly confirms an instrument before saving a 500-day rule on mobile", async () => {
+  it("creates and independently manages multiple reminders for one confirmed product on mobile", async () => {
     const { page, consoleErrors } = await newPage();
     await page.goto(`${baseUrl}/price-alerts/new`, { waitUntil: "networkidle" });
     await page.getByLabel("产品代码或名称").fill("518880");
@@ -772,9 +772,40 @@ describe.sequential("database-free UI demo", () => {
     await page.getByLabel("提醒条件").selectOption("ma_touch");
     await page.getByLabel("均线天数").fill("500");
     await page.getByRole("button", { name: "保存提醒" }).click();
-    await page.waitForURL(new RegExp(`${appBasePath}/price-alerts/demo-alert-\\d+$`));
     await expect.poll(() => page.getByText("向上触及 MA500", { exact: true }).isVisible()).toBe(true);
+    expect(new URL(page.url()).pathname).toBe(`${appBasePath}/price-alerts/new`);
+    const product = page.getByRole("article", { name: "黄金 ETF的提醒" });
+    await expect.poll(() => product.getByText("2 条提醒", { exact: true }).isVisible()).toBe(true);
+    expect(await page.getByRole("button", { name: "保存提醒" }).count()).toBe(0);
+    await product.getByRole("button", { name: "增加更多提醒" }).click();
+    expect(await page.getByLabel("保存后启用").isChecked()).toBe(false);
+    await page.getByLabel("目标价格").fill("6.92");
+    await page.getByRole("button", { name: "保存提醒" }).click();
+    await expect.poll(() => product.getByRole("alert").textContent()).toContain("已存在相同提醒");
+    expect(await page.getByLabel("目标价格").inputValue()).toBe("6.92");
+    await page.getByLabel("目标价格").fill("6");
+    await page.getByLabel("触发方向").selectOption("down");
+    await page.getByRole("button", { name: "保存提醒" }).click();
+    await expect.poll(() => product.getByText("3 条提醒", { exact: true }).isVisible()).toBe(true);
     await expectNoHorizontalOverflow(page);
+    await page.getByRole("link", { name: "← 返回股价提醒" }).click();
+    await page.waitForURL(`${baseUrl}/price-alerts`);
+    await expect.poll(() => product.getByText("3 条提醒", { exact: true }).isVisible()).toBe(true);
+    expect(await product.getByText("缓存分钟收盘价", { exact: true }).count()).toBe(1);
+    const down = product.getByRole("group", { name: "提醒：向下触及 6", exact: true });
+    await down.getByRole("button", { name: "恢复" }).click();
+    await expect.poll(() => down.getByRole("button", { name: "暂停" }).isVisible()).toBe(true);
+    expect(await product.getByRole("group", { name: "提醒：向上触及 MA500", exact: true }).getByRole("button", { name: "恢复" }).isVisible()).toBe(true);
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: "/tmp/fitgrid-multiple-alerts-mobile.png", fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: "/tmp/fitgrid-multiple-alerts-desktop.png", fullPage: true });
+    await down.getByRole("button", { name: "删除", exact: true }).click();
+    await down.getByRole("button", { name: "确认删除", exact: true }).click();
+    await expect.poll(() => product.getByText("2 条提醒", { exact: true }).isVisible()).toBe(true);
+    expect(await down.count()).toBe(0);
     expect(consoleErrors).toEqual([]);
   }, 60_000);
 

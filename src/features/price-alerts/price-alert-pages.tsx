@@ -61,46 +61,77 @@ function AlertStatus({ rule }: { rule: AlertDTO }) {
   return <span className={`${styles.badge} ${!rule.enabled || rule.deletedAt || !rule.armed ? styles.paused : ""} ${rule.enabled && rule.lastError && !rule.deletedAt ? styles.marketError : ""}`}>{label}</span>;
 }
 
-export function AlertListPage() {
-  const load = useCallback((signal: AbortSignal) => alertApi.list(signal), []);
-  const data = useCached(load);
-  const [actionError, setActionError] = useState("");
+function ProductAlertCard({ instrument, rules, onSaved, onRemoved, reload, initiallyAdding = false, onSavingChange }: {
+  instrument: Instrument & { quote?: AlertDTO["instrument"]["quote"] }; rules: AlertDTO[];
+  onSaved: (rule: AlertDTO) => void; onRemoved: (id: string) => void;
+  reload: () => void;
+  initiallyAdding?: boolean; onSavingChange?: (saving: boolean) => void;
+}) {
+  const [adding, setAdding] = useState(initiallyAdding);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [pending, setPending] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const lock = useRef(false);
+  async function create(input: AlertInput) {
+    if (lock.current) return;
+    lock.current = true; setPending(true); setError(""); setSuccess(""); onSavingChange?.(true);
+    try {
+      const created = await alertApi.create({ ...input, instrumentId: instrument.id });
+      onSaved(created); setAdding(false); setSuccess("提醒已保存，可以继续增加更多提醒。");
+    } catch (caught) { setError(message(caught)); throw caught; }
+    finally { lock.current = false; setPending(false); onSavingChange?.(false); }
+  }
   async function act(rule: AlertDTO, remove = false) {
     if (lock.current) return;
-    lock.current = true; setPending(true); setActionError("");
+    lock.current = true; setPending(true); setError(""); setSuccess("");
     try {
-      if (remove) {
-        await alertApi.remove(rule.id, rule.version);
-        data.setValue((current) => current ? { ...current, items: current.items.filter((item) => item.id !== rule.id) } : current);
-        setConfirmId(null);
-      } else {
-        const updated = await alertApi.update(rule.id, { expectedVersion: rule.version, enabled: !rule.enabled });
-        data.setValue((current) => current ? { ...current, items: current.items.map((item) => item.id === rule.id ? updated : item) } : current);
-      }
-    } catch (error) { setActionError(message(error)); }
+      if (remove) { await alertApi.remove(rule.id, rule.version); onRemoved(rule.id); setConfirmId(null); }
+      else onSaved(await alertApi.update(rule.id, { expectedVersion: rule.version, enabled: !rule.enabled }));
+    } catch (caught) { setError(message(caught)); }
     finally { lock.current = false; setPending(false); }
   }
-  return <Page title="股价提醒" description="为关注的股票与 ETF 设置条件，在价格到达时收到通知。" actions={<><Link href="/settings/notifications">通知设置</Link><Link className={styles.primary} href="/price-alerts/new">创建提醒</Link></>}>
+  return <article className={styles.card} aria-label={`${instrument.name || instrument.code}的提醒`}>
+    <header className={styles.productHeading}>
+      <div>{rules.length ? <Link className={styles.identity} href={`/price-alerts/${rules[0].id}`}>{instrument.name || instrument.code}</Link> : <h3 className={styles.identity}>{instrument.name || instrument.code}</h3>}<span className={styles.code}>{instrument.market === "cn" ? "A 股" : "美股"} · {instrument.code}</span></div>
+      <span className={styles.hint}>{rules.length} 条提醒</span>
+    </header>
+    <div className={styles.cachedQuote}>
+      <span className={styles.hint}>缓存分钟收盘价</span>
+      <span className={styles.quoteValue}>{instrument.currency} {formatPrice(instrument.quote?.price, instrument)}</span>
+      {instrument.quote ? <><span>来源：<span>{provider(instrument.quote.provider)}</span></span><span>行情时间：<time dateTime={instrument.quote.minuteEnd}>{time(instrument.quote.minuteEnd)}</time></span></> : <span>暂无缓存行情</span>}
+    </div>
+    <div className={styles.ruleList}>{rules.map((rule) => <div className={styles.rule} role="group" aria-label={`提醒：${conditionText(rule.condition)}`} key={rule.id}>
+      <div><p className={styles.condition}>{conditionText(rule.condition)}</p><AlertStatus rule={rule} />{rule.continuityDegraded ? <p className={styles.warning}>历史行情有缺口，可能漏过触发；后续完整分钟继续监控。</p> : null}{rule.lastError ? <p className={styles.error}>{rule.lastError}</p> : null}</div>
+      <div className={styles.actions}><Link href={`/price-alerts/${rule.id}`}>查看</Link><Link href={`/price-alerts/${rule.id}/edit`}>编辑</Link><button disabled={pending} onClick={() => void act(rule)}>{rule.enabled ? "暂停" : "恢复"}</button><button disabled={pending} className={styles.danger} onClick={() => setConfirmId(rule.id)}>删除</button></div>
+      {confirmId === rule.id ? <div role="group" aria-label="删除确认" className={styles.confirm}><span>删除后停止观察，历史记录仍可查看。</span><button disabled={pending} onClick={() => setConfirmId(null)}>取消</button><button disabled={pending} className={styles.danger} onClick={() => void act(rule, true)}>确认删除</button></div> : null}
+    </div>)}</div>
+    {success ? <p role="status" className={styles.success}>{success}</p> : null}
+    {error ? <ErrorNotice error={error} reload={reload} /> : null}
+    {adding ? <section className={styles.addRule} aria-label="新增提醒"><h3>设置条件</h3><PriceAlertForm onSubmit={create} disabled={pending} /><div className={styles.actions}><button disabled={pending} onClick={() => { setAdding(false); setError(""); }}>取消新增</button></div></section>
+      : <div className={styles.actions}><button disabled={pending} onClick={() => { setAdding(true); setError(""); setSuccess(""); }}>增加更多提醒</button></div>}
+  </article>;
+}
+
+export function AlertListPage() {
+  const load = useCallback((signal: AbortSignal) => alertApi.list(signal), []);
+  const data = useCached(load);
+  const groups = new Map<string, AlertDTO[]>();
+  for (const rule of data.value?.items ?? []) {
+    const group = groups.get(rule.instrument.id);
+    if (group) group.push(rule); else groups.set(rule.instrument.id, [rule]);
+  }
+  function saved(rule: AlertDTO) {
+    data.setValue((current) => current ? { ...current, items: [rule, ...current.items.filter((item) => item.id !== rule.id)]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id)) } : current);
+  }
+  return <Page title="股价提醒" description="为关注的股票与 ETF 设置多条条件，在价格到达时收到通知。" actions={<><Link href="/settings/notifications">通知设置</Link><Link className={styles.primary} href="/price-alerts/new">创建提醒</Link></>}>
     <State {...data} />
-    {actionError ? <ErrorNotice error={actionError} reload={() => { setActionError(""); data.reload(); }} /> : null}
     {data.value && !data.loading && !data.error ? <>
       {data.value.status.calendarWarnings.map((warning, index) => <p key={index} className={styles.warning}>{warning}</p>)}
       <p className={styles.hint}>仅在正常交易时段观察。行情定期检查，刷新页面只查看已保存的数据。下一次检查：{time(data.value.status.nextRunAt)}</p>
-      {data.value.items.length ? <div className={styles.list}>{data.value.items.map((rule) => <article className={styles.card} key={rule.id}>
-        <div><Link className={styles.identity} href={`/price-alerts/${rule.id}`}>{rule.instrument.name || rule.instrument.code}</Link><span className={styles.code}>{rule.instrument.market === "cn" ? "A 股" : "美股"} · {rule.instrument.code}</span>
-          <div className={styles.cachedQuote}>
-            <span className={styles.hint}>缓存分钟收盘价</span>
-            <span className={styles.quoteValue}>{rule.instrument.currency} {formatPrice(rule.instrument.quote?.price, rule.instrument)}</span>
-            {rule.instrument.quote ? <><span>来源：<span>{provider(rule.instrument.quote.provider)}</span></span><span>行情时间：<time dateTime={rule.instrument.quote.minuteEnd}>{time(rule.instrument.quote.minuteEnd)}</time></span></> : <span>暂无缓存行情</span>}
-          </div>
-        </div>
-        <div><p className={styles.condition}>{conditionText(rule.condition)}</p><AlertStatus rule={rule} />{rule.continuityDegraded ? <p className={styles.warning}>历史行情有缺口，可能漏过触发；后续完整分钟继续监控。</p> : null}{rule.lastError ? <p className={styles.error}>{rule.lastError}</p> : null}</div>
-        <div className={styles.actions}><Link href={`/price-alerts/${rule.id}`}>查看</Link><button disabled={pending} onClick={() => void act(rule)}>{rule.enabled ? "暂停" : "恢复"}</button><button disabled={pending} className={styles.danger} onClick={() => setConfirmId(rule.id)}>删除</button></div>
-        {confirmId === rule.id ? <div role="group" aria-label="删除确认" className={styles.confirm}><span>删除后停止观察，历史记录仍可查看。</span><button disabled={pending} onClick={() => setConfirmId(null)}>取消</button><button disabled={pending} className={styles.danger} onClick={() => void act(rule, true)}>确认删除</button></div> : null}
-      </article>)}</div> : <div className={`${styles.panel} ${styles.empty}`}><h2>还没有股价提醒</h2><p>先在通知设置中保存并测试 Bark，再为关注的产品创建提醒。</p><Link href="/price-alerts/new">创建第一条提醒 →</Link></div>}
+      {groups.size ? <div className={styles.list}>{Array.from(groups, ([instrumentId, rules]) => <ProductAlertCard key={instrumentId} instrument={rules[0].instrument} rules={rules} reload={data.reload} onSaved={saved} onRemoved={(id) => data.setValue((current) => current ? { ...current, items: current.items.filter((item) => item.id !== id) } : current)} />)}</div>
+        : <div className={`${styles.panel} ${styles.empty}`}><h2>还没有股价提醒</h2><p>先在通知设置中保存并测试 Bark，再为关注的产品创建提醒。</p><Link href="/price-alerts/new">创建第一条提醒 →</Link></div>}
     </> : null}
   </Page>;
 }
@@ -166,7 +197,9 @@ export function AlertEditorPage({ id, prefill }: { id?: string; prefill?: { code
   return <NewAlert prefill={prefill} />;
 }
 function NewAlert({ prefill }: { prefill?: { code?: string; market?: "cn" | "us" } }) {
-  const router = useRouter();
+  const load = useCallback((signal: AbortSignal) => alertApi.list(signal), []);
+  const data = useCached(load);
+  const [saving, setSaving] = useState(false);
   const [market, setMarket] = useState<"cn" | "us">(prefill?.market ?? "cn");
   const [code, setCode] = useState(prefill?.code ?? "");
   const [instrument, setInstrument] = useState<Instrument | null>(null);
@@ -195,19 +228,18 @@ function NewAlert({ prefill }: { prefill?: { code?: string; market?: "cn" | "us"
     catch (caught) { if (current === generation.current) setError(message(caught)); }
     finally { resolveLock.current = false; setPending(false); }
   }
-  async function create(input: AlertInput) {
-    if (!instrument) return;
-    setError("");
-    try { const created = await alertApi.create({ ...input, instrumentId: instrument.id }); router.push(`/price-alerts/${created.id}`); }
-    catch (caught) { setError(message(caught)); throw caught; }
+  const rules = data.value?.items.filter((rule) => rule.instrument.id === instrument?.id) ?? [];
+  function saved(rule: AlertDTO) {
+    data.setValue((current) => current ? { ...current, items: [rule, ...current.items.filter((item) => item.id !== rule.id)]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id)) } : current);
   }
-  return <Page title="创建提醒" description="搜索股票或 ETF 的代码、名称，确认产品后设置条件。" actions={<Link href="/settings/notifications">通知设置</Link>}><Link className={styles.back} href="/price-alerts">← 返回股价提醒</Link><div className={styles.columns}><section className={styles.panel}><h2>选择产品</h2><div className={styles.form}>
+  return <Page title="创建提醒" description="搜索股票或 ETF 的代码、名称，确认产品后逐条设置提醒，可为同一产品增加多个条件。" actions={<Link href="/settings/notifications">通知设置</Link>}><Link className={styles.back} href="/price-alerts">← 返回股价提醒</Link><div className={styles.columns}><section className={styles.panel}><h2>选择产品</h2><fieldset className={styles.formFields} disabled={saving}>
     <label htmlFor="alert-market">市场</label><select id="alert-market" value={market} onChange={(event) => { invalidate(); setMarket(event.target.value as "cn" | "us"); }}><option value="cn">A 股 · 股票 / ETF</option><option value="us">美股 · 股票 / ETF</option></select>
     <label htmlFor="instrument-code">产品代码或名称</label><input id="instrument-code" autoComplete="off" maxLength={64} value={code} placeholder={market === "cn" ? "例如 510880 或 红利" : "例如 AAPL 或 Apple"} onChange={(event) => { invalidate(); setCode(event.target.value); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void search(); } }} /><button disabled={pending || !code.trim()} onClick={() => void search()}>{pending ? "正在查询…" : "搜索产品"}</button>
     {searched && candidates.length === 0 ? <p role="status" className={styles.hint}>没有找到支持的股票或 ETF，请调整代码或名称。</p> : null}
     {candidates.length ? <div aria-label="检索结果">{candidates.map((candidate) => <div className={styles.event} key={candidate.code}><h3>{candidate.name}</h3><p className={styles.code}>{candidate.code} · {candidate.exchange} · {candidate.kind === "etf" ? "ETF" : "股票"}</p><button disabled={pending} aria-label={`确认选择 ${candidate.name} ${candidate.code}`} onClick={() => void confirm(candidate)}>确认选择</button></div>)}</div> : null}
     {instrument ? <div><h3>{instrument.name}</h3><p className={styles.code}>{instrument.code} · {instrument.currency}</p>{!instrument.eastmoney ? <p className={styles.warning}>此产品暂时没有备用行情来源。</p> : null}</div> : null}
-    </div></section><section className={styles.panel}><h2>设置条件</h2>{instrument ? <PriceAlertForm key={instrument.id} onSubmit={create} /> : <p className={styles.hint}>先搜索并确认产品，再设置提醒条件。</p>}{error ? <ErrorNotice error={error} /> : null}</section></div></Page>;
+    {error ? <ErrorNotice error={error} /> : null}</fieldset></section><section><State {...data} />{instrument && data.value && !data.loading && !data.error ? <ProductAlertCard key={instrument.id} instrument={rules[0]?.instrument ?? instrument} rules={rules} reload={data.reload} onSaved={saved} onRemoved={(id) => data.setValue((current) => current ? { ...current, items: current.items.filter((item) => item.id !== id) } : current)} initiallyAdding onSavingChange={setSaving} /> : !instrument ? <div className={styles.panel}><h2>设置条件</h2><p className={styles.hint}>先搜索并确认产品，再设置提醒条件。</p></div> : null}</section></div></Page>;
 }
 function EditAlert({ id }: { id: string }) {
   const router = useRouter();
